@@ -1,0 +1,10 @@
+{
+  "name": "beyond-minimal-example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/calc.js && node --check test/calc.test.js"
+  }
+}

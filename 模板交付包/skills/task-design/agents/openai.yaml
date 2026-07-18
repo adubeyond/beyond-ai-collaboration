@@ -1,0 +1,7 @@
+interface:
+  display_name: "架构/设计"
+  short_description: "按任务规模收敛架构、契约和落地顺序"
+  default_prompt: "$task-design：先查事实并判断设计规模，再收敛目标、边界、契约、风险和验收。只有存在真实取舍时比较方案；只把一个会改变方向的问题交给用户，其余在授权内调查并自动交棒。"
+
+policy:
+  allow_implicit_invocation: true

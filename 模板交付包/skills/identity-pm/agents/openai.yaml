@@ -1,0 +1,7 @@
+interface:
+  display_name: "PM 总控"
+  short_description: "一次授权完整任务，只处理红灯、资源和证据收口"
+  default_prompt: "$identity-pm：作为控制面，把用户目标转成任务授权，指定任务控制实例、自动路径、收口方式、黄灯和红灯去向。授权后不逐技能审批；资源、实例和边界问题由 PM 裁决，业务语义、验收偏好、生产和不可逆授权允许执行对话直接找用户纠偏，不经 PM 转述。"
+
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,7 @@
+interface:
+  display_name: "运维"
+  short_description: "处理发布、回滚、运行检查和 Git 分支收口"
+  default_prompt: "$task-ops：已预授权发布对象、环境、版本、验证和回滚时，连续发布并验证。资源和发布顺序冲突找 PM；真实生产、停机、数据、不可逆或高成本授权直接找用户。未授权时只做发布前检查，用户答复后沿原任务继续。"
+
+policy:
+  allow_implicit_invocation: true

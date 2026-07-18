@@ -1,0 +1,31 @@
+name: public-validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Validate public repository content
+        run: node scripts/check-public-content.mjs --strict-candidate
+      - name: Run minimal example tests
+        working-directory: examples/minimal-project
+        run: npm test
+      - name: Run minimal example syntax check
+        working-directory: examples/minimal-project
+        run: npm run check

@@ -1,0 +1,26 @@
+# Isolated repositories and external samples
+/模板建设区/外部样例/
+/模板建设区/试点仓库-git/
+
+# Local scratch space
+/模板建设区/临时工作区/
+
+# Local environments and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Runtime and tool caches
+**/node_modules/
+**/__pycache__/
+**/.pytest_cache/
+**/.venv/
+*.py[cod]
+*.log
+*.tmp
+*.swp
+~$*
+.DS_Store
+Thumbs.db
+Desktop.ini

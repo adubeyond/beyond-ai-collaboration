@@ -1,0 +1,7 @@
+interface:
+  display_name: "测试"
+  short_description: "验证实现、证据和完成门禁"
+  default_prompt: "$task-test：独立验证并把结论和证据交回任务控制实例；测试实例不启动或管理开发。普通缺陷由任务控制实例修复，再把新版本交回原测试实例回测。通过后由任务控制实例按授权收口或进入运维；契约、边界、权限、高风险或修复超限才升级。"
+
+policy:
+  allow_implicit_invocation: true

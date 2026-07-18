@@ -1,0 +1,7 @@
+interface:
+  display_name: "开发"
+  short_description: "按正式设计和契约稳定落地实现，并留下可测结果"
+  default_prompt: "$task-dev：按任务授权和当前轮契约实现。设计或验证方法可在同一任务内切换技能补齐，目标、写入边界、正式契约冲突或真实权限缺失才停止。实现和自测完成后，授权路径包含测试时立即交棒测试，不等待 PM 或用户回复继续。"
+
+policy:
+  allow_implicit_invocation: true
