@@ -6,11 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-07-21
+
+### Changed
+
+- Separate business authorization from Codex runtime permissions; standard tool calls now come first, and one capability can request the smallest additional permission at most once after an actual sandbox or ACL denial.
+- Require design and worker reports to distinguish the current user-visible state from an unpublished proposal or candidate.
+- Add static regression guards for permission handling and current-state wording to the public validation script.
+- Require at least three independent, varied fresh baselines before closing an explicitly intermittent Skill-behavior report as “not reproduced.”
+
+### Fixed
+
+- Align the active construction task, durable behavior-test evidence, and the previously authorized PM, worker, and design candidate changes.
+- Correct public documentation that still described the already-created GitHub repository, ruleset, private vulnerability reporting, and first Release as future work.
+
 ### Planned
 
 - Verify installation, upgrade, and rollback on the supported public platforms.
-- Create the GitHub repository and verify its server-side ruleset and private vulnerability reporting.
-- Repeat the Quick Start from a fresh clone of the published remote.
+- Complete the full Codex Quick Start from a fresh clone of the published remote.
+- Add at least one additional maintainer who can independently review Pull Requests.
 
 ## [3.0.0-preview.1] - 2026-07-18
 

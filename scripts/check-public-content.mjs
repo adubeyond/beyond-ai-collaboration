@@ -227,6 +227,46 @@ for (const path of uniqueFiles) {
   }
 }
 
+const requiredSkillFacts = [
+  {
+    path: "模板交付包/skills/identity-pm/SKILL.md",
+    label: "PM separates business authorization from runtime permissions",
+    value: "业务授权与 Codex 运行权限分开编译",
+  },
+  {
+    path: "模板交付包/skills/identity-worker/SKILL.md",
+    label: "worker forbids proactive tool escalation",
+    value: "不得主动携带`sandbox_permissions`、`require_escalated`或审批 justification",
+  },
+  {
+    path: "模板交付包/skills/identity-worker/SKILL.md",
+    label: "worker limits one capability to one permission request",
+    value: "才允许对同一能力申请一次最小同范围工具权限",
+  },
+  {
+    path: "模板交付包/skills/identity-worker/SKILL.md",
+    label: "worker does not present an unreleased candidate as currently usable",
+    value: "当前用户页面/业务操作尚未变化",
+  },
+  {
+    path: "模板交付包/skills/task-design/SKILL.md",
+    label: "design distinguishes current behavior from the proposed state",
+    value: "当前用户页面/系统业务流程尚未变化",
+  },
+];
+
+for (const fact of requiredSkillFacts) {
+  const path = join(repositoryRoot, ...fact.path.split("/"));
+  if (!existsSync(path)) {
+    errors.push(`关键 Skill 文件缺失：${fact.path}`);
+    continue;
+  }
+  const text = readFileSync(path, "utf8");
+  if (!text.includes(fact.value)) {
+    errors.push(`关键 Skill 规则缺失：${fact.label} (${fact.path})`);
+  }
+}
+
 const packagePath = join(repositoryRoot, "examples", "minimal-project", "package.json");
 if (existsSync(packagePath)) {
   try {
