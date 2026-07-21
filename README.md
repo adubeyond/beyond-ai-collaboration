@@ -12,7 +12,7 @@ Most AI coding tools focus on generating code faster. BEYOND focuses on a harder
 
 [Quick Start](docs/en/quick-start.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
 
-> The first public release is `v3.0.0-preview.1`. Its clean-candidate Codex end-to-end run passed; cross-platform installation, upgrade, and rollback evidence remains incomplete, so it is intentionally published as a preview rather than a stable release.
+> The current public release is `v3.0.1`. It carries the post-preview permission, reporting, evidence, and regression-guard upgrades while preserving the documented platform limitations below. The first public release was `v3.0.0-preview.1`.
 
 ## What BEYOND changes
 
@@ -154,9 +154,9 @@ The public repository is assembled from an explicit allowlist. Internal construc
 
 - The Skills and full project-template documentation are currently Chinese-first.
 - Cross-platform installation, upgrade, and rollback evidence is not complete.
-- GitHub branch rules, private vulnerability reporting, and the first Release can only be verified after the remote repository exists.
+- GitHub branch rules, private vulnerability reporting, and the first Release are verified; the project still needs an additional maintainer who can independently review Pull Requests.
 
-These limits are why the first release is a public preview rather than a stable release.
+These limits are why the first release remained a public preview. Version `v3.0.1` publishes the post-preview control and reporting fixes without claiming that those remaining platform gaps are closed.
 
 ## Contributing and security
 
