@@ -10,10 +10,12 @@ This guide uses the repository's zero-dependency Node.js fixture to verify three
 
 The guide does not touch a real server, database, production environment, or remote Git repository.
 
+> Check the capability boundary first: loading `AGENTS.md` and Skills is not the same as running complete formal-task collaboration. This version supports Windows + Codex Desktop only. PM-to-worker routing also requires the current Desktop session to expose user-visible task creation, follow-up messaging, task reading, and direct correction. If any capability is missing, do not present an internal subagent as a formal task.
+
 ## Requirements
 
-- A Codex environment that can read project `AGENTS.md` files and use Skills.
-- Node.js 18 or later. The fixture uses only built-in modules and needs no `npm install`.
+- Codex Desktop on Windows, able to read project `AGENTS.md` files and use Skills. Complete collaboration additionally requires the current session to expose the formal-task capabilities.
+- Node.js 24.x, the current tested script-runtime baseline. The fixture uses only built-in modules and needs no `npm install`.
 - A writable local directory.
 
 If you want to invoke `$identity-pm`, `$identity-worker`, and `$task-*` directly, install the six Skills from this repository and restart Codex. If they are not installed, explicitly reference their project-local `SKILL.md` paths.
@@ -27,15 +29,16 @@ npm --version
 
 ## Prepare the demo project
 
-Copy [`examples/minimal-project`](../../examples/minimal-project) to a new writable directory such as `beyond-demo`.
-
-From the [template package](../../模板交付包), copy the following into the demo root:
+Copy [`examples/minimal-project`](../../examples/minimal-project) to a new writable directory such as `beyond-demo`. From this repository root, inspect the dry-run and then install into that explicit target:
 
 ```text
-AGENTS.md
-docs/AI编程协同机制/
-skills/
+node scripts/beyond-install.mjs install --target <absolute-demo-path> --dry-run
+node scripts/beyond-install.mjs install --target <absolute-demo-path>
+node scripts/beyond-install.mjs version --target <absolute-demo-path>
+node scripts/beyond-install.mjs verify --target <absolute-demo-path>
 ```
+
+The manager owns only `AGENTS.md`, `docs/AI编程协同机制/`, and project-local `skills/`; it does not overwrite the fixture README. It stops on a colliding file, drift, symbolic link, or path escape.
 
 Keep the fixture's own `README.md`; do not overwrite it with the template package README. The result should contain at least:
 
@@ -54,7 +57,7 @@ The project overview, workbench, and project facts are intentionally uninitializ
 
 ## Install the Skills
 
-Install or explicitly reference these six directories from `skills/`:
+The project-template manager never writes to a real Codex runtime directory. Explicitly reference project-local Skill paths when the surface supports that. To use the `$identity-*` and `$task-*` entries, install these six directories through the current Codex-supported Skill installation path and restart Codex:
 
 ```text
 identity-pm
@@ -65,7 +68,7 @@ task-test
 task-ops
 ```
 
-Restart Codex after installation, then create a new Codex task from the demo root.
+Runtime Skill installation is outside this manager's write scope. Restart Codex after that separate installation, then create a new Codex task from the demo root.
 
 ## Run the initial baseline
 
@@ -143,6 +146,8 @@ Also verify:
 - Project documents contain only investigated or verified facts.
 - Git, services, network, servers, production, and data show zero operations.
 
-For a second run, delete only the disposable demo directory, create a fresh copy of the original fixture, import the template again, restart Codex, and repeat the baseline. Do not force-clean a directory containing personal work, and do not copy runtime facts back into this repository's original fixture.
+Before an upgrade, run `verify`, then run `upgrade --dry-run` and `upgrade` from the new source checkout. A successful upgrade reports a backup ID with raw-byte hashes. Roll back with `rollback --backup <id> --dry-run` followed by the same command without `--dry-run`; rollback refuses a drifted managed tree.
+
+For a second run, delete only the disposable demo directory, create a fresh copy of the original fixture, install the template again, restart Codex, and repeat the baseline. Do not force-clean a directory containing personal work, and do not copy runtime facts back into this repository's original fixture.
 
 Continue with the [Architecture Overview](architecture.md) before adopting BEYOND in a real project.
