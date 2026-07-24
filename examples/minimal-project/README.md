@@ -6,7 +6,7 @@
 
 ## 环境
 
-- Node.js 18 或更高版本。
+- Windows + Node.js 24.x（当前脚本实测基线）。
 - 不需要运行`npm install`。
 
 ## 初始验证

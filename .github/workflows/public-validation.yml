@@ -10,9 +10,9 @@ permissions:
   contents: read
 
 jobs:
-  validate:
-    name: validate
-    runs-on: ubuntu-latest
+  public-content:
+    name: public-content
+    runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -23,9 +23,83 @@ jobs:
           package-manager-cache: false
       - name: Validate public repository content
         run: node scripts/check-public-content.mjs --strict-candidate
+      - name: Reassemble and verify the public candidate
+        shell: pwsh
+        run: |
+          $taskRoot = Join-Path $env:RUNNER_TEMP "beyond-public-validation-$PID"
+          $candidate = Join-Path $taskRoot "candidate"
+          $manifest = Join-Path $taskRoot "candidate.manifest.json"
+          node scripts/check-public-content.mjs --assemble-candidate $candidate --manifest $manifest
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          $checker = Join-Path $candidate "scripts/check-public-content.mjs"
+          node $checker --strict-candidate
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          $selfTestRoot = Join-Path $taskRoot "path-safety-self-test"
+          New-Item -ItemType Directory -LiteralPath $selfTestRoot | Out-Null
+          $selfTestItem = Get-Item -LiteralPath $selfTestRoot -Force
+          $resolvedSelfTestRoot = (Resolve-Path -LiteralPath $selfTestRoot).ProviderPath
+          if ($selfTestItem.Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint) -or $null -ne $selfTestItem.LinkType) {
+            throw "path safety self-test root must not be a reparse point"
+          }
+          if ([System.IO.Path]::GetFullPath($selfTestRoot) -ne [System.IO.Path]::GetFullPath($resolvedSelfTestRoot)) {
+            throw "path safety self-test root must resolve to its declared physical path"
+          }
+          node $checker --self-test-paths --self-test-root $selfTestRoot
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          if ([System.IO.Directory]::EnumerateFileSystemEntries($selfTestRoot).GetEnumerator().MoveNext()) {
+            throw "path safety self-test root must be empty after the fixture run"
+          }
+          [System.IO.Directory]::Delete($selfTestRoot, $false)
+          if (Test-Path -LiteralPath $selfTestRoot) {
+            throw "path safety self-test root cleanup failed"
+          }
+
+  windows_scripts:
+    name: windows-node-24-scripts
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Validate deterministic control contracts (behavior not run)
+        run: node scripts/check-control-contracts.mjs
+      - name: Test template install, upgrade, verify, and rollback
+        run: node scripts/beyond-install.test.mjs
+      - name: Test skill canary promotion gate
+        run: node scripts/check-skill-promotion.test.mjs
       - name: Run minimal example tests
         working-directory: examples/minimal-project
         run: npm test
       - name: Run minimal example syntax check
         working-directory: examples/minimal-project
         run: npm run check
+
+  validate:
+    name: validate
+    if: ${{ always() }}
+    needs:
+      - public-content
+      - windows_scripts
+    runs-on: windows-latest
+    env:
+      PUBLIC_CONTENT_RESULT: ${{ needs.public-content.result }}
+      WINDOWS_SCRIPTS_RESULT: ${{ needs.windows_scripts.result }}
+    steps:
+      - name: Require every public validation job
+        shell: pwsh
+        run: |
+          if ($env:PUBLIC_CONTENT_RESULT -ne "success" -or $env:WINDOWS_SCRIPTS_RESULT -ne "success") {
+            Write-Host "public-content=$env:PUBLIC_CONTENT_RESULT"
+            Write-Host "windows-scripts=$env:WINDOWS_SCRIPTS_RESULT"
+            exit 1
+          }

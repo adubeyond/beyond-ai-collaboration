@@ -12,7 +12,7 @@ Most AI coding tools focus on generating code faster. BEYOND focuses on a harder
 
 [Quick Start](docs/en/quick-start.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
 
-> The current public release is `v3.0.1`. It carries the post-preview permission, reporting, evidence, and regression-guard upgrades while preserving the documented platform limitations below. The first public release was `v3.0.0-preview.1`.
+> The current public release is `v3.0.2`. It carries the post-preview permission, reporting, evidence, and regression-guard upgrades while preserving the documented platform limitations below. The first public release was `v3.0.0-preview.1`.
 
 ## What BEYOND changes
 
@@ -100,16 +100,20 @@ This structure keeps the safety core complete without forcing every task to read
 
 The repository includes a zero-dependency Node.js fixture. You can use it to verify template import, cold start, formal task creation, development, testing, evidence, and write-back without touching Git or production.
 
+> Loading `AGENTS.md` and Skills is not the same as having BEYOND's complete formal-task collaboration. This version supports that path only on Windows with Codex Desktop, and the current Desktop session must expose user-visible task creation, follow-up messaging, task reading, and direct user correction. Check the [support and runtime boundary](docs/en/install-permissions-platform.md) before relying on PM-to-worker routing.
+
 Requirements:
 
-- A Codex environment that can read project `AGENTS.md` files and use Skills.
-- Node.js 18 or later.
+- Windows with Codex Desktop able to read project `AGENTS.md` files and use Skills.
+- Node.js 24.x, the current tested script-runtime baseline.
 - A writable local directory.
 
-Baseline commands:
+Install the project template with an explicit target, then run the baseline:
 
 ```text
-cd examples/minimal-project
+node scripts/beyond-install.mjs install --target <demo-directory> --dry-run
+node scripts/beyond-install.mjs install --target <demo-directory>
+cd <demo-directory>
 npm test
 npm run check
 ```
@@ -128,7 +132,7 @@ BEYOND grew from failures observed in real engineering work. Its current archite
 6. **Repeated discovery → growing project capability:** initialize and refresh engineering, test, design, operations, and security baselines.
 7. **Rule accumulation → product engineering:** keep a complete safety core, move low-frequency branches into references, and require RED/GREEN/regression evidence for mechanism changes.
 
-The next public milestones are reproducible installation, measurable performance, composable capability baselines, and community contribution without allowing one private project's rules to become global defaults.
+The next public milestones are measurable performance, composable capability baselines, and community contribution without allowing one private project's rules to become global defaults.
 
 ## Repository map
 
@@ -153,10 +157,11 @@ The public repository is assembled from an explicit allowlist. Internal construc
 ## Current limitations
 
 - The Skills and full project-template documentation are currently Chinese-first.
-- Cross-platform installation, upgrade, and rollback evidence is not complete.
+- The only formally supported and accepted combination for this version is Windows + Codex Desktop, with Node.js 24.x as the tested script-runtime baseline. Public CI runs the deterministic script suites on `windows-latest` with Node.js 24; it does not replace real Codex Desktop behavior evidence.
+- The standard-library scripts may run on other systems, but CLI, Linux (including Ubuntu), macOS, IDE, and cloud surfaces are uncommitted and unverified. They are outside this release scope rather than promotion blockers.
 - GitHub branch rules, private vulnerability reporting, and the first Release are verified; the project still needs an additional maintainer who can independently review Pull Requests.
 
-These limits are why the first release remained a public preview. Version `v3.0.1` publishes the post-preview control and reporting fixes without claiming that those remaining platform gaps are closed.
+These limits are why the first release remained a public preview. Version `v3.0.2` publishes the post-preview control and reporting fixes without extending the supported environment beyond its documented scope.
 
 ## Contributing and security
 
