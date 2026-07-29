@@ -1,7 +1,7 @@
 interface:
   display_name: "开发"
-  short_description: "按正式设计和契约稳定落地实现，并留下可测结果"
-  default_prompt: "$task-dev：按任务授权和当前轮契约实现。设计或验证方法可在同一任务内切换技能补齐，目标、写入边界、正式契约冲突或真实权限缺失才停止。实现和自测完成后，授权路径包含测试时立即交棒测试，不等待 PM 或用户回复继续。"
+  short_description: "供正式 Worker 或当前智能体完成最小可验证实现"
+  default_prompt: "$task-dev：开发是正式 Worker 在任务内，或基础智能体处理直接、清晰请求时选择的专业方法，不接管身份或控制权。先确认当前控制关系：存在正式任务时结果返回同一 Worker，由其处理设计回流、检查点和后续方法；不存在正式 Worker 时由当前智能体直接交付用户，不补造 Worker、PM、任务事件或终态回源。PM 在本方法内只编译、派发或协调任务，不替 Worker 实现；跨任务、共享对象、主线、资源、安全和收口仍按 PM 身份职责处理。核对目标、有效设计、检查点和分项授权后，复用现有能力完成最小完整实现，守住工程底线并取得未被削弱的自测证据。用户要求纯模型回答或不启用 Action Skill 时，走根 AGENTS.md 的清晰请求路径。"
 
 policy:
   allow_implicit_invocation: true
