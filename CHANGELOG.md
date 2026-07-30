@@ -6,6 +6,39 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.0.3] - 2026-07-30
+
+Version 3.0.2 was never tagged or published from the main branch. Its release branch was abandoned; 3.0.3 continues from 3.0.1 with an independently rebuilt and tested candidate.
+
+### Changed
+
+- Rebuild the real startup chain from the root entry through PM and worker identities to design, development, testing, and operations methods.
+- Keep Action Skills as methods selected by the current worker or direct caller instead of allowing them to become task-control identities.
+- Make the multi-agent protocol conditional on actual shared work, while one worker can move through design, development, testing, and operations without repeated PM routing.
+- Tighten task-document ownership, active-document identity, cross-task handoff, and history recovery so long-running records do not grow without bounds.
+- Simplify design and development delivery while preserving formal complex-design documents, engineering baselines, acceptance paths, and archive locations.
+
+### Fixed
+
+- Prevent PM follow-up requests such as “start development” from loading an Action Skill or executing implementation, build, test, or environment work.
+- Separate terminal delivery, PM consumption, and final adjudication; preserve one terminal signal per task version and execution round.
+- Stop equivalent command, runtime, test, or write retries after a platform policy rejection.
+- Block direct writes when the active-task ownership check is unavailable or cannot exclude overlap.
+- Make release prechecks consume existing candidate, test, environment, runtime, and rollback evidence instead of manufacturing missing evidence by rerunning tests.
+- Remove internal-only regression drivers that depended on untracked task evidence; the self-contained public guards remain in `scripts/`.
+
+### Validation
+
+- Complete five fresh isolated runtime passes without installing into the user's active Skills directory; preserve each failed pass and rerun the full 18-scenario matrix after every repair.
+- Pass the final 18-scenario identity, routing, handoff, write-isolation, testing, operations, long-observation, and terminal-consumption review.
+- Pass 16/16 source-regression commands across 70 source files with zero source drift, plus the zero-dependency Node.js fixture.
+
+### Known limitations
+
+- User-local Skill installation, upgrade, rollback, and automatic discovery still require a separate real-environment acceptance step.
+- The validation does not claim production deployment, real-server availability, or universal behavior across every Codex platform.
+- The project still needs an additional maintainer who can independently review Pull Requests.
+
 ## [3.0.1] - 2026-07-21
 
 ### Changed

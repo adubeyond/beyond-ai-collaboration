@@ -12,7 +12,7 @@ Most AI coding tools focus on generating code faster. BEYOND focuses on a harder
 
 [Quick Start](docs/en/quick-start.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
 
-> The current public release is `v3.0.1`. It carries the post-preview permission, reporting, evidence, and regression-guard upgrades while preserving the documented platform limitations below. The first public release was `v3.0.0-preview.1`.
+> The current release is `v3.0.3`. It rebuilds the root → PM → worker → Action Skill runtime chain, strengthens task and evidence lifecycle boundaries, and preserves the documented installation and platform limitations below. Version `v3.0.2` was never tagged or published from the main branch.
 
 ## What BEYOND changes
 
@@ -156,7 +156,7 @@ The public repository is assembled from an explicit allowlist. Internal construc
 - Cross-platform installation, upgrade, and rollback evidence is not complete.
 - GitHub branch rules, private vulnerability reporting, and the first Release are verified; the project still needs an additional maintainer who can independently review Pull Requests.
 
-These limits are why the first release remained a public preview. Version `v3.0.1` publishes the post-preview control and reporting fixes without claiming that those remaining platform gaps are closed.
+These limits are why the first release remained a public preview. Version `v3.0.3` publishes the rebuilt control, task, and Action Skill boundaries without claiming that the remaining installation and platform gaps are closed.
 
 ## Contributing and security
 
