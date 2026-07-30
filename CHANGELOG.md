@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Version 3.0.2 was never tagged or published from the main branch. Its release branch was abandoned; 3.0.3 continues from 3.0.1 with an independently rebuilt and tested candidate.
 
+See the full [v3.0.1 → v3.0.3 upgrade guide](docs/en/releases/v3.0.3.md), or read the [Chinese version](docs/releases/v3.0.3.md).
+
 ### Changed
 
 - Rebuild the real startup chain from the root entry through PM and worker identities to design, development, testing, and operations methods.
