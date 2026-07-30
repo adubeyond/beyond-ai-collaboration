@@ -127,7 +127,7 @@ check("PM registers design identity but does not own its filesystem policy", () 
 check("design method delegates lifecycle to the document owner", () => {
   assert.ok(
     includesAll(text.design, [
-      "唯一文档、版本、活动期和归档规则以",
+      "路径、活动期和归档规则仍只由项目文档入口拥有",
       "第4项只负责设计内容、交付和接力方法",
     ]),
   );
@@ -136,6 +136,7 @@ check("design method delegates lifecycle to the document owner", () => {
       "由[项目文档入口]",
       "本作业包只规定设计正文",
       "本作业包不另建第二套门禁",
+      "必须再完整读取[项目文档入口]",
     ]),
   );
 });

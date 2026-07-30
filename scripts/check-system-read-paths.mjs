@@ -81,6 +81,8 @@ check("clear read stays light while first clear write checks ownership once", ()
       "首次写入采用本机制",
       "这是一次写入隔离检查",
       "不进入项目接手链",
+      "所有权检查被平台拒绝或仍无法排除重叠时",
+      "不得调用写入工具，也不得运行针对拟议改动的构建、测试或运行时验证",
     ]),
   );
 });
@@ -112,6 +114,29 @@ check("formal execution enters Worker before any action method", () => {
   );
 });
 
+check("one primary action owns release-readiness requests", () => {
+  assert.ok(
+    includesAll(text.agents, [
+      "动作方法初始只选择最贴近当前主要矛盾的一种",
+      "用户要判断能否发布、上线、切换环境或回滚时选择运维",
+      "已有测试结论只是运维输入",
+      "不能因为一句话同时出现“检查、验证、测试、发布”等词就并行加载多种 Action Skill",
+    ]),
+  );
+  assert.ok(
+    includesAll(text.test, [
+      "“能否发布、上线前检查、生产切换或回滚”按根路由进入 task-ops",
+      "已有测试证据只是运维输入",
+    ]),
+  );
+  assert.ok(
+    includesAll(text.ops, [
+      "当前主要目标是运维、部署、判断能否发布、上线前检查、生产切换、回滚",
+      "不为此另起 task-test",
+    ]),
+  );
+});
+
 check("PM controls the mainline without becoming a stage executor", () => {
   assert.ok(
     includesAll(text.pm, [
@@ -119,6 +144,17 @@ check("PM controls the mainline without becoming a stage executor", () => {
       "不执行实现、完整测试、发布、Git 写操作",
       "指定唯一任务控制实例",
       "依据一手证据裁决",
+      "当前实例只用本身份规则编译任务、门禁和证据要求",
+      "不直接运行项目实现、构建、测试或环境命令",
+      "不读取对应Action Skill正文",
+      "由原Worker接单后读取方法正文",
+    ]),
+  );
+  assert.ok(
+    includesAll(text.agents, [
+      "当前对话已经建立PM身份时",
+      "不在当前PM实例加载对应Action Skill",
+      "只有Worker完成接单核验并真实进入该动作后才读取方法正文",
     ]),
   );
 });
@@ -176,7 +212,40 @@ check("ops starts from stable server facts and separates runtime truth", () => {
       "`运行环境与服务器信息`回答“在哪里”",
       "不可变制品身份与可变运行真值分开",
       "运维方法不发送任务终态、不替PM更新工作台",
+      "发布预检只消费已经存在的候选、测试、环境、当前运行版本和回滚证据",
+      "不再扫描源码、读取测试正文、重跑测试",
     ]),
+  );
+});
+
+check("platform policy rejection stops equivalent command retries", () => {
+  assert.ok(
+    includesAll(text.agents, [
+      "平台已经明确拒绝某类命令、工具或权限后",
+      "没有新增能力、授权或环境证据时立即按当前证据裁决",
+      "不用等价命令、换壳工具、路径改写或重复探测重试",
+      "同一验证分支一次只提交一条最接近验收的命令并等待结果",
+    ]),
+  );
+  assert.ok(
+    text.test.includes(
+      "不换成等价命令、命令壳或运行时探测继续重试",
+    ),
+  );
+  assert.ok(
+    text.ops.includes(
+      "不用等价测试命令、运行时探测或命令壳继续试探",
+    ),
+  );
+  assert.ok(
+    text.worker.includes(
+      "仅核对开发条件、入口或计划且当前段未授权执行时，只读现有事实",
+    ),
+  );
+  assert.ok(
+    text.dev.includes(
+      "需要验证时预先选定一条最接近验收的命令",
+    ),
   );
 });
 

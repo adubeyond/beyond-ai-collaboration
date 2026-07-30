@@ -12,6 +12,12 @@ const skillsRoot = path.join(repositoryRoot, "模板交付包", "skills");
 const files = {
   design: path.join(skillsRoot, "task-design", "SKILL.md"),
   designAgent: path.join(skillsRoot, "task-design", "agents", "openai.yaml"),
+  designDelivery: path.join(
+    skillsRoot,
+    "task-design",
+    "references",
+    "contracts-delivery-and-handoff.md",
+  ),
   dev: path.join(skillsRoot, "task-dev", "SKILL.md"),
   devAgent: path.join(skillsRoot, "task-dev", "agents", "openai.yaml"),
   test: path.join(skillsRoot, "task-test", "SKILL.md"),
@@ -95,6 +101,56 @@ check("design returns through the real caller", () => {
   );
 });
 
+check("complex design always binds a document identity before delivery", () => {
+  assert.ok(
+    includesAll(text.design, [
+      "完整读取[契约、交付与接力作业包]",
+      "再按该作业包的交付门禁完整读取[项目文档入口]",
+      "未确定唯一活动路径、当前版本、写入状态、消费者和计划归档位置时",
+      "不得写“设计完成”",
+      "聊天交付最多使用六个短段",
+      "总计不超过1200个中文字符",
+      "原样说明`尚未持久化，不能作为正式实施依据`",
+    ]),
+  );
+  assert.ok(
+    includesAll(text.designDelivery, [
+      "形成任何交付前，必须再完整读取[项目文档入口]",
+      "唯一活动路径 / 当前版本 / 是否已写入 / 当前消费者 / 计划归档位置",
+      "缺一项就保持继续设计",
+      "聊天默认只交付第一层和正式文档锚点",
+      "聊天不是执行层的替代载体",
+      "不得继续输出字段、状态、事件、接口、逐步回滚或完整测试矩阵",
+    ]),
+  );
+  assert.ok(
+    includesAll(text.designAgent, [
+      "复杂设计必须完整读取契约交付作业包和项目文档入口",
+      "交付唯一活动路径、版本、写入状态、消费者和计划归档位置",
+      "聊天最多六个短段、1200个中文字符",
+      "不展开字段、状态、事件、接口、开发切片、测试矩阵或逐步回滚",
+    ]),
+  );
+});
+
+check("action prompts preserve release routing and policy-stop boundaries", () => {
+  assert.ok(
+    includesAll(text.testAgent, [
+      "当前主要目标是能否发布、上线前检查、生产切换或回滚时使用 task-ops",
+      "不并行加载本 Skill",
+      "不换等价命令重试",
+    ]),
+  );
+  assert.ok(
+    includesAll(text.opsAgent, [
+      "能否发布、上线前检查、生产切换或回滚以本 Skill 为主",
+      "不为核对它并行加载 task-test",
+      "发布预检只消费既有候选、测试、环境、运行版本和回滚证据",
+      "不换等价命令重试",
+    ]),
+  );
+});
+
 check("development can continue directly only under direct authorization", () => {
   assert.ok(
     includesAll(text.dev, [
@@ -103,6 +159,17 @@ check("development can continue directly only under direct authorization", () =>
       "正式任务由同一 Worker、直接请求由当前智能体切回设计补齐",
       "直接请求由当前智能体在现有授权包含设计时切换设计方法",
       "直接请求只有用户已经明确授权测试",
+      "当前PM实例不得触发或读取本 Skill",
+      "需要验证时预先选定一条最接近验收的命令",
+      "检查被拒绝或仍无法排除重叠时只能继续读取必要事实",
+    ]),
+  );
+  assert.ok(
+    includesAll(text.devAgent, [
+      "当前PM实例不得触发或读取本 Skill",
+      "只有Worker接单后真实进入开发才读取",
+      "一次只提交最接近验收的一条命令并等待结果",
+      "所有权检查被拒绝或仍无法排除重叠时只能继续读取必要事实",
     ]),
   );
 });
