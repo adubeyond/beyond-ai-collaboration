@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.0.4] - 2026-08-01
+
+See the [v3.0.3 → v3.0.4 upgrade guide](docs/en/releases/v3.0.4.md), or read the [Chinese version](docs/releases/v3.0.4.md).
+
+### Changed
+
+- Simplify the managed task model to PM, one Worker per business result, three business states, and continuous design/development/testing/operations actions inside the same Worker task.
+- Make the user-selected formal project the default workspace; worktrees are no longer created automatically, and shared-directory writes are serialized while independent clones coordinate through Git.
+- Reduce default document reads, PM callbacks, task fields, and project-fact initialization while preserving reusable technology-stack, test, server, deployment, rollback, and credential-entry facts.
+
+### Fixed
+
+- Keep direct Action Skill requests in the current base agent, return formal Action Skill results to the original Worker, and prevent Skills from becoming additional task identities.
+- Map formal Workers to user-visible top-level task threads with an explicit `$identity-worker` invocation, while keeping internal subagents as task-local helpers that never invoke the Worker identity.
+- Keep each formal Worker returning to its direct PM, without propagating an ancestor source thread into the Worker task and causing bypass or duplicate delivery.
+- Keep ordinary failures, local commits, authorized remote operations, and method switches inside the current Worker instead of turning them into PM approval pauses.
+- Align the English architecture summary, isolated acceptance tooling, and current validation counts with the rebuilt three-state runtime path.
+
 ## [3.0.3] - 2026-07-30
 
 Version 3.0.2 was never tagged or published from the main branch. Its release branch was abandoned; 3.0.3 continues from 3.0.1 with an independently rebuilt and tested candidate.

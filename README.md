@@ -10,16 +10,16 @@ BEYOND is a document-driven AI engineering collaboration system for Codex. It tu
 
 Most AI coding tools focus on generating code faster. BEYOND focuses on a harder problem: helping AI understand a real project, stay within authorization, finish a complete business task, prove the result, and become more effective as project knowledge grows.
 
-[Quick Start](docs/en/quick-start.md) · [v3.0.3 Upgrade Guide](docs/en/releases/v3.0.3.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
+[Quick Start](docs/en/quick-start.md) · [v3.0.3 Upgrade Guide](docs/en/releases/v3.0.3.md) · [v3.0.4 Upgrade Guide](docs/en/releases/v3.0.4.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
 
-> The current release is `v3.0.3`. It rebuilds the root → PM → worker → Action Skill runtime chain, strengthens task and evidence lifecycle boundaries, and preserves the documented installation and platform limitations below. Version `v3.0.2` was never tagged or published from the main branch. See the full [v3.0.1 → v3.0.3 upgrade guide](docs/en/releases/v3.0.3.md).
+> The current public release is `v3.0.4`. Version `v3.0.2` was abandoned and never entered the public mainline. Version 3.0.4 simplifies the v3.0.3 runtime path while preserving production-grade authorization and evidence boundaries.
 
 ## What BEYOND changes
 
-- Goals, authorization, contracts, state, and evidence live in formal project documents rather than only in chat history.
-- Design, development, testing, and operations advance one business result inside one task lifecycle.
-- Ordinary implementation and test failures are repaired and retested in the same task; only real business conflicts, high-risk permissions, and irreversible actions stop for a decision.
-- Technology stacks, test commands, environments, servers, and release procedures become reusable project capabilities instead of being rediscovered in every task.
+- Stable goals live in the project overview, team progress lives in the PM workbench, and reusable engineering knowledge lives in project facts rather than only in chat history.
+- Design, development, testing, and operations advance one business result continuously without stage approvals.
+- Ordinary implementation and test failures are repaired and retested in the same task; only a required business choice, high-risk action, real shared conflict, or unavailable external resource pauses work.
+- Technology stacks, test commands, environments, servers, and release procedures become reusable project facts instead of being rediscovered in every task.
 - Code, Git, tests, services, data, and production remain separate sources of truth with separate authorization boundaries.
 
 ## Three methodologies, one engineering system
@@ -29,8 +29,8 @@ BEYOND combines three bodies of thought. They are not decorative slogans; each o
 | Foundation | Engineering interpretation | How BEYOND applies it |
 | --- | --- | --- |
 | **Practice-oriented methods distilled from the Selected Works of Mao Zedong** | Seek truth from facts, investigate before deciding, identify the primary contradiction, validate through practice, and learn from the people doing the work | Inspect code, Git, tests, and environments first; focus the current task on the main problem; let fresh evidence override stale assumptions; incorporate user correction and write verified knowledge back |
-| **PMP and project governance** | Integrate objectives, scope, quality, risk, stakeholders, change, and closure | A PM control plane freezes the business result, explicit non-goals, acceptance criteria, permissions, and real stop conditions before execution |
-| **Dao, Fa, Shu, Qi** | Move from principles, to governance mechanisms, to professional methods, and finally to tools | Principles define values and safety; documents and lifecycle contracts define governance; Skills define professional actions; Codex, Git, tests, environments, and servers provide execution reality |
+| **PMP and project governance** | Integrate objectives, scope, quality, risk, stakeholders, change, and closure | A PM manages the result, task board, ownership, conflicts, and acceptance without micromanaging execution |
+| **Dao, Fa, Shu, Qi** | Move from principles, to governance mechanisms, to professional methods, and finally to tools | Principles define value and safety; PM/Worker, the workbench, project facts, and collaboration define governance; action Skills define professional methods; tools provide execution reality |
 
 BEYOND does not mechanically reproduce any source text and does not claim endorsement by any related organization. It extracts methods that can be tested against engineering facts and outcomes.
 
@@ -57,27 +57,27 @@ flowchart LR
     E --> F["Design, development, testing, operations"]
     F --> G["Code, Git, tests, services, data, production"]
     G --> H["Result and first-hand evidence"]
-    H --> I["Write-back and project capability growth"]
+    H --> I["Workbench and reusable-fact write-back"]
     I --> A
 ```
 
-One business result maps to one formal task and one task-control instance. The PM governs the portfolio and consumes lifecycle events; it does not become the developer. The worker controls the complete task lifecycle and invokes design, development, testing, and operations as actions when the task requires them.
+One business result maps to one formal task and one Worker. The PM governs the portfolio, workbench, conflicts, and acceptance; it does not become the developer. The Worker invokes design, development, testing, and operations as methods when required.
 
 ```mermaid
 flowchart LR
-    U["Project owner"] --> PM["PM control plane"]
+    U["Project owner"] --> PM["PM team manager"]
     PM --> T["One formal task"]
-    T --> W["One worker control instance"]
+    T --> W["One Worker"]
     W --> D["Design"]
     W --> DEV["Development"]
     W --> TEST["Testing"]
     W --> OPS["Operations"]
     TEST -->|"ordinary failure"| DEV
     DEV --> TEST
-    TEST -->|"passed, release not authorized"| C["Candidate complete"]
+    TEST -->|"passed, release not authorized"| C["Formal local result"]
     TEST -->|"passed and release authorized"| OPS
     OPS --> C
-    C --> E["Evidence, terminal event, knowledge write-back"]
+    C --> E["Evidence, workbench, reusable facts"]
     E --> PM
 ```
 
@@ -87,12 +87,12 @@ BEYOND separates stable project truth from reusable execution methods.
 
 | Layer | Owns | Does not own |
 | --- | --- | --- |
-| Project documents | Objectives, task contracts, current state, project capabilities, evidence, and history | Active execution |
-| Identity Skills | PM and worker control rights, read paths, and lifecycle rules | Project-specific facts |
+| Project documents | Stable objectives, the PM workbench, and reusable project facts | Active execution or Git truth |
+| Identity Skills | PM and Worker responsibilities, read paths, pause, and completion | Project-specific facts |
 | Action Skills | Design, development, testing, and operations methods | Task ownership |
 | Skill references | Lower-frequency complex branches loaded only when needed | Default reading for every task |
 | Code and environments | First-hand Git, test, service, server, data, and production reality | Business intent or authorization |
-| Task events | Delivery of progress, conflicts, shared facts, and terminal evidence to the PM | Replacement for formal task records |
+| Formal task threads | Execution, low-frequency progress, pause, and completion results | Replacement for Git or first-hand evidence |
 
 This structure keeps the safety core complete without forcing every task to read every rule. Formal documents preserve verified truth; Skills decide how to act; tools provide reality; validated discoveries return to the correct document owner.
 
@@ -124,8 +124,8 @@ BEYOND grew from failures observed in real engineering work. Its current archite
 2. **Role-play → explicit control rights:** keep PM and worker identities separate; make design, development, testing, and operations task actions.
 3. **Stage handoffs → task autonomy:** freeze a complete task once and continue through ordinary failures without repeated PM routing.
 4. **Default trust → evidence governance:** separate file, Git, data, environment, and production truth and authorization.
-5. **Single-task success → multi-task isolation:** use task ID, version, execution round, event identity, and actual source to prevent cross-task contamination.
-6. **Repeated discovery → growing project capability:** initialize and refresh engineering, test, design, operations, and security baselines.
+5. **Single-task success → multi-task coordination:** let the PM workbench track ownership and progress, allow only one Worker to write a formal project at a time, and use Git between independent clones.
+6. **Repeated discovery → reusable project facts:** reuse verified engineering, design, test, operations, and security facts; when a task needs missing facts, its Worker investigates and writes back only stable knowledge.
 7. **Rule accumulation → product engineering:** keep a complete safety core, move low-frequency branches into references, and require RED/GREEN/regression evidence for mechanism changes.
 
 The next public milestones are reproducible installation, measurable performance, composable capability baselines, and community contribution without allowing one private project's rules to become global defaults.
@@ -156,7 +156,7 @@ The public repository is assembled from an explicit allowlist. Internal construc
 - Cross-platform installation, upgrade, and rollback evidence is not complete.
 - GitHub branch rules, private vulnerability reporting, and the first Release are verified; the project still needs an additional maintainer who can independently review Pull Requests.
 
-These limits are why the first release remained a public preview. Version `v3.0.3` publishes the rebuilt control, task, and Action Skill boundaries without claiming that the remaining installation and platform gaps are closed.
+These limits are why the first release remained a public preview. Version `v3.0.1` publishes the post-preview control and reporting fixes without claiming that those remaining platform gaps are closed.
 
 ## Contributing and security
 
