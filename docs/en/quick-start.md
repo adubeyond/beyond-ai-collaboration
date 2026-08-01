@@ -50,7 +50,7 @@ beyond-demo/
 └─ test/calc.test.js
 ```
 
-The project overview, workbench, and project facts are intentionally uninitialized. Do not prefill them with demo results.
+The project overview, workbench, and project-fact files are intentionally empty. Do not prefill them with unverified demo results.
 
 ## Install the Skills
 
@@ -97,7 +97,7 @@ Explicit non-goals: do not add multiplication, division, a command-line interfac
 Allowed actions: read the current project; modify src/calc.js, test/calc.test.js, and the project documents defined by the template; run npm test and npm run check.
 Acceptance: both commands exit with code 0, the existing add test still passes, and the new subtract test passes.
 
-Follow the minimum read path in the root AGENTS.md. Investigate facts available from package.json, source, and tests; complete only the project initialization required for this task; form a complete task contract and create one formal task. The worker must remain the single task-control instance and combine design, development, and testing as needed. Write back the evidence and one terminal event when complete.
+Follow the minimum read path in the root AGENTS.md. Record one task in the workbench and create one Worker with the six-field task packet. The Worker must remain responsible for the result and combine design, development, and testing as needed. Return the formal result and current-run evidence to the PM. Write reusable engineering facts only when the task actually confirms them; do not create a capability-initialization task.
 ```
 
 The message deliberately supplies the business result, non-goals, file boundary, command permissions, and acceptance criteria. It tests the complete automatic path rather than the PM's ability to ask many questions.
@@ -106,22 +106,22 @@ The message deliberately supplies the business result, non-goals, file boundary,
 
 ```mermaid
 flowchart LR
-    A["PM minimum read"] --> B["Inspect package, source, and tests"]
-    B --> C["Freeze contract and create formal task"]
-    C --> D["Worker becomes task controller"]
+    A["PM minimum read"] --> B["Record task in workbench"]
+    B --> C["Create Worker with six-field packet"]
+    C --> D["Worker reads relevant project facts"]
     D --> E["Implement subtract and its test"]
     E --> F["npm test"]
     F -->|"failed"| E
     F -->|"passed"| G["npm run check"]
-    G -->|"passed"| H["Evidence, write-back, terminal event"]
-    H --> I["PM consumes and closes"]
+    G -->|"passed"| H["Formal result and current evidence"]
+    H --> I["PM accepts and updates workbench"]
 ```
 
 Normal behavior:
 
 - The PM does not modify `src/calc.js` or the test file.
 - Design, development, and testing are not split into three business tasks that require repeated “continue” messages.
-- If required project facts are missing, the worker investigates and writes the minimum baseline, then continues the original task.
+- Missing project facts do not block unrelated work. The Worker writes reusable facts in the original task only when they are actually confirmed.
 - Ordinary implementation or test failures are repaired and retested in the same task.
 - Git, dependencies, servers, production, and data remain untouched because they were not authorized.
 
@@ -138,7 +138,7 @@ Also verify:
 
 - `src/calc.js` exports both `add` and `subtract`.
 - `test/calc.test.js` covers `add(2, 3) === 5` and `subtract(5, 2) === 3`.
-- The PM task records one formal task and its terminal state instead of doing the implementation itself.
+- The PM workbench records one formal task, its Worker, progress, and completion instead of doing the implementation itself.
 - The formal task contains implementation, current-run validation, and completion evidence.
 - Project documents contain only investigated or verified facts.
 - Git, services, network, servers, production, and data show zero operations.

@@ -2,82 +2,84 @@
 
 **English** | [简体中文完整版](../系统架构与运行机制.md)
 
-BEYOND is a document-driven control system around Codex. Formal documents preserve project truth, Skills preserve reusable operating methods, and tools provide first-hand execution reality.
+BEYOND turns Codex into a PM-led agent team. Its purpose is to complete real business work quickly and accurately while keeping production, data, and irreversible actions safe.
 
-## System layers
+## Core roles
 
-```mermaid
-flowchart TB
-    O["Project owner"] --> P["Principles and governance"]
-    P --> D["Formal project documents"]
-    D --> I["Identity Skills: PM and worker"]
-    I --> A["Action Skills: design, development, testing, operations"]
-    A --> T["Tools: Codex, Git, tests, environments, servers"]
-    T --> E["First-hand evidence"]
-    E --> D
-```
-
-| Layer | Responsibility |
+| Component | Responsibility |
 | --- | --- |
-| Project owner | Business direction, meaningful trade-offs, and high-risk authorization |
-| PM control plane | Portfolio state, complete task contracts, task isolation, red-light decisions, and closure |
-| Worker control instance | The complete lifecycle of one business task |
-| Action Skills | Professional methods required by the current task phase |
-| Formal documents | Objectives, boundaries, state, project capabilities, evidence, and history |
-| Tools and environments | Current code, Git, tests, services, data, server, and production reality |
+| User | Business direction, major trade-offs, and high-risk authorization |
+| PM | Mainline, task allocation, workbench, shared conflicts, and acceptance |
+| Worker | One business result from investigation through delivery |
+| Action Skills | Professional design, development, testing, and operations methods |
+| Project documents | Stable goals, reusable facts, and the PM's current team view |
+| Git and tools | File versions, execution, and first-hand reality |
 
-## One business result, one control instance
+PM and Worker are agent identities. Design, development, testing, and operations are methods, not additional agents.
 
-A business result is not split into four independent design, development, testing, and operations owners. The PM creates one formal task. One worker becomes its task-control instance and switches actions as required.
-
-```mermaid
-stateDiagram-v2
-    [*] --> Ready
-    Ready --> Executing
-    Executing --> Executing: design / develop / test / repair
-    Executing --> RedLight: business conflict or missing high-risk authorization
-    RedLight --> Executing: owner decision
-    Executing --> CandidateComplete: evidence and authorized work closed
-    CandidateComplete --> Released: production release explicitly authorized and verified
-    CandidateComplete --> [*]
-    Released --> [*]
-```
-
-Ordinary failures do not become PM decisions. The worker repairs and retests within the existing task authorization. A red light is reserved for issues that genuinely change business meaning, authorization, irreversible risk, or cross-task ownership.
-
-## Document truth and write-back
-
-BEYOND separates documents by ownership and update frequency:
-
-- The root entry routes Codex to the minimum valid read path.
-- The project overview stores stable objectives, boundaries, and capability status.
-- The PM-owned workbench stores current portfolio control state.
-- A formal task stores one business result, contract, evidence index, and terminal state.
-- Project-fact baselines store verified engineering, design, testing, operations, and security knowledge.
-- Historical records preserve completed context without becoming current authority.
-
-Newly verified facts return to their formal owner. Workers do not directly edit PM-only control state; they send lifecycle or shared-fact events, and the PM updates its control view. This allows several tasks to run concurrently without sharing one ambiguous conversation state.
-
-## Authorization and truth
-
-The following permissions and truths are independent:
-
-- Reading files does not authorize writing them.
-- Writing files does not authorize Git staging, commit, push, or merge.
-- Passing tests does not authorize deployment.
-- Deployment access does not authorize destructive data changes.
-- A document claim does not override current code, Git, environment, or production evidence.
-
-When sources conflict, BEYOND records the conflict and uses the freshest authoritative evidence for the relevant domain. It does not silently choose the most convenient statement.
-
-## Growing project capability
-
-The first time an action lacks essential project facts, the Skill guides a minimal initialization: discover what can be verified, ask only for facts that cannot be discovered, write the baseline, and continue the original task. Later tasks reuse that baseline and refresh it only when a real trigger appears.
-
-This creates a learning loop:
+## Default task flow
 
 ```text
-task → investigation → verified fact → formal baseline → later reuse → conditional refresh
+user result
+→ PM records one task and assigns one Worker
+→ Worker reads only relevant project facts
+→ Worker designs, implements, tests, repairs, and delivers continuously
+→ Worker returns either completion or one real blocking reason
+→ PM verifies evidence and updates the workbench
 ```
 
-The full Chinese architecture document covers detailed read chains, ownership matrices, lifecycle events, multi-task convergence, source-of-truth conflicts, and capability initialization: [系统架构与运行机制](../系统架构与运行机制.md).
+A normal task package contains only:
+
+```text
+business result
+scope and explicit non-goals
+acceptance criteria
+formal project, target, and delivery method
+relevant project-fact entries
+real pause boundaries
+```
+
+## Workbench and project facts
+
+The PM workbench is a team dashboard. It records the task, responsible Worker/thread, one of three states, current progress, blocking risk, formal result, and update time. It is not a Git HEAD mirror or an execution permit.
+
+Project facts preserve reusable knowledge such as the technology stack, build and test commands, module boundaries, servers, services, logs, deployment steps, and rollback paths. Missing facts do not block unrelated work. A Worker investigates and writes reusable facts in the same business task when needed.
+
+Project facts do not use an `uninitialized / refresh-needed / available` runtime state machine.
+
+## Three business states
+
+- `in progress`
+- `paused`
+- `completed`
+
+Design, development, testing, repair, commit, and acceptance are actions rather than additional states.
+
+A task pauses only for:
+
+1. a business choice that the user must make;
+2. production, destructive data, irreversible, or significant-cost authorization;
+3. a real shared conflict that cannot be handled safely;
+4. an objectively unavailable account, environment, credential, target, or external resource.
+
+## Git and workspaces
+
+The user-selected formal project is the default workspace. BEYOND does not create worktrees automatically.
+
+Only one Worker writes to the same formal project at a time. Other Workers may investigate in parallel. Each writing Worker commits its own changes and leaves a clean handoff point before the next Worker writes.
+
+Git manages versions, commits, rollback, and integration. The PM workbench manages people and order.
+
+- People with independent clones can collaborate through branches.
+- Multiple Workers sharing one directory must serialize writes.
+- A worktree is used only when the user explicitly requests it and accepts the integration cost.
+
+## Evidence and safety
+
+Current code, Git, tests, services, data, and production reality override old documents and chat summaries.
+
+Read, local write, local commit, remote Git, deployment, shared/production data, irreversible actions, and external cost remain separate authorization dimensions. Safety triggers from the actual effect of an action, not from keywords such as “database,” “server,” or “Git.”
+
+Completion requires the result to exist in the agreed formal target and current first-hand evidence to satisfy acceptance. Passing tests does not mean the feature is deployed.
+
+See the [full Chinese architecture](../系统架构与运行机制.md) and [quick start](quick-start.md).
