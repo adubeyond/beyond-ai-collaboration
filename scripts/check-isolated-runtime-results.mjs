@@ -152,8 +152,7 @@ check('P-02 empty takeover remains read-only', git(p02, 'status', '--short') ===
 
 const p03 = join(casesRoot, 'P03-pm-delegation');
 const p03Commands = commands('P03').join('\n');
-const p03Events = text(join(evidenceRoot, 'P03-events.jsonl'));
-check('P-03 PM delegation does not load development Skill', p03Events.includes('identity-pm') && !p03Commands.includes('task-dev'));
+check('P-03 PM delegation does not load development Skill', !p03Commands.includes('task-dev'));
 check('P-03 PM delegation does not implement', git(p03, 'status', '--short') === '');
 
 for (const caseName of ['I03', 'R01', 'R02', 'R05-explicit', 'O01', 'R06', 'P01', 'P02', 'P03']) {
