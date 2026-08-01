@@ -42,6 +42,7 @@ const ops = read("模板交付包/skills/task-ops/SKILL.md");
 const production = read("模板交付包/skills/task-ops/references/production-release-and-convergence.md");
 const documentEntry = read("模板交付包/docs/AI编程协同机制/00-模板入口.md");
 const collaboration = read("模板交付包/docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md");
+const workerCollaboration = read("模板交付包/skills/identity-worker/references/collaboration-and-rework.md");
 
 // S1：普通局部 BUG。
 requireText("S1清晰请求不制造任务", agents, "清晰请求不先输出接手确认，不把初始化仪式当成答案，也不凭空制造正式任务");
@@ -70,6 +71,16 @@ requireText("S3同任务长观察", ops, "原 Worker转`已暂停`并在同一�
 
 // 三场景共同约束。
 requireText("普通过程不逐步回PM", pm, "不为普通任务逐动作授权、逐阶段续派或设置动作额度");
+requireText("正式Worker使用用户可见任务", pm, "创建正式任务时使用平台的用户可见任务入口");
+requireText("内部子智能体不冒充正式Worker", pm, "不用内部助手冒充");
+requireText("安排其他人包含建任务意图", pm, "该请求已经包含建立用户可见任务的意图");
+requireText("Worker只回直接PM", pm, "只把平台为该任务实际注入的直接来源 PM");
+requireText("PM不下传祖先来源", pm, "不得继续写入 Worker任务包");
+requireText("PM不填写回传ID", pm, "不在 Worker任务正文中填写任何 thread ID");
+requireText("PM不否定平台回传", pm, "也不写“无需回传”");
+requireText("正式任务显式启动Worker", pm, "把`$identity-worker`放在新任务初始提示的首行");
+requireText("局部助手不启动Worker身份", workerCollaboration, "也不得调用`$identity-worker`");
+requireText("子智能体只协助原Worker", worker, "内部子智能体只协助当前 Worker");
 requireText("未触及权限不检查", worker, "未触及的维度不检查、不补字段，也不形成暂停");
 requireText("默认不用worktree", worker, "BEYOND 不自动创建 worktree");
 

@@ -6,7 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-See the draft [v3.0.3 → v3.0.4 candidate guide](docs/en/releases/v3.0.4.md), or read the [Chinese version](docs/releases/v3.0.4.md).
+## [3.0.4] - 2026-08-01
+
+See the [v3.0.3 → v3.0.4 upgrade guide](docs/en/releases/v3.0.4.md), or read the [Chinese version](docs/releases/v3.0.4.md).
 
 ### Changed
 
@@ -17,6 +19,8 @@ See the draft [v3.0.3 → v3.0.4 candidate guide](docs/en/releases/v3.0.4.md), o
 ### Fixed
 
 - Keep direct Action Skill requests in the current base agent, return formal Action Skill results to the original Worker, and prevent Skills from becoming additional task identities.
+- Map formal Workers to user-visible top-level task threads with an explicit `$identity-worker` invocation, while keeping internal subagents as task-local helpers that never invoke the Worker identity.
+- Keep each formal Worker returning to its direct PM, without propagating an ancestor source thread into the Worker task and causing bypass or duplicate delivery.
 - Keep ordinary failures, local commits, authorized remote operations, and method switches inside the current Worker instead of turning them into PM approval pauses.
 - Align the English architecture summary, isolated acceptance tooling, and current validation counts with the rebuilt three-state runtime path.
 

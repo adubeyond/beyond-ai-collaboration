@@ -74,12 +74,21 @@ function commandResults(caseName) {
       try {
         const event = JSON.parse(line);
         return event.type === 'item.completed' && event.item?.type === 'command_execution'
-          ? [{ command: event.item.command, exitCode: event.item.exit_code }]
+          ? [{
+              command: event.item.command,
+              exitCode: event.item.exit_code,
+              output: event.item.aggregated_output ?? '',
+            }]
           : [];
       } catch {
         return [];
       }
     });
+}
+
+function effectiveExitCode(result) {
+  const reported = [...result.output.matchAll(/(?:^|\r?\n)EXIT:(\d+)(?=\r?$)/gm)].at(-1)?.[1];
+  return reported === undefined ? result.exitCode : Number(reported);
 }
 
 function git(cwd, ...args) {
@@ -123,13 +132,13 @@ const finalAdjacent = JSON.parse(text(join(ops, 'runtime', 'current', 'adjacent.
 check('O-01/O-02/O-03 final runtime is verified v2', finalApi.version === 'v2' && finalApi.feature === 'fixed' && finalAdjacent.version === 'v2' && finalAdjacent.adjacent === 'preserved');
 check('O-01 legacy target untouched', git(ops, 'diff', '--exit-code', 'HEAD', '--', 'runtime/legacy') === '');
 const opsResults = commandResults('O01');
-const badDeployIndex = opsResults.findIndex((result) => result.command.includes('deploy.mjs artifacts/v3-bad') && result.exitCode === 0);
-const rollbackIndex = opsResults.findIndex((result, index) => index > badDeployIndex && result.command.includes('rollback.mjs') && result.exitCode === 0);
+const badDeployIndex = opsResults.findIndex((result) => result.command.includes('deploy.mjs artifacts/v3-bad') && effectiveExitCode(result) === 0);
+const rollbackIndex = opsResults.findIndex((result, index) => index > badDeployIndex && result.command.includes('rollback.mjs') && effectiveExitCode(result) === 0);
 const badBusinessFailed = opsResults.slice(badDeployIndex + 1, rollbackIndex)
-  .some((result) => result.command.includes('business.mjs') && result.exitCode === 1);
+  .some((result) => result.command.includes('business.mjs') && effectiveExitCode(result) === 1);
 const postRollback = opsResults.slice(rollbackIndex + 1);
-const postRollbackHealthy = postRollback.some((result) => result.command.includes('health.mjs') && result.exitCode === 0)
-  && postRollback.some((result) => result.command.includes('business.mjs') && result.exitCode === 0);
+const postRollbackHealthy = postRollback.some((result) => result.command.includes('health.mjs') && effectiveExitCode(result) === 0)
+  && postRollback.some((result) => result.command.includes('business.mjs') && effectiveExitCode(result) === 0);
 const runtimeState = JSON.parse(text(join(ops, 'runtime', 'current', 'runtime-state.json')));
 check('O-03 controlled failure and rollback executed', badDeployIndex >= 0 && rollbackIndex > badDeployIndex && badBusinessFailed && postRollbackHealthy && runtimeState.version === 'v2' && runtimeState.rolledBack === true);
 
@@ -139,15 +148,15 @@ check('R-06 read-only pause leaves fixture clean', git(join(casesRoot, 'R06-paus
 
 const p01 = join(casesRoot, 'P01-pm-healthy');
 const p01Commands = commands('P01').join('\n');
-const p01Events = text(join(evidenceRoot, 'P01-events.jsonl'));
-check('P-01 healthy takeover reads PM and workbench', p01Events.includes('identity-pm') && p01Commands.includes('当前工作台.md'));
+const p01Output = text(join(evidenceRoot, 'P01-last-message.txt'));
+check('P-01 healthy takeover applies PM identity and reads workbench', p01Output.includes('PM') && p01Commands.includes('当前工作台.md'));
 check('P-01 healthy takeover skips document-governance entry', !p01Commands.includes('00-模板入口.md'));
 check('P-01 healthy takeover remains read-only', git(p01, 'status', '--short') === '');
 
 const p02 = join(casesRoot, 'P02-pm-empty');
 const p02Commands = commands('P02').join('\n');
-const p02Events = text(join(evidenceRoot, 'P02-events.jsonl'));
-check('P-02 empty takeover enters document governance', p02Events.includes('identity-pm') && p02Commands.includes('当前工作台.md') && p02Commands.includes('00-模板入口.md'));
+const p02Output = text(join(evidenceRoot, 'P02-last-message.txt'));
+check('P-02 empty takeover enters document governance', p02Output.includes('PM') && p02Commands.includes('当前工作台.md') && p02Commands.includes('00-模板入口.md'));
 check('P-02 empty takeover remains read-only', git(p02, 'status', '--short') === '');
 
 const p03 = join(casesRoot, 'P03-pm-delegation');

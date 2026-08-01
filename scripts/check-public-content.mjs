@@ -294,6 +294,11 @@ const requiredSkillFacts = [
     value: "设计、开发、测试、运维只是动作能力，不改变 PM 或执行者身份，也不接管任务控制权",
   },
   {
+    path: "模板交付包/AGENTS.md",
+    label: "boss address remains a weak startup-path signal",
+    value: "漏称只作为默认入口可能未生效的弱异常信号，不能单独证明上下文丢失",
+  },
+  {
     path: "模板交付包/skills/task-design/SKILL.md",
     label: "design distinguishes current behavior from the proposed state",
     value: "当前用户页面/系统业务流程尚未变化",
