@@ -83,6 +83,11 @@ requireText("局部助手不启动Worker身份", workerCollaboration, "也不得
 requireText("子智能体只协助原Worker", worker, "内部子智能体只协助当前 Worker");
 requireText("未触及权限不检查", worker, "未触及的维度不检查、不补字段，也不形成暂停");
 requireText("默认不用worktree", worker, "BEYOND 不自动创建 worktree");
+requireText("同目录不等于冲突", pm, "同一目录本身不是冲突");
+requireText("同目录边界不重叠可并行", worker, "共享对象不重叠且测试或运行副作用隔离时可以并行编辑和验证");
+requireText("共享Git动作串行", worker, "共享 Git工作区的索引、HEAD或历史动作串行");
+requireText("只读核对不建正式任务", pm, "只读核对、状态查询、局部判断和 PM能够当轮回答的问题不建立正式任务");
+requireText("环境缺口暂停前查正式事实", worker, "相关运行手册和配置，并尝试不扩大风险的既有路径");
 
 // 冷启动与定位压缩不能改变实际责任。
 requireText("健康工作台优先于文档治理入口", agents, "先恢复当前主线、正式任务和下一步");

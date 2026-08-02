@@ -66,12 +66,12 @@ A task pauses only for:
 
 The user-selected formal project is the default workspace. BEYOND does not create worktrees automatically.
 
-Only one Worker writes to the same formal project at a time. Other Workers may investigate in parallel. Each writing Worker commits its own changes and leaves a clean handoff point before the next Worker writes.
+Workers may edit and validate in the same formal project when task-owned paths and modules are explicit, shared objects do not overlap, and runtime side effects are isolated. Actual overlap in a file, contract, data object, service, environment, or generated output serializes only the affected action.
 
 Git manages versions, commits, rollback, and integration. The PM workbench manages people and order.
 
 - People with independent clones can collaborate through branches.
-- Multiple Workers sharing one directory must serialize writes.
+- Workers sharing one Git working directory serialize index, HEAD, and history operations and stage only task-owned paths.
 - A worktree is used only when the user explicitly requests it and accepts the integration cost.
 
 ## Evidence and safety

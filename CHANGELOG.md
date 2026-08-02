@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- Allow Workers with non-overlapping owned paths and isolated side effects to edit and validate in one formal project, while serializing shared-object and Git index/HEAD/history operations.
+- Keep read-only checks and ordinary progress out of new formal tasks and PM relay traffic, refresh the workbench at control-changing nodes, and require Workers to consult existing facts and runbooks before pausing for environment details.
+
 ## [3.0.4] - 2026-08-01
 
 See the [v3.0.3 → v3.0.4 upgrade guide](docs/en/releases/v3.0.4.md), or read the [Chinese version](docs/releases/v3.0.4.md).
@@ -13,7 +18,7 @@ See the [v3.0.3 → v3.0.4 upgrade guide](docs/en/releases/v3.0.4.md), or read t
 ### Changed
 
 - Simplify the managed task model to PM, one Worker per business result, three business states, and continuous design/development/testing/operations actions inside the same Worker task.
-- Make the user-selected formal project the default workspace; worktrees are no longer created automatically, and shared-directory writes are serialized while independent clones coordinate through Git.
+- Make the user-selected formal project the default workspace; worktrees are no longer created automatically, and independent clones coordinate through Git.
 - Reduce default document reads, PM callbacks, task fields, and project-fact initialization while preserving reusable technology-stack, test, server, deployment, rollback, and credential-entry facts.
 
 ### Fixed

@@ -124,7 +124,7 @@ BEYOND grew from failures observed in real engineering work. Its current archite
 2. **Role-play → explicit control rights:** keep PM and worker identities separate; make design, development, testing, and operations task actions.
 3. **Stage handoffs → task autonomy:** freeze a complete task once and continue through ordinary failures without repeated PM routing.
 4. **Default trust → evidence governance:** separate file, Git, data, environment, and production truth and authorization.
-5. **Single-task success → multi-task coordination:** let the PM workbench track ownership and progress, allow only one Worker to write a formal project at a time, and use Git between independent clones.
+5. **Single-task success → multi-task coordination:** let the PM workbench track ownership and progress, allow parallel work on non-overlapping paths and objects, and serialize shared-object and Git index/history operations.
 6. **Repeated discovery → reusable project facts:** reuse verified engineering, design, test, operations, and security facts; when a task needs missing facts, its Worker investigates and writes back only stable knowledge.
 7. **Rule accumulation → product engineering:** keep a complete safety core, move low-frequency branches into references, and require RED/GREEN/regression evidence for mechanism changes.
 

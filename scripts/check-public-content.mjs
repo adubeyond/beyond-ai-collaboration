@@ -470,8 +470,8 @@ const requiredTaskStateFacts = [
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
-    label: "one worker writes a formal project at a time",
-    value: "同一正式项目同一时刻只安排一个 Worker 进入写入阶段",
+    label: "same directory is not automatically a conflict",
+    value: "同一目录本身不是冲突",
   },
   {
     path: "模板交付包/skills/identity-pm/references/dispatch-and-init.md",
@@ -480,8 +480,8 @@ const requiredTaskStateFacts = [
   },
   {
     path: "模板交付包/skills/identity-pm/references/cross-task-coordination-and-review.md",
-    label: "one writer is allowed in a shared directory",
-    value: "多个 Worker共享一个目录时，同一时间只允许一个写入者",
+    label: "shared Git index and history operations are serialized",
+    value: "同一 Git工作区的索引、HEAD或历史动作串行",
   },
   {
     path: "模板交付包/skills/task-ops/references/git-worktree-and-resource-closeout.md",
