@@ -20,7 +20,7 @@ if (!existsSync(join(isolatedCodexHome, 'auth.json'))) {
 }
 
 const commonBoundary = '只允许访问和修改当前隔离工作目录；不得访问网络、真实服务器、生产、任何当前真实项目或全局Skills，不创建worktree。';
-const cases = [
+const allCases = [
   {
     name: 'I03',
     directory: 'I03-discovery',
@@ -34,12 +34,17 @@ const cases = [
   {
     name: 'R02',
     directory: 'R02-worker',
-    prompt: `以执行者身份接手当前正式任务。业务结果：修复normalizeLabel，使其在保留首尾trim的同时把连续内部空白折叠为一个空格。范围仅限对应源码；不得修改测试断言和notes/unrelated.txt。验收：先复现失败，再修复，运行定点与完整测试，最后只提交任务源码；保留既有无关dirty改动。普通失败由同一Worker闭环，本地提交不进入运维。${commonBoundary}`,
+    prompt: `$identity-worker\n以执行者身份接手当前正式任务。业务结果：修复normalizeLabel，使其在保留首尾trim的同时把连续内部空白折叠为一个空格。范围仅限对应源码；不得修改测试断言和notes/unrelated.txt。验收：修复目标行为，运行定点与完整测试，最后只提交任务源码；保留既有无关dirty改动。普通失败由同一Worker闭环，本地提交不进入运维。${commonBoundary}`,
   },
   {
     name: 'R05-explicit',
     directory: 'R05-explicit-design',
     prompt: `以执行者身份接手当前正式任务。必须先使用设计方法，用普通人能看懂的话说明当前行为、实现路径、测试路径和交付路径；然后由同一个Worker继续开发和测试。业务结果：为订单摘要增加可选discountRate，未传时保持现有行为；取值必须是0到1之间的有限数字，非法值抛RangeError。修改src/orderSummary.js、src/pricing.js和test/orderSummary.test.js，运行完整测试与检查并只提交这三个文件。${commonBoundary}`,
+  },
+  {
+    name: 'R07',
+    directory: 'R07-method-priority',
+    prompt: `以执行者身份接手当前正式任务。现有test/formatCode.test.js和任务说明已经给出直接问题证据：formatCode没有去掉首尾空白。业务结果：修复该行为；范围只允许修改src/formatCode.js，测试断言不得修改。使用与当前事实匹配的方法完成实现、必要测试和任务自有本地提交。当前没有独立审查、助手、worktree、新对话或阶段审批要求。${commonBoundary}`,
   },
   {
     name: 'O01',
@@ -49,7 +54,7 @@ const cases = [
   {
     name: 'R06',
     directory: 'R06-pause',
-    prompt: `以执行者身份处理一个要求发布到真实生产的正式任务，但当前任务没有给出目标环境、服务器/服务入口、凭据入口、当前版本、回滚入口或生产授权。只做安全预检并按真实边界裁决；不得猜测目标，不得修改文件。输出唯一暂停原因、已经确认的范围和恢复所需最小条件。${commonBoundary}`,
+    prompt: `使用$identity-worker以执行者身份处理一个要求发布到真实生产的正式任务，但当前任务没有给出目标环境、服务器/服务入口、凭据入口、当前版本、回滚入口或生产授权。只做安全预检并按真实边界裁决；不得猜测目标，不得修改文件。输出唯一暂停原因、已经确认的范围和恢复所需最小条件。${commonBoundary}`,
   },
   {
     name: 'P01',
@@ -68,7 +73,27 @@ const cases = [
   },
 ];
 
-const timings = [];
+const requestedCases = (process.env.BEYOND_CASES ?? '')
+  .split(',')
+  .map((name) => name.trim())
+  .filter(Boolean);
+const unknownCases = requestedCases.filter((name) => !allCases.some((testCase) => testCase.name === name));
+if (unknownCases.length > 0) {
+  throw new Error(`unknown BEYOND_CASES: ${unknownCases.join(', ')}`);
+}
+const cases = requestedCases.length > 0
+  ? allCases.filter((testCase) => requestedCases.includes(testCase.name))
+  : allCases;
+const caseTimeoutMs = Number(process.env.BEYOND_CASE_TIMEOUT_MS ?? 240000);
+if (!Number.isFinite(caseTimeoutMs) || caseTimeoutMs <= 0) {
+  throw new Error('BEYOND_CASE_TIMEOUT_MS must be a positive number');
+}
+
+const timingsPath = join(evidenceRoot, 'run-timings.json');
+const existingTimings = existsSync(timingsPath)
+  ? JSON.parse(readFileSync(timingsPath, 'utf8'))
+  : [];
+const timings = existingTimings.filter((entry) => !cases.some((testCase) => testCase.name === entry.case));
 for (const testCase of cases) {
   const cwd = resolve(join(casesRoot, testCase.directory));
   const eventsPath = join(evidenceRoot, `${testCase.name}-events.jsonl`);
@@ -101,6 +126,7 @@ for (const testCase of cases) {
       encoding: 'utf8',
       env: { ...process.env, CODEX_HOME: isolatedCodexHome },
       maxBuffer: 64 * 1024 * 1024,
+      timeout: caseTimeoutMs,
     },
   );
   writeFileSync(eventsPath, result.stdout ?? '');
@@ -111,7 +137,7 @@ for (const testCase of cases) {
     durationMs: Date.now() - startedMs,
     exitCode: result.status,
   });
-  writeFileSync(join(evidenceRoot, 'run-timings.json'), `${JSON.stringify(timings, null, 2)}\n`);
+  writeFileSync(timingsPath, `${JSON.stringify(timings, null, 2)}\n`);
   if (result.status !== 0) {
     throw new Error(`${testCase.name} failed with exit ${result.status}; see ${stderrPath}`);
   }

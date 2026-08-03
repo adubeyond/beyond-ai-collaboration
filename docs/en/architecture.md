@@ -45,6 +45,8 @@ The PM workbench is a team dashboard. It records the task, responsible Worker/th
 
 Project facts preserve reusable knowledge such as the technology stack, build and test commands, module boundaries, servers, services, logs, deployment steps, and rollback paths. Missing facts do not block unrelated work. A Worker investigates and writes reusable facts in the same business task when needed.
 
+A production task establishes one current context for its target, running version, source and artifact, allowed effects, health and business checks, rollback, and authorization. After that context is closed, preflight, release, verification, and pre-authorized rollback continue without repeated PM round trips. Only facts that actually change are refreshed.
+
 Project facts do not use an `uninitialized / refresh-needed / available` runtime state machine.
 
 ## Three business states
@@ -64,15 +66,15 @@ A task pauses only for:
 
 ## Git and workspaces
 
-The user-selected formal project is the default workspace. BEYOND does not create worktrees automatically.
+The user-selected formal project is the default workspace. BEYOND does not create or recommend worktrees.
 
-Only one Worker writes to the same formal project at a time. Other Workers may investigate in parallel. Each writing Worker commits its own changes and leaves a clean handoff point before the next Worker writes.
+Workers may edit and validate in the same formal project when task-owned paths and modules are explicit, shared objects do not overlap, and runtime side effects are isolated. Actual overlap in a file, contract, data object, service, environment, or generated output serializes only the affected action.
 
 Git manages versions, commits, rollback, and integration. The PM workbench manages people and order.
 
 - People with independent clones can collaborate through branches.
-- Multiple Workers sharing one directory must serialize writes.
-- A worktree is used only when the user explicitly requests it and accepts the integration cost.
+- Workers sharing one Git working directory serialize index, HEAD, and history operations and stage only task-owned paths.
+- If the user or platform already provided a worktree, treat it only as the current Git scene, verify its source and formal target, and do not create another one.
 
 ## Evidence and safety
 

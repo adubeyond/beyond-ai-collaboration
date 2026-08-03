@@ -10,9 +10,9 @@ BEYOND is a document-driven AI engineering collaboration system for Codex. It tu
 
 Most AI coding tools focus on generating code faster. BEYOND focuses on a harder problem: helping AI understand a real project, stay within authorization, finish a complete business task, prove the result, and become more effective as project knowledge grows.
 
-[Quick Start](docs/en/quick-start.md) · [v3.0.3 Upgrade Guide](docs/en/releases/v3.0.3.md) · [v3.0.4 Upgrade Guide](docs/en/releases/v3.0.4.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
+[Quick Start](docs/en/quick-start.md) · [v3.0.4 Upgrade Guide](docs/en/releases/v3.0.4.md) · [v3.0.5 Upgrade Guide](docs/en/releases/v3.0.5.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
 
-> The current public release is `v3.0.4`. Version `v3.0.2` was abandoned and never entered the public mainline. Version 3.0.4 simplifies the v3.0.3 runtime path while preserving production-grade authorization and evidence boundaries.
+> The current public release is `v3.0.5`. Version `v3.0.2` was abandoned and never entered the public mainline. Version 3.0.5 removes prescriptive method flows that could take control away from the task while preserving the production-grade authorization, evidence, Git, and rollback capabilities established in v3.0.4.
 
 ## What BEYOND changes
 
@@ -20,6 +20,7 @@ Most AI coding tools focus on generating code faster. BEYOND focuses on a harder
 - Design, development, testing, and operations advance one business result continuously without stage approvals.
 - Ordinary implementation and test failures are repaired and retested in the same task; only a required business choice, high-risk action, real shared conflict, or unavailable external resource pauses work.
 - Technology stacks, test commands, environments, servers, and release procedures become reusable project facts instead of being rediscovered in every task.
+- A production task establishes its target, artifact, authorization, verification, and rollback context once, then refreshes only facts that actually change.
 - Code, Git, tests, services, data, and production remain separate sources of truth with separate authorization boundaries.
 
 ## Three methodologies, one engineering system
@@ -124,9 +125,9 @@ BEYOND grew from failures observed in real engineering work. Its current archite
 2. **Role-play → explicit control rights:** keep PM and worker identities separate; make design, development, testing, and operations task actions.
 3. **Stage handoffs → task autonomy:** freeze a complete task once and continue through ordinary failures without repeated PM routing.
 4. **Default trust → evidence governance:** separate file, Git, data, environment, and production truth and authorization.
-5. **Single-task success → multi-task coordination:** let the PM workbench track ownership and progress, allow only one Worker to write a formal project at a time, and use Git between independent clones.
+5. **Single-task success → multi-task coordination:** let the PM workbench track ownership and progress, allow parallel work on non-overlapping paths and objects, and serialize shared-object and Git index/history operations.
 6. **Repeated discovery → reusable project facts:** reuse verified engineering, design, test, operations, and security facts; when a task needs missing facts, its Worker investigates and writes back only stable knowledge.
-7. **Rule accumulation → product engineering:** keep a complete safety core, move low-frequency branches into references, and require RED/GREEN/regression evidence for mechanism changes.
+7. **Rule accumulation → product engineering:** keep a complete safety core, move low-frequency branches into references, and validate mechanism changes against the real problem, affected behavior, adjacent regressions, and deployment boundaries without prescribing one test order.
 
 The next public milestones are reproducible installation, measurable performance, composable capability baselines, and community contribution without allowing one private project's rules to become global defaults.
 

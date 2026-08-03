@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.0.5] - 2026-08-03
+
+See the [v3.0.4 → v3.0.5 upgrade guide](docs/en/releases/v3.0.5.md), or read the [Chinese version](docs/releases/v3.0.5.md).
+
+### Changed
+
+- Remove prescriptive pre-design, fixed test-order, automatic independent-review, helper-per-step, and worktree-creation paths from the runtime contract while retaining result-based engineering, test, Git, and release evidence.
+- Treat existing worktrees as ordinary Git scenes only; BEYOND no longer creates or recommends them.
+- Establish one reusable production context per release task and refresh only changed targets, artifacts, versions, authorization, verification, or rollback facts instead of reopening the same gate at every step.
+- Allow a Worker to use task-local subagents for bounded investigation, testing, or cross-module checks that can run in parallel, without turning them into formal Workers or PM approval points.
+
+### Fixed
+
+- Allow Workers with non-overlapping owned paths and isolated side effects to edit and validate in one formal project, while serializing shared-object and Git index/HEAD/history operations.
+- Keep read-only checks and ordinary progress out of new formal tasks and PM relay traffic, refresh the workbench at control-changing nodes, and require Workers to consult existing facts and runbooks before pausing for environment details.
+
 ## [3.0.4] - 2026-08-01
 
 See the [v3.0.3 → v3.0.4 upgrade guide](docs/en/releases/v3.0.4.md), or read the [Chinese version](docs/releases/v3.0.4.md).
@@ -13,7 +29,7 @@ See the [v3.0.3 → v3.0.4 upgrade guide](docs/en/releases/v3.0.4.md), or read t
 ### Changed
 
 - Simplify the managed task model to PM, one Worker per business result, three business states, and continuous design/development/testing/operations actions inside the same Worker task.
-- Make the user-selected formal project the default workspace; worktrees are no longer created automatically, and shared-directory writes are serialized while independent clones coordinate through Git.
+- Make the user-selected formal project the default workspace; worktrees are no longer created automatically, and independent clones coordinate through Git.
 - Reduce default document reads, PM callbacks, task fields, and project-fact initialization while preserving reusable technology-stack, test, server, deployment, rollback, and credential-entry facts.
 
 ### Fixed

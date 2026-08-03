@@ -49,9 +49,9 @@ npm run check
 
 Changes under `模板交付包/skills/` must also provide:
 
-1. A stable RED scenario that reproduces the problem before the change.
-2. GREEN evidence for the same scenario after the change.
-3. At least one adjacent regression scenario.
+1. Pre-change evidence for the real problem, gap, or regression risk; reuse direct evidence instead of manufacturing a failing test for process.
+2. Post-change validation that directly matches the intended result.
+3. At least one affected adjacent regression scenario.
 4. An explanation of the impact on triggering, control rights, authorization, stop conditions, and compatibility.
 
 Do not weaken a gate, delete a failing assertion, or write private-project facts into the general template merely to make a test pass.

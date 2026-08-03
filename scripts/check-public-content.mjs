@@ -340,8 +340,8 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/task-dev/SKILL.md",
-    label: "the same Worker continues from development to testing",
-    value: "同一个 Worker切换测试方法",
+    label: "development switches to testing only when the result needs it",
+    value: "需要测试专业判断、复杂覆盖、跨层联调或明确独立性时",
   },
   {
     path: "模板交付包/skills/task-dev/SKILL.md",
@@ -406,12 +406,12 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/task-ops/SKILL.md",
     label: "operations verdict is not task state",
-    value: "这是当前运维动作的判断，不是任务状态",
+    value: "这是一次判断，不是每个执行步骤都要重复经过的状态",
   },
   {
     path: "模板交付包/skills/task-ops/SKILL.md",
     label: "real operations refresh target host identity",
-    value: "必须重新确认本次目标环境与主机身份",
+    value: "连接目标时现场确认主机身份和实际运行落点",
   },
   {
     path: "模板交付包/skills/task-ops/SKILL.md",
@@ -429,9 +429,9 @@ const requiredSkillFacts = [
     value: "写回项目事实索引登记的现有环境所有者",
   },
   {
-    path: "模板交付包/skills/task-ops/references/git-worktree-and-resource-closeout.md",
-    label: "legacy runbooks do not authorize worktrees",
-    value: "不等于用户已经授权创建",
+    path: "模板交付包/skills/task-ops/references/git-and-resource-closeout.md",
+    label: "legacy runbooks do not create worktrees",
+    value: "旧 runbook要求创建“干净 worktree”不改变本规则",
   },
   {
     path: "模板交付包/skills/task-design/references/complex-design-document-and-implementation.md",
@@ -441,7 +441,17 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/task-ops/references/production-release-and-convergence.md",
     label: "ordinary production release uses four concrete facts",
-    value: "普通单一来源发布只核对四项",
+    value: "普通单一来源发布先核对四个身份事实",
+  },
+  {
+    path: "模板交付包/skills/task-ops/SKILL.md",
+    label: "production context is reused instead of rebuilt",
+    value: "已经核验且没有变化的事实不重复询问、重读或重新审批",
+  },
+  {
+    path: "模板交付包/skills/task-ops/SKILL.md",
+    label: "production runs continuously after one gate",
+    value: "不逐步输出`可以继续`、不回PM、不等待用户重复放行",
   },
 ];
 
@@ -465,13 +475,13 @@ const requiredTaskStateFacts = [
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
-    label: "BEYOND does not create worktrees automatically",
-    value: "BEYOND 不自动创建或默认使用 worktree",
+    label: "BEYOND does not create or recommend worktrees",
+    value: "BEYOND 不创建、推荐或默认使用 worktree",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
-    label: "one worker writes a formal project at a time",
-    value: "同一正式项目同一时刻只安排一个 Worker 进入写入阶段",
+    label: "same directory is not automatically a conflict",
+    value: "同一目录本身不是冲突",
   },
   {
     path: "模板交付包/skills/identity-pm/references/dispatch-and-init.md",
@@ -479,14 +489,14 @@ const requiredTaskStateFacts = [
     value: "当前正式项目是默认工作区",
   },
   {
-    path: "模板交付包/skills/identity-pm/references/cross-task-coordination-and-review.md",
-    label: "one writer is allowed in a shared directory",
-    value: "多个 Worker共享一个目录时，同一时间只允许一个写入者",
+    path: "模板交付包/skills/identity-pm/references/cross-task-coordination.md",
+    label: "shared Git index and history operations are serialized",
+    value: "同一 Git工作区的索引、HEAD或历史动作串行",
   },
   {
-    path: "模板交付包/skills/task-ops/references/git-worktree-and-resource-closeout.md",
-    label: "worktrees require an explicit user request",
-    value: "只有用户明确要求并接受合流成本时，才一次性使用 worktree",
+    path: "模板交付包/skills/task-ops/references/git-and-resource-closeout.md",
+    label: "only existing worktrees are supported",
+    value: "只有用户或平台已经提供 worktree时才处理这个现场",
   },
   {
     path: "模板交付包/docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md",
@@ -591,6 +601,61 @@ for (const skillName of ["task-design", "task-dev", "task-test", "task-ops"]) {
         )}`,
       );
     }
+  }
+}
+
+const forbiddenPrescriptiveDefaults = [
+  {
+    path: "README.zh-CN.md",
+    pattern: /先有 RED|RED\/GREEN/,
+    label: "public guidance prescribes RED/GREEN",
+  },
+  {
+    path: "CONTRIBUTING.md",
+    pattern: /RED 场景|GREEN 证据/,
+    label: "contribution guidance prescribes RED/GREEN",
+  },
+  {
+    path: "模板交付包/skills/task-dev/SKILL.md",
+    pattern: /一次只验证一个根因假设/,
+    label: "development prescribes a single-hypothesis gate",
+  },
+  {
+    path: "模板交付包/skills/task-test/SKILL.md",
+    pattern: /独立证据收益高于协调成本|核心链路.*独立审查/,
+    label: "testing infers independent review",
+  },
+  {
+    path: "模板交付包/skills/identity-pm/references/cross-task-coordination.md",
+    pattern: /正式独立审查|低风险改动已有匹配机器证据|核心链路、共享契约、生产数据或发布变更确实需要独立责任/,
+    label: "coordination reintroduces an automatic review lifecycle",
+  },
+  {
+    path: "模板交付包/skills/task-ops/references/git-and-resource-closeout.md",
+    pattern: /创建前必须明确|只有用户明确要求并接受合流成本时/,
+    label: "operations reintroduces worktree creation",
+  },
+];
+
+for (const check of forbiddenPrescriptiveDefaults) {
+  const path = join(repositoryRoot, ...check.path.split("/"));
+  if (!existsSync(path)) {
+    errors.push(`固定流程守卫文件缺失：${check.path}`);
+    continue;
+  }
+  const matched = check.pattern.test(readFileSync(path, "utf8"));
+  if ((!check.invert && matched) || (check.invert && !matched)) {
+    errors.push(`固定流程回归：${check.label} (${check.path})`);
+  }
+}
+
+for (const removedPath of [
+  "模板交付包/skills/task-dev/references/implementation-debugging-and-repair.md",
+  "模板交付包/skills/identity-pm/references/cross-task-coordination-and-review.md",
+  "模板交付包/skills/task-ops/references/git-worktree-and-resource-closeout.md",
+]) {
+  if (existsSync(join(repositoryRoot, ...removedPath.split("/")))) {
+    errors.push(`已删除的旧流程 reference 重新出现：${removedPath}`);
   }
 }
 
