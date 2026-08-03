@@ -43,11 +43,13 @@ const production = read("模板交付包/skills/task-ops/references/production-r
 const documentEntry = read("模板交付包/docs/AI编程协同机制/00-模板入口.md");
 const collaboration = read("模板交付包/docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md");
 const workerCollaboration = read("模板交付包/skills/identity-worker/references/collaboration-and-rework.md");
+const pmCoordination = read("模板交付包/skills/identity-pm/references/cross-task-coordination.md");
+const gitCloseout = read("模板交付包/skills/task-ops/references/git-and-resource-closeout.md");
 
 // S1：普通局部 BUG。
 requireText("S1清晰请求不制造任务", agents, "清晰请求不先输出接手确认，不把初始化仪式当成答案，也不凭空制造正式任务");
-requireText("S1局部修改不读reference", dev, "清晰局部修改：沿现有组织直接处理，不读 reference");
-requireText("S1必要测试不再申请授权", dev, "正式代码任务的验收本身包含必要测试");
+requireText("S1局部修改不读reference", dev, "普通缺陷、清晰局部修改或已有明确验证入口：沿现有组织直接处理，不读 reference");
+requireText("S1必要验证不再申请授权", dev, "正式代码任务的验收本身包含必要测试或等价验证");
 requireText("S1普通失败原Worker闭环", worker, "普通测试失败、实现调整、格式化、lint、构建和复测由本 Worker闭环");
 requireText("S1本地提交连续交付", dev, "任务自有本地提交属于连续交付");
 requireText("S1本地提交不切运维", dev, "不为这一步切换或加载 `task-ops`");
@@ -62,8 +64,11 @@ requireText("S2测试失败回原Worker", test, "同一个 Worker切换开发方
 
 // S3：已授权生产发布。
 requireText("S3相同授权不再等待PM", ops, "不等待 PM二次激活");
-requireText("S3核验实际目标", ops, "必须重新确认本次目标环境与主机身份");
-requireText("S3单一来源四项事实", production, "普通单一来源发布只核对四项");
+requireText("S3首次核验实际目标", ops, "连接目标时现场确认主机身份和实际运行落点");
+requireText("S3单一来源四项事实", production, "普通单一来源发布先核对四个身份事实");
+requireText("S3一次建立生产上下文", production, "形成一份生产上下文");
+requireText("S3后续只刷新变化项", ops, "才刷新受影响项");
+requireText("S3连续发布不重复放行", ops, "不逐步输出`可以继续`、不回PM、不等待用户重复放行");
 forbidText("S3不再默认五锚点", production, "五锚点");
 forbidText("S3不再默认任务起始基线", production, "任务起始基线 /");
 requireText("S3执行者自行远程操作", ops, "不要求用户手工代操作，也不重复索要相同授权");
@@ -80,14 +85,31 @@ requireText("PM不填写回传ID", pm, "不在 Worker任务正文中填写任何
 requireText("PM不否定平台回传", pm, "也不写“无需回传”");
 requireText("正式任务显式启动Worker", pm, "把`$identity-worker`放在新任务初始提示的首行");
 requireText("局部助手不启动Worker身份", workerCollaboration, "也不得调用`$identity-worker`");
-requireText("子智能体只协助原Worker", worker, "内部子智能体只协助当前 Worker");
+requireText("子智能体只协助原Worker", worker, "子智能体不是新的正式任务或Worker");
 requireText("未触及权限不检查", worker, "未触及的维度不检查、不补字段，也不形成暂停");
-requireText("默认不用worktree", worker, "BEYOND 不自动创建 worktree");
+requireText("默认不用worktree", worker, "BEYOND 不创建或推荐 worktree");
 requireText("同目录不等于冲突", pm, "同一目录本身不是冲突");
 requireText("同目录边界不重叠可并行", worker, "共享对象不重叠且测试或运行副作用隔离时可以并行编辑和验证");
 requireText("共享Git动作串行", worker, "共享 Git工作区的索引、HEAD或历史动作串行");
 requireText("只读核对不建正式任务", pm, "只读核对、状态查询、局部判断和 PM能够当轮回答的问题不建立正式任务");
 requireText("环境缺口暂停前查正式事实", worker, "相关运行手册和配置，并尝试不扩大风险的既有路径");
+
+// 目标优先：方法按需，独立性和助手只显式/有收益触发，worktree只兼容既有现场。
+requireText("根入口任务目标高于流程", agents, "任务目标高于方法流程");
+requireText("Worker不按方法拆任务", worker, "不按 Skill、步骤或文件数量机械拆任务");
+requireText("简单单路径不启助手", worker, "简单、连续、单路径任务由Worker直接完成");
+requireText("开发不制造失败测试", dev, "不为流程预先制造失败测试");
+requireText("开发方法没有固定过门顺序", dev, "不是必须依次通过的阶段门禁");
+requireText("清晰局部修复不强制切测试Skill", dev, "清晰局部改动可以由开发方法直接运行现有测试并交付");
+requireText("独立测试只显式触发", test, "没有用户、项目规则或验收标准明确提出独立性时");
+forbidText("测试不推断独立审查", test, "独立证据收益高于协调成本");
+requireText("助手只在真并行收益时使用", workerCollaboration, "可以与Worker当前动作真正并行");
+requireText("普通助手无需重复批准", workerCollaboration, "不需要PM或用户为普通局部助手另行批准");
+requireText("独立验证可由项目预登记", test, "项目规则可以预先登记认证、支付、数据迁移、核心契约或生产发布等对象必须独立验证");
+requireText("PM协调不内置reviewer", pmCoordination, "不增加 reviewer身份、专属状态、自动触发条件或审查生命周期");
+forbidText("PM协调不按风险自动审查", pmCoordination, "核心链路、共享契约、生产数据或发布变更确实需要独立责任");
+requireText("既有worktree仅兼容", gitCloseout, "只有用户或平台已经提供 worktree时才处理这个现场");
+forbidText("不再提供worktree创建清单", gitCloseout, "创建前必须明确并核对");
 
 // 冷启动与定位压缩不能改变实际责任。
 requireText("健康工作台优先于文档治理入口", agents, "先恢复当前主线、正式任务和下一步");
@@ -98,6 +120,18 @@ requireText("开发方法仍回原Worker", dev, "正式结果回到同一个 Wor
 requireText("测试方法仍回原Worker", test, "正式证据和裁决回到同一个 Worker");
 requireText("运维方法仍回原Worker", ops, "正式结果回到同一个 Worker");
 requireText("03退出返回根所有者", collaboration, "返回根[AGENTS.md规则所有者]");
+
+for (const removedPath of [
+  "模板交付包/skills/task-dev/references/implementation-debugging-and-repair.md",
+  "模板交付包/skills/identity-pm/references/cross-task-coordination-and-review.md",
+  "模板交付包/skills/task-ops/references/git-worktree-and-resource-closeout.md",
+]) {
+  if (existsSync(join(repositoryRoot, ...removedPath.split("/")))) {
+    errors.push(`旧流程 reference 仍存在：${removedPath}`);
+  } else {
+    passed += 1;
+  }
+}
 
 if (errors.length > 0) {
   console.error(`实现路径验证失败：${errors.length} 项；通过 ${passed} 项`);

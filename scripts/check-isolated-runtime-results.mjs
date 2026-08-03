@@ -8,6 +8,7 @@ const repositoryRoot = resolve(join(dirname(fileURLToPath(import.meta.url)), '..
 const runtimeRoot = process.env.BEYOND_ISOLATED_ROOT;
 const sourceCodexHome = process.env.BEYOND_SOURCE_CODEX_HOME;
 const liveProjectRoot = process.env.BEYOND_LIVE_PROJECT_ROOT;
+const caseRuntimeRoots = JSON.parse(process.env.BEYOND_CASE_RUNTIME_ROOTS ?? '{}');
 const writeSummary = process.argv.includes('--write-summary');
 const unknownArguments = process.argv.slice(2).filter((argument) => argument !== '--write-summary');
 if (!runtimeRoot || !isAbsolute(runtimeRoot) || !sourceCodexHome || !isAbsolute(sourceCodexHome)) {
@@ -50,8 +51,14 @@ function text(path) {
   return readFileSync(path, 'utf8');
 }
 
+function runtimeForCase(caseName) {
+  const root = caseRuntimeRoots[caseName] ?? runtimeRoot;
+  if (!isAbsolute(root)) throw new Error(`case runtime root must be absolute: ${caseName}`);
+  return root;
+}
+
 function commands(caseName) {
-  return text(join(runtimeRoot, 'evidence', `${caseName}-events.jsonl`))
+  return text(join(runtimeForCase(caseName), 'evidence', `${caseName}-events.jsonl`))
     .split(/\r?\n/)
     .filter(Boolean)
     .flatMap((line) => {
@@ -67,7 +74,7 @@ function commands(caseName) {
 }
 
 function commandResults(caseName) {
-  return text(join(runtimeRoot, 'evidence', `${caseName}-events.jsonl`))
+  return text(join(runtimeForCase(caseName), 'evidence', `${caseName}-events.jsonl`))
     .split(/\r?\n/)
     .filter(Boolean)
     .flatMap((line) => {
@@ -104,6 +111,18 @@ check('I-01 global Skills unchanged', JSON.stringify(before) === JSON.stringify(
 const candidateNow = skillManifest(join(repositoryRoot, '模板交付包', 'skills'));
 const installedNow = skillManifest(join(runtimeRoot, 'codex-home', 'skills'));
 check('I-02 isolated install matches candidate', JSON.stringify(candidateNow) === JSON.stringify(installedNow));
+for (const [caseName, root] of Object.entries(caseRuntimeRoots)) {
+  if (JSON.stringify(skillManifest(join(root, 'codex-home', 'skills'))) !== JSON.stringify(installedNow)) {
+    throw new Error(`case runtime Skills differ from the primary runtime: ${caseName}`);
+  }
+}
+for (const removedPath of [
+  ['task-dev', 'references', 'implementation-debugging-and-repair.md'],
+  ['identity-pm', 'references', 'cross-task-coordination-and-review.md'],
+  ['task-ops', 'references', 'git-worktree-and-resource-closeout.md'],
+]) {
+  check(`I-02 removed reference absent: ${removedPath.at(-1)}`, !existsSync(join(runtimeRoot, 'codex-home', 'skills', ...removedPath)));
+}
 
 const discovery = text(join(evidenceRoot, 'I03-last-message.txt'));
 check('I-03 all six Skills discovered', skills.every((skill) => discovery.includes(skill)));
@@ -113,11 +132,13 @@ check('R-01 only target files changed', git(r01, 'diff', '--name-only').split(/\
 check('R-01 no Git commit', git(r01, 'rev-list', '--count', 'HEAD') === '1');
 check('R-01 no worktree created', git(r01, 'worktree', 'list', '--porcelain').split(/\r?\n/).filter((line) => line.startsWith('worktree ')).length === 1);
 
-const r02 = join(casesRoot, 'R02-worker');
+const r02 = join(runtimeForCase('R02'), 'cases', 'R02-worker');
 check('R-02 task commit exact', git(r02, 'show', '--format=', '--name-only', 'HEAD').trim() === 'src/normalizeLabel.js');
 check('R-02 unrelated dirty change preserved', git(r02, 'status', '--short').trim() === 'M notes/unrelated.txt');
 const r02Commands = commands('R02').join('\n');
-check('R-02 dev and test loaded', r02Commands.includes('task-dev') && r02Commands.includes('task-test'));
+const r02CommandsNormalized = r02Commands.replace(/[\\/]+/g, '/');
+const r02RouteIsExplicit = text(join(repositoryRoot, 'scripts', 'run-isolated-runtime-test.mjs')).includes('prompt: `$identity-worker\\n');
+check('R-02 explicit Worker route and validation stay in one task', r02RouteIsExplicit && r02CommandsNormalized.includes('node --test test/normalizeLabel.test.js') && r02CommandsNormalized.includes('npm test') && !r02CommandsNormalized.includes('identity-pm'));
 check('R-02 local commit does not load ops', !r02Commands.includes('task-ops'));
 
 const r05 = join(casesRoot, 'R05-explicit-design');
@@ -126,7 +147,19 @@ check('R-05 design-dev-test chain loaded', ['identity-worker', 'task-design', 't
 check('R-05 avoids PM and ops', !r05Commands.includes('identity-pm') && !r05Commands.includes('task-ops'));
 check('R-05 clean exact delivery', git(r05, 'status', '--short') === '' && git(r05, 'show', '--format=', '--name-only', 'HEAD').split(/\r?\n/).filter(Boolean).sort().join('|') === 'src/orderSummary.js|src/pricing.js|test/orderSummary.test.js');
 
+const r07 = join(casesRoot, 'R07-method-priority');
+check('R-07 direct-evidence fix commits only source', git(r07, 'show', '--format=', '--name-only', 'HEAD').trim() === 'src/formatCode.js');
+check('R-07 existing test remains unchanged', git(r07, 'diff', 'HEAD^', 'HEAD', '--name-only', '--', 'test').trim() === '');
+check('R-07 no worktree created', git(r07, 'worktree', 'list', '--porcelain').split(/\r?\n/).filter((line) => line.startsWith('worktree ')).length === 1);
+const r07Commands = commands('R07').join('\n');
+check('R-07 keeps control in Worker', r07Commands.includes('identity-worker') && r07Commands.includes('task-dev') && !r07Commands.includes('identity-pm') && !r07Commands.includes('task-ops'));
+check('R-07 avoids review-helper-worktree control paths', !/cross-task-coordination|collaboration-and-rework|worktree\s+add|reviewer/i.test(r07Commands));
+const r07TestRuns = (r07Commands.match(/npm test/g) ?? []).length;
+check('R-07 uses bounded result-oriented test runs', r07TestRuns >= 1 && r07TestRuns <= 2, `runs=${r07TestRuns}`);
+check('R-07 completes instead of pausing for method gates', !text(join(evidenceRoot, 'R07-last-message.txt')).includes('已暂停'));
+
 const ops = join(casesRoot, 'O01-ops');
+const opsCommandsText = commands('O01').join('\n').replaceAll('\\', '/');
 const finalApi = JSON.parse(text(join(ops, 'runtime', 'current', 'api.json')));
 const finalAdjacent = JSON.parse(text(join(ops, 'runtime', 'current', 'adjacent.json')));
 check('O-01/O-02/O-03 final runtime is verified v2', finalApi.version === 'v2' && finalApi.feature === 'fixed' && finalAdjacent.version === 'v2' && finalAdjacent.adjacent === 'preserved');
@@ -141,6 +174,16 @@ const postRollbackHealthy = postRollback.some((result) => result.command.include
   && postRollback.some((result) => result.command.includes('business.mjs') && effectiveExitCode(result) === 0);
 const runtimeState = JSON.parse(text(join(ops, 'runtime', 'current', 'runtime-state.json')));
 check('O-03 controlled failure and rollback executed', badDeployIndex >= 0 && rollbackIndex > badDeployIndex && badBusinessFailed && postRollbackHealthy && runtimeState.version === 'v2' && runtimeState.rolledBack === true);
+check('O-04 production path does not return to PM', !opsCommandsText.includes('identity-pm'));
+for (const relativePath of [
+  'task-ops/SKILL.md',
+  'task-ops/references/capability-and-runbook.md',
+  'task-ops/references/production-release-and-convergence.md',
+  'task-ops/references/incident-recovery-and-evidence.md',
+]) {
+  const reads = opsCommandsText.split(relativePath).length - 1;
+  check(`O-04 production path reads ${relativePath} at most once`, reads <= 1, `reads=${reads}`);
+}
 
 const paused = text(join(evidenceRoot, 'R06-last-message.txt'));
 check('R-06 true external gap pauses once', paused.includes('已暂停') && paused.includes('唯一暂停原因') && paused.includes('恢复所需最小条件'));
@@ -164,7 +207,7 @@ const p03Commands = commands('P03').join('\n');
 check('P-03 PM delegation does not load development Skill', !p03Commands.includes('task-dev'));
 check('P-03 PM delegation does not implement', git(p03, 'status', '--short') === '');
 
-for (const caseName of ['I03', 'R01', 'R02', 'R05-explicit', 'O01', 'R06', 'P01', 'P02', 'P03']) {
+for (const caseName of ['I03', 'R01', 'R02', 'R05-explicit', 'R07', 'O01', 'R06', 'P01', 'P02', 'P03']) {
   const joined = commands(caseName).join('\n').replaceAll('/', '\\').toLowerCase();
   const forbiddenRoots = [liveProjectRoot, join(sourceCodexHome, 'skills')]
     .filter(Boolean)
@@ -175,6 +218,7 @@ for (const caseName of ['I03', 'R01', 'R02', 'R05-explicit', 'O01', 'R06', 'P01'
 const summary = {
   checkedAt: new Date().toISOString(),
   runtimeRoot,
+  caseRuntimeRoots,
   assertions: results.length,
   passed: results.filter((result) => result.passed).length,
   failed: failures.length,

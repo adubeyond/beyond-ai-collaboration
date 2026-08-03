@@ -231,7 +231,7 @@ if (!existsSync(sourceAuth)) {
 }
 cpSync(sourceAuth, join(isolatedCodexHome, "auth.json"));
 
-for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-design", "R05-explicit-design", "R06-pause", "O01-ops", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation"]) {
+for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-design", "R05-explicit-design", "R06-pause", "R07-method-priority", "O01-ops", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation"]) {
   copyProjectFixture(join(casesRoot, caseName));
 }
 
@@ -267,6 +267,22 @@ for (const caseName of ["R05-design", "R05-explicit-design"]) {
 }
 
 initializeGit(join(casesRoot, "R06-pause"), "fixture: production information gap");
+
+const r07 = join(casesRoot, "R07-method-priority");
+writeFixture(r07, "src/formatCode.js", `export function formatCode(value) {
+  return value.toUpperCase();
+}
+`);
+writeFixture(r07, "test/formatCode.test.js", `import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { formatCode } from '../src/formatCode.js';
+
+test('trims surrounding whitespace and uppercases the code', () => {
+  assert.equal(formatCode('  alpha-1  '), 'ALPHA-1');
+});
+`);
+initializeGit(r07, "fixture: direct evidence for formatCode defect");
 
 const ops = join(casesRoot, "O01-ops");
 addOpsFixture(ops);

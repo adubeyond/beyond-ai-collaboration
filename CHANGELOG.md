@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.0.5] - 2026-08-03
+
+See the [v3.0.4 → v3.0.5 upgrade guide](docs/en/releases/v3.0.5.md), or read the [Chinese version](docs/releases/v3.0.5.md).
+
+### Changed
+
+- Remove prescriptive pre-design, fixed test-order, automatic independent-review, helper-per-step, and worktree-creation paths from the runtime contract while retaining result-based engineering, test, Git, and release evidence.
+- Treat existing worktrees as ordinary Git scenes only; BEYOND no longer creates or recommends them.
+- Establish one reusable production context per release task and refresh only changed targets, artifacts, versions, authorization, verification, or rollback facts instead of reopening the same gate at every step.
+- Allow a Worker to use task-local subagents for bounded investigation, testing, or cross-module checks that can run in parallel, without turning them into formal Workers or PM approval points.
+
 ### Fixed
 
 - Allow Workers with non-overlapping owned paths and isolated side effects to edit and validate in one formal project, while serializing shared-object and Git index/HEAD/history operations.
