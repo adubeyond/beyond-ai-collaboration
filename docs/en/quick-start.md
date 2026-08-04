@@ -52,6 +52,8 @@ beyond-demo/
 
 The project overview, workbench, and project-fact files are intentionally empty. Do not prefill them with unverified demo results.
 
+For an existing project, do not overwrite its documentation tree. During the initial import or an upgrade, check only the root and active nested `AGENTS.md` files, current subproject entries, and fact indexes. Keep project-specific boundaries and fact links, but move obsolete workbench-activation gates, task states, and duplicated Skill methods out of those project documents. This compatibility check is not part of the normal task hot path.
+
 ## Install the Skills
 
 Install or explicitly reference these six directories from `skills/`:

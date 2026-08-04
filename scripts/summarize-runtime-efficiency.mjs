@@ -17,6 +17,7 @@ const caseDirectories = {
   I03: 'I03-discovery',
   R01: 'R01-direct',
   R02: 'R02-worker',
+  R08: 'R08-production-baseline',
   'R05-explicit': 'R05-explicit-design',
   O01: 'O01-ops',
   R06: 'R06-pause',

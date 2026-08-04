@@ -39,9 +39,15 @@ relevant project-fact entries
 real pause boundaries
 ```
 
+The packet is a compact business contract, not a PM-authored execution manual. A formal task explicitly starts the Worker identity with one Action Skill matching the initial primary problem; this loads the professional method without preventing the Worker from switching methods later. Investigation steps, implementation tactics, test composition, and evidence organization remain with the Worker, which combines the relevant Action Skill with project facts and first-hand reality.
+
+Test verdicts preserve the full coverage denominator, including failures, skips, and exclusions. Offline evidence does not impersonate current DOM, GUI, network, database, or runtime canaries, and a task-scoped candidate verdict does not turn a failing repository-wide gate green. Testing by the same Worker is professional testing, not independent testing.
+
+A hotfix binds to the source identity of its formal target. If the current branch is not a descendant of that target, or if the range contains unrelated changes, the Worker prepares the change on the target baseline instead of presenting a next-release package as deployable. Shared modules and external contracts use current samples or schemas and close over direct consumers, adjacent behavior, and the complete task-owned commit.
+
 ## Workbench and project facts
 
-The PM workbench is a team dashboard. It records the task, responsible Worker/thread, one of three states, current progress, blocking risk, formal result, and update time. It is not a Git HEAD mirror or an execution permit.
+The PM workbench is a team dashboard. It records the task, responsible Worker/thread, one of three states, one current business milestone, blocking risk, one formal result or evidence entry, and update time. It does not copy route counts, test totals, command logs, or repeated attempts, and it is not a Git HEAD mirror or an execution permit. Completed tasks leave the high-frequency table once their result has a stable entry and no longer affects the current mainline or shared objects.
 
 Project facts preserve reusable knowledge such as the technology stack, build and test commands, module boundaries, servers, services, logs, deployment steps, and rollback paths. Missing facts do not block unrelated work. A Worker investigates and writes reusable facts in the same business task when needed.
 
@@ -56,6 +62,8 @@ Project facts do not use an `uninitialized / refresh-needed / available` runtime
 - `completed`
 
 Design, development, testing, repair, commit, and acceptance are actions rather than additional states.
+
+A user checkpoint such as “design first, implement after confirmation” keeps the original task in progress and resumes the same Worker after confirmation. Discussions, suggestions, and candidate proposals do not change another active task's prerequisites, pause conditions, or authorization until the user confirms them.
 
 A task pauses only for:
 

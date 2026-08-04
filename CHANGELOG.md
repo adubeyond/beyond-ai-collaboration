@@ -6,6 +6,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+
+## [3.0.6] - 2026-08-04
+
+See the [v3.0.5 → v3.0.6 upgrade guide](docs/en/releases/v3.0.6.md), or read the [Chinese version](docs/releases/v3.0.6.md).
+
+### Changed
+
+- Define BEYOND as a composition of identity/Action Skills, project Markdown facts, the current task, and first-hand runtime evidence rather than a pure-Skill system.
+- Add a one-time existing-project compatibility check for active nested `AGENTS.md` files, subproject entries, fact indexes, and direct links without adding that scan to ordinary tasks.
+- During that one-time check, reconcile conflicting current host, SSH-alias, and credential-source entries without scanning unrelated history.
+- Keep PM task packets as compact business contracts instead of Worker execution manuals, and treat an explicit request to assign a team result as sufficient dispatch intent.
+- Keep one formal Worker in control across design, development, testing, ordinary repair, local commits, and compact PM callback; Action Skills remain professional methods rather than new agents.
+- Record canonical SSH aliases, verified host identity, recent resolved addresses, and credential sources separately so stale IPs do not become the permanent connection entry again.
+- Keep user-facing status and delivery answers in business language while leaving commands, hashes, field names, and detailed evidence in their formal evidence owner.
+
+### Fixed
+
+- Prevent project overviews and fact indexes from becoming a second copy of generic Skill methods or from retaining obsolete workbench-activation and fixed-stage gates after an upgrade.
+- Prevent the PM workbench from copying Worker route/test/batch details or retaining completed tasks after their stable result no longer affects the mainline.
+- Prevent design checkpoints from creating a second implementation Worker, and prevent unconfirmed PM discussions from becoming cross-task control instructions.
+- Prevent a hotfix from using a source line unrelated to the deployed target, and require shared-contract changes to close over direct consumers, adjacent checks, and the complete task-owned delivery set.
+- Prevent simple PM actions from narrating every read, edit, and verification step; short tasks now keep only an opening notice and the final delivery, with status updates reserved for longer work.
+- Prevent an explicitly selected Skill from being executed only from its name or description; its main instructions must be loaded, and references remain conditional on the Skill's own reading matrix.
+- Prevent SSH conflicts from causing repeated password requests before the canonical alias and existing key or credential entry have been checked.
+
 ## [3.0.5] - 2026-08-03
 
 See the [v3.0.4 → v3.0.5 upgrade guide](docs/en/releases/v3.0.5.md), or read the [Chinese version](docs/releases/v3.0.5.md).

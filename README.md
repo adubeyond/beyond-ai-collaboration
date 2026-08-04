@@ -10,9 +10,9 @@ BEYOND is a document-driven AI engineering collaboration system for Codex. It tu
 
 Most AI coding tools focus on generating code faster. BEYOND focuses on a harder problem: helping AI understand a real project, stay within authorization, finish a complete business task, prove the result, and become more effective as project knowledge grows.
 
-[Quick Start](docs/en/quick-start.md) · [v3.0.4 Upgrade Guide](docs/en/releases/v3.0.4.md) · [v3.0.5 Upgrade Guide](docs/en/releases/v3.0.5.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
+[Quick Start](docs/en/quick-start.md) · [v3.0.5 Upgrade Guide](docs/en/releases/v3.0.5.md) · [v3.0.6 Upgrade Guide](docs/en/releases/v3.0.6.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
 
-> The current public release is `v3.0.5`. Version `v3.0.2` was abandoned and never entered the public mainline. Version 3.0.5 removes prescriptive method flows that could take control away from the task while preserving the production-grade authorization, evidence, Git, and rollback capabilities established in v3.0.4.
+> The current public release is `v3.0.6`. Version `v3.0.2` was abandoned and never entered the public mainline. Version 3.0.6 further shortens PM dispatch, Worker execution, result callback, and user delivery while preserving production-grade authorization, evidence, Git, and rollback capabilities.
 
 ## What BEYOND changes
 
@@ -62,7 +62,7 @@ flowchart LR
     I --> A
 ```
 
-One business result maps to one formal task and one Worker. The PM governs the portfolio, workbench, conflicts, and acceptance; it does not become the developer. The Worker invokes design, development, testing, and operations as methods when required.
+One business result maps to one formal task and one Worker. The PM governs the portfolio, workbench, conflicts, and acceptance; it does not become the developer. A formal task starts with the Worker identity and one initial Action Skill matching the primary problem; the Worker can switch design, development, testing, and operations methods as reality requires.
 
 ```mermaid
 flowchart LR
