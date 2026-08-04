@@ -239,6 +239,21 @@ const requiredSkillFacts = [
     value: "普通任务包最多包含六项",
   },
   {
+    path: "模板交付包/skills/identity-pm/SKILL.md",
+    label: "PM does not promote discussion into task control",
+    value: "讨论、建议、候选方案和 PM推断没有控制效力",
+  },
+  {
+    path: "模板交付包/skills/identity-pm/SKILL.md",
+    label: "a design checkpoint does not create an implementation Worker",
+    value: "不得再建立一个实施 Worker",
+  },
+  {
+    path: "模板交付包/skills/identity-pm/SKILL.md",
+    label: "formal worker prompt explicitly loads identity and one starting action method",
+    value: "在新任务初始提示首行同时放`$identity-worker`和一个与当前主要问题匹配的起始 Action Skill",
+  },
+  {
     path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "worker completes reversible in-scope work continuously",
     value: "范围内可逆本地动作不逐步申请业务授权",
@@ -257,6 +272,11 @@ const requiredSkillFacts = [
     path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "ordinary test failures stay inside the worker task",
     value: "普通测试失败、实现调整、格式化、lint、构建和复测由本 Worker闭环",
+  },
+  {
+    path: "模板交付包/skills/identity-worker/SKILL.md",
+    label: "worker loads one matching action method before professional work",
+    value: "进入第一个专业动作前必须完整读取一个与主要问题匹配的 Action Skill",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
@@ -324,6 +344,16 @@ const requiredSkillFacts = [
     value: "同一个 Worker切换到开发方法继续",
   },
   {
+    path: "模板交付包/skills/task-design/SKILL.md",
+    label: "design discovery evidence does not become implementation by default",
+    value: "只是证据",
+  },
+  {
+    path: "模板交付包/skills/task-design/references/complex-design-document-and-implementation.md",
+    label: "design directory does not become a downstream evidence workspace",
+    value: "不作为后续开发、测试、发布或运行证据的通用工作区",
+  },
+  {
     path: "模板交付包/skills/task-dev/SKILL.md",
     label: "PM does not execute development",
     value: "PM不得读取本 Skill并直接实现",
@@ -337,6 +367,21 @@ const requiredSkillFacts = [
     path: "模板交付包/skills/task-dev/SKILL.md",
     label: "development reuses existing capabilities",
     value: "不复制业务规则、不重复造轮子",
+  },
+  {
+    path: "模板交付包/skills/task-dev/SKILL.md",
+    label: "a hotfix candidate must match the formal target baseline",
+    value: "或从目标到当前包含未授权的其他变化时，不把当前整包冒充可发布候选",
+  },
+  {
+    path: "模板交付包/skills/task-dev/SKILL.md",
+    label: "shared changes include direct consumers and the complete delivery unit",
+    value: "定点核对直接调用方、共同制品和必要迁移",
+  },
+  {
+    path: "模板交付包/skills/task-dev/SKILL.md",
+    label: "external contracts use current evidence instead of guesses",
+    value: "先取得一个当前样本、schema或等价一手证据",
   },
   {
     path: "模板交付包/skills/task-dev/SKILL.md",
@@ -372,6 +417,21 @@ const requiredSkillFacts = [
     path: "模板交付包/skills/task-test/SKILL.md",
     label: "test verdict is not task state",
     value: "这是测试裁决，不是任务状态",
+  },
+  {
+    path: "模板交付包/skills/task-test/SKILL.md",
+    label: "test verdict preserves the full denominator",
+    value: "只统计成功记录或只看已进入checkpoint的对象不能代表整体通过",
+  },
+  {
+    path: "模板交付包/skills/task-test/SKILL.md",
+    label: "offline tests do not replace current external evidence",
+    value: "离线fixture和Mock只证明本地逻辑",
+  },
+  {
+    path: "模板交付包/skills/task-test/SKILL.md",
+    label: "same-worker testing is not independent testing",
+    value: "同一 Worker切换到`task-test`是专业测试，不得称为独立测试",
   },
   {
     path: "模板交付包/docs/AI编程协同机制/项目事实/README.md",

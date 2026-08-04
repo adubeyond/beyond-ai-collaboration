@@ -1,7 +1,7 @@
 interface:
   display_name: "开发"
   short_description: "按正式设计和契约稳定落地实现，并留下可测结果"
-  default_prompt: "$task-dev：先复用现有工程能力并完成最小完整实现；保持契约、必要注释、失败可见和匹配验证。正式任务结果回原 Worker，由同一个 Worker继续测试或修复；直接请求在当前授权内交付。不让PM执行开发，不重复造轮子。"
+  default_prompt: "$task-dev：先复用现有工程能力并完成最小完整实现；核对正式目标源码基线、外部契约实证、直接消费者和完整变更集，保持契约、必要注释、失败可见和匹配验证。正式任务结果回原 Worker，由同一个 Worker继续测试或修复；直接请求在当前授权内交付。不让PM执行开发，不重复造轮子。"
 
 policy:
   allow_implicit_invocation: true
