@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "releaseVersion": "3.0.8",
+  "projectEntry": "AGENTS.md",
+  "projectOverrideBegin": "<!-- BEGIN BEYOND PROJECT OVERRIDES -->",
+  "projectOverrideEnd": "<!-- END BEYOND PROJECT OVERRIDES -->",
+  "skills": [
+    "identity-pm",
+    "identity-worker",
+    "task-design",
+    "task-dev",
+    "task-test",
+    "task-ops"
+  ]
+}

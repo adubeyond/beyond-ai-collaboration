@@ -33,6 +33,7 @@ From the [template package](../../模板交付包), copy the following into the 
 
 ```text
 AGENTS.md
+beyond-release.json
 docs/AI编程协同机制/
 skills/
 ```
@@ -67,7 +68,13 @@ task-test
 task-ops
 ```
 
-Restart Codex after installation, then create a new Codex task from the demo root.
+Before restarting Codex, verify the actual installed copy from the immutable release checkout:
+
+```text
+node 模板交付包/scripts/verify-install-integrity.mjs --installed-skills-root "<Codex Skills directory>" --project-agents "<project root>/AGENTS.md"
+```
+
+Installation or upgrade is complete only when this command exits with code `0` and confirms that all six Skills and the managed project entry match. A non-zero result means that an old, residual, or mixed runtime is still present; a model's statement that an upgrade completed is not evidence. Restart Codex only after this verification, then create a new task from the demo root.
 
 ## Run the initial baseline
 

@@ -10,9 +10,9 @@ BEYOND is a document-driven AI engineering collaboration system for Codex. It tu
 
 Most AI coding tools focus on generating code faster. BEYOND focuses on a harder problem: helping AI understand a real project, stay within authorization, finish a complete business task, prove the result, and become more effective as project knowledge grows.
 
-[Quick Start](docs/en/quick-start.md) · [v3.0.7 Upgrade Guide](docs/en/releases/v3.0.7.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
+[Quick Start](docs/en/quick-start.md) · [v3.0.8 Upgrade Guide](docs/en/releases/v3.0.8.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
 
-> The current public release is `v3.0.7`. Version `v3.0.2` was abandoned and never entered the public mainline. Version 3.0.7 preserves the short 3.0.5-style execution path, fixes task-container and continuation regressions exposed by 3.0.6, and adds evidence-backed model selection and scope-expansion brakes.
+> The current public release is `v3.0.8`. Version `v3.0.2` was abandoned and never entered the public mainline. Version 3.0.8 preserves v3.0.7 continuous execution while preventing mixed-version upgrades, PM-model override leakage, and takeover-triggered task restarts.
 
 ## What BEYOND changes
 
