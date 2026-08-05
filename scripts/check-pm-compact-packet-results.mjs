@@ -55,7 +55,7 @@ function inspect(root) {
     worktreeClean: execFileSync("git", ["status", "--short"], { cwd: worktree, encoding: "utf8" }).trim() === "",
     facts,
     factsComplete: Object.values(facts).every(Boolean),
-    startingActionSkillPresent: message.includes("$task-test"),
+    actionSkillInjectedByPm: /\$task-(design|dev|test|ops)/.test(message),
   };
 }
 
@@ -67,8 +67,8 @@ const failures = Object.entries(runs).flatMap(([name, run]) => [
   ...(run.actionSkillRead ? [`${name}:pm-read-action-skill`] : []),
   ...(!run.factsComplete ? [`${name}:required-business-fact-missing`] : []),
 ]);
-for (const name of ["currentBefore", "fixedR1", "fixedR2"]) {
-  if (!runs[name].startingActionSkillPresent) failures.push(`${name}:starting-action-skill-missing`);
+for (const name of ["fixedR1", "fixedR2"]) {
+  if (runs[name].actionSkillInjectedByPm) failures.push(`${name}:pm-injected-action-skill`);
 }
 if (fixedAverageCharacters >= runs.currentBefore.characters) failures.push("fixed:not-shorter-than-current-before");
 if (fixedAverageListLines >= runs.currentBefore.listLines) failures.push("fixed:list-not-shorter-than-current-before");

@@ -10,9 +10,9 @@ BEYOND is a document-driven AI engineering collaboration system for Codex. It tu
 
 Most AI coding tools focus on generating code faster. BEYOND focuses on a harder problem: helping AI understand a real project, stay within authorization, finish a complete business task, prove the result, and become more effective as project knowledge grows.
 
-[Quick Start](docs/en/quick-start.md) · [v3.0.5 Upgrade Guide](docs/en/releases/v3.0.5.md) · [v3.0.6 Upgrade Guide](docs/en/releases/v3.0.6.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
+[Quick Start](docs/en/quick-start.md) · [v3.0.7 Upgrade Guide](docs/en/releases/v3.0.7.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
 
-> The current public release is `v3.0.6`. Version `v3.0.2` was abandoned and never entered the public mainline. Version 3.0.6 further shortens PM dispatch, Worker execution, result callback, and user delivery while preserving production-grade authorization, evidence, Git, and rollback capabilities.
+> The current public release is `v3.0.7`. Version `v3.0.2` was abandoned and never entered the public mainline. Version 3.0.7 preserves the short 3.0.5-style execution path, fixes task-container and continuation regressions exposed by 3.0.6, and adds evidence-backed model selection and scope-expansion brakes.
 
 ## What BEYOND changes
 
@@ -22,6 +22,7 @@ Most AI coding tools focus on generating code faster. BEYOND focuses on a harder
 - Technology stacks, test commands, environments, servers, and release procedures become reusable project facts instead of being rediscovered in every task.
 - A production task establishes its target, artifact, authorization, verification, and rollback context once, then refreshes only facts that actually change.
 - Code, Git, tests, services, data, and production remain separate sources of truth with separate authorization boundaries.
+- Formal Workers run only in fresh, user-visible tasks bound to the formal project; forks, projectless tasks, and inherited PM history do not carry task control.
 
 ## Three methodologies, one engineering system
 
@@ -62,7 +63,7 @@ flowchart LR
     I --> A
 ```
 
-One business result maps to one formal task and one Worker. The PM governs the portfolio, workbench, conflicts, and acceptance; it does not become the developer. A formal task starts with the Worker identity and one initial Action Skill matching the primary problem; the Worker can switch design, development, testing, and operations methods as reality requires.
+One business result maps to one formal task and one Worker. The PM governs the portfolio, workbench, conflicts, and acceptance; it does not become the developer. A formal task is a fresh, user-visible task bound to the formal project, not a fork, projectless task, or internal helper. It starts only with the Worker identity. The Worker then selects and loads the Action Skill needed by the current primary problem, and switches design, development, testing, or operations methods without creating stage-specific tasks.
 
 ```mermaid
 flowchart LR

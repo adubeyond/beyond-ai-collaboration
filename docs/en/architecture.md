@@ -39,7 +39,7 @@ relevant project-fact entries
 real pause boundaries
 ```
 
-The packet is a compact business contract, not a PM-authored execution manual. A formal task explicitly starts the Worker identity with one Action Skill matching the initial primary problem; this loads the professional method without preventing the Worker from switching methods later. Investigation steps, implementation tactics, test composition, and evidence organization remain with the Worker, which combines the relevant Action Skill with project facts and first-hand reality.
+The packet is a compact business contract, not a PM-authored execution manual. A formal task is fresh, user-visible, and bound to the formal project; a fork that inherits PM history, a projectless task, or an internal helper cannot carry a formal business result. The task explicitly starts only the Worker identity. The Worker treats only the current task wrapper, direct user instructions in that task, and named facts as control context; inherited PM history is unverified evidence, not identity or authorization. The Worker then selects and loads one Action Skill for the current primary problem and may switch methods later without creating stage-specific tasks.
 
 Test verdicts preserve the full coverage denominator, including failures, skips, and exclusions. Offline evidence does not impersonate current DOM, GUI, network, database, or runtime canaries, and a task-scoped candidate verdict does not turn a failing repository-wide gate green. Testing by the same Worker is professional testing, not independent testing.
 
@@ -51,7 +51,7 @@ The PM workbench is a team dashboard. It records the task, responsible Worker/th
 
 Project facts preserve reusable knowledge such as the technology stack, build and test commands, module boundaries, servers, services, logs, deployment steps, and rollback paths. Missing facts do not block unrelated work. A Worker investigates and writes reusable facts in the same business task when needed.
 
-A production task establishes one current context for its target, running version, source and artifact, allowed effects, health and business checks, rollback, and authorization. After that context is closed, preflight, release, verification, and pre-authorized rollback continue without repeated PM round trips. Only facts that actually change are refreshed.
+A production task establishes one current context for its target, running version, source and complete artifact, database/configuration/runtime dependencies, allowed effects, health and business checks, rollback, and authorization. After that context is closed, preflight, release, verification, and pre-authorized rollback continue without repeated PM round trips. Only facts that actually change are refreshed. Process health, a reachable page, or HTTP 200 does not replace the real changed business path such as login, query, or write.
 
 Project facts do not use an `uninitialized / refresh-needed / available` runtime state machine.
 
@@ -90,6 +90,6 @@ Current code, Git, tests, services, data, and production reality override old do
 
 Read, local write, local commit, remote Git, deployment, shared/production data, irreversible actions, and external cost remain separate authorization dimensions. Safety triggers from the actual effect of an action, not from keywords such as “database,” “server,” or “Git.”
 
-Completion requires the result to exist in the agreed formal target and current first-hand evidence to satisfy acceptance. Passing tests does not mean the feature is deployed.
+Completion requires the result to exist in the agreed formal target and current first-hand evidence to satisfy acceptance. UI and business acceptance follows the affected user operation path rather than a single endpoint or visible button. Passing tests does not mean the feature is deployed.
 
 See the [full Chinese architecture](../系统架构与运行机制.md) and [quick start](quick-start.md).
