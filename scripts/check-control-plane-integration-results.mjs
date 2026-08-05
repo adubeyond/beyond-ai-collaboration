@@ -46,7 +46,7 @@ const log = git("log", "--oneline", "-2");
 const worktrees = git("worktree", "list", "--porcelain");
 const testOutput = execFileSync("node", ["--test"], { cwd: caseRoot, encoding: "utf8" });
 
-check("PM packet starts Worker and development method", packet.includes("$identity-worker $task-dev"));
+check("PM packet starts only the Worker identity", packet.includes("$identity-worker") && !/\$task-(design|dev|test|ops)/.test(packet));
 check("PM packet preserves business result", packet.includes("重复") && packet.includes("负责人") && packet.includes("导出"));
 check("PM packet preserves no-release reality", packet.includes("不") && packet.includes("发布"));
 check("PM packet remains compact", packet.length < 1400);
@@ -57,8 +57,9 @@ check(
     && workerEvents.includes("正式 Worker"),
 );
 check(
-  "installed development method is available and Worker completes implementation",
+  "Worker selects the installed development method and completes implementation",
   existsSync(join(installedSkillsRoot, "task-dev", "SKILL.md"))
+    && workerEvents.includes("task-dev")
     && workerEvents.includes("公司详情")
     && workerResumeEvents.includes("完整测试")
     && workerResumeEvents.includes("src/companyRelations.js"),
@@ -68,8 +69,8 @@ check("Worker fixes duplicate behavior", source.includes("new Set") || source.in
 check(
   "Worker writes formal evidence",
   workerEvidence.includes("npm test")
-    && /(?:3|4).{0,8}(?:个测试|项).{0,8}通过/.test(workerEvidence)
-    && workerEvidence.includes("当前用户页面和业务操作尚未变化"),
+    && /(?:3|4).{0,8}(?:(?:个测试|项).{0,8}通过|tests?.{0,8}passed)|pass(?:ed)?.{0,8}(?:3|4).{0,8}tests?/i.test(workerEvidence)
+    && /当前用户页面和业务操作尚未变化|current user page and business operations? (?:are|remain) unchanged/i.test(workerEvidence),
 );
 const testPasses = Number(testOutput.match(/pass\s+(\d+)/i)?.[1] ?? 0);
 check("all tests pass", testPasses >= 3 && /fail\s+0/i.test(testOutput));

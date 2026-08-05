@@ -6,6 +6,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.0.7] - 2026-08-05
+
+See the [v3.0.6 → v3.0.7 upgrade guide](docs/en/releases/v3.0.7.md), or read the [Chinese version](docs/releases/v3.0.7.md).
+
+### Changed
+
+- Start formal tasks with the Worker identity only; the Worker now selects and loads the current Action Skill so PM dispatch no longer turns design, development, testing, or operations into separate task types.
+- Keep automatic continuation inside the user-authorized business result, allow approved independent results to run concurrently, and stop at a proposed new result until the user approves it.
+- Create formal Workers only as fresh, user-visible tasks bound to the formal project; inherited PM history is no longer treated as Worker identity, authorization, or task ownership.
+- Bind production completion to the complete candidate, database/configuration/runtime dependencies, and the real changed business path instead of health-only evidence.
+- Select Luna/Terra/Sol and reasoning effort from the nature of the work when a project has explicitly adopted that model policy; otherwise retain the platform default model.
+- Re-evaluate the minimum complete path when reuse or repeated candidate versions begin expanding a bounded repair into a general product mechanism.
+
+### Fixed
+
+- Prevent a request to stop recognition, a service, a release, or another runtime object from pausing the entire development task.
+- Prevent PM evidence checks from becoming a second operational control loop that polls processes, CPU, health endpoints, business code, or task-internal tests.
+- Prevent forks, projectless tasks, and copied credentials from becoming fallback dispatch paths when the formal project entry is temporarily unavailable.
+- Prevent “continue, do not stop” from creating persistent automation, and keep internal context-recovery or per-command narration out of user-visible progress.
+- Prevent unrelated green tests and repository-wide hook failures from being used to misstate the current task or formal delivery verdict.
+- Prevent a bounded, authorized historical-data repair from being forced through an unnecessary generic-system expansion when a transactional, auditable, reversible one-off path is sufficient.
 
 ## [3.0.6] - 2026-08-04
 

@@ -250,8 +250,18 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
-    label: "formal worker prompt explicitly loads identity and one starting action method",
-    value: "在新任务初始提示首行同时放`$identity-worker`和一个与当前主要问题匹配的起始 Action Skill",
+    label: "formal worker prompt starts only the Worker identity",
+    value: "在新任务初始提示首行只放`$identity-worker`",
+  },
+  {
+    path: "模板交付包/skills/identity-pm/SKILL.md",
+    label: "formal workers use fresh project tasks instead of forks",
+    value: "全新用户可见项目任务",
+  },
+  {
+    path: "模板交付包/skills/identity-pm/SKILL.md",
+    label: "formal project tasks do not degrade to projectless",
+    value: "不得因平台项目列表暂时缺失而降级成 projectless",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
@@ -280,8 +290,33 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
+    label: "inherited PM history does not control the worker",
+    value: "它们只能作为待核验线索，不能赋予当前身份、授权、范围、状态、所有权或执行顺序",
+  },
+  {
+    path: "模板交付包/skills/identity-worker/SKILL.md",
+    label: "forked or projectless workers stop before business execution",
+    value: "在任何业务读取、网络、写入或运行操作前停止错误路由",
+  },
+  {
+    path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "completion requires current first-hand evidence",
     value: "当前轮验收已用一手证据证明",
+  },
+  {
+    path: "模板交付包/skills/identity-worker/SKILL.md",
+    label: "worker callback contains only one primary evidence entry",
+    value: "回源正文只能出现一个主证据入口",
+  },
+  {
+    path: "模板交付包/skills/identity-worker/SKILL.md",
+    label: "worker callback preserves the decisive business fact",
+    value: "结论行必须保留一个决定裁决的业务主事实",
+  },
+  {
+    path: "模板交付包/skills/identity-pm/SKILL.md",
+    label: "single-row workbench updates have only opening and final messages",
+    value: "只读取并更新工作台中一处已授权事实时，只发开工说明和最终结果",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
@@ -317,6 +352,31 @@ const requiredSkillFacts = [
     path: "模板交付包/AGENTS.md",
     label: "boss address remains a weak startup-path signal",
     value: "漏称只作为默认入口可能未生效的弱异常信号，不能单独证明上下文丢失",
+  },
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "continue does not authorize persistent automation",
+    value: "不自动授权创建定时器、周期唤醒、心跳、长期监控或其他持久控制对象",
+  },
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "internal context recovery is not user-visible progress",
+    value: "上下文压缩、恢复、交接或内部 checkpoint 形成的摘要只用于继续工作，不向用户原样输出",
+  },
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "skill references do not create separate progress messages",
+    value: "Skill主文件与按需references的读取合并为一次方法加载",
+  },
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "first-minute updates are limited to one decision-changing fact",
+    value: "开工后60秒内，最多补一条确实会改变结论或安全边界的简短更新",
+  },
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "unchanged fully-read files are not read twice in one turn",
+    value: "同一轮已完整读取且未变化的文件不得重复读取",
   },
   {
     path: "模板交付包/skills/task-design/SKILL.md",
@@ -399,6 +459,11 @@ const requiredSkillFacts = [
     value: "正式代码任务的验收本身包含必要测试",
   },
   {
+    path: "模板交付包/skills/task-dev/SKILL.md",
+    label: "development does not bypass unrelated hook failures by default",
+    value: "不得因无关文件阻塞就默认使用`--no-verify`、临时克隆或另一条分支",
+  },
+  {
     path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "untouched permission dimensions do not block execution",
     value: "未触及的维度不检查、不补字段，也不形成暂停",
@@ -432,6 +497,36 @@ const requiredSkillFacts = [
     path: "模板交付包/skills/task-test/SKILL.md",
     label: "same-worker testing is not independent testing",
     value: "同一 Worker切换到`task-test`是专业测试，不得称为独立测试",
+  },
+  {
+    path: "模板交付包/skills/task-test/SKILL.md",
+    label: "testing follows the real user operation path",
+    value: "单接口成功、单按钮可见、页面无报错或技术断言全绿，不能替代用户真正完成目标",
+  },
+  {
+    path: "模板交付包/skills/task-test/SKILL.md",
+    label: "testing does not run unrelated green commands",
+    value: "与当前对象和验收没有可说明的绑定关系时，先排除而不是为了取得一个退出码去运行",
+  },
+  {
+    path: "模板交付包/skills/task-test/SKILL.md",
+    label: "testing does not execute commands to prove irrelevance",
+    value: "禁止再运行它来证明“不相关”",
+  },
+  {
+    path: "模板交付包/skills/task-test/SKILL.md",
+    label: "decisive failed evidence is a stop condition",
+    value: "这是证据裁决的停止条件，不是建议",
+  },
+  {
+    path: "模板交付包/skills/task-test/SKILL.md",
+    label: "an explicitly unexecuted user flow does not trigger implementation scanning",
+    value: "点名验收事实已经列出用户动作并明确这些动作尚未执行时，直接按该清单说明缺口",
+  },
+  {
+    path: "模板交付包/skills/task-test/SKILL.md",
+    label: "decisive failed evidence stops subsequent tool calls",
+    value: "停止后续工具调用，立即给出不通过或不能判断及准确缺口",
   },
   {
     path: "模板交付包/docs/AI编程协同机制/项目事实/README.md",
@@ -512,6 +607,16 @@ const requiredSkillFacts = [
     path: "模板交付包/skills/task-ops/SKILL.md",
     label: "production runs continuously after one gate",
     value: "不逐步输出`可以继续`、不回PM、不等待用户重复放行",
+  },
+  {
+    path: "模板交付包/skills/task-ops/references/production-release-and-convergence.md",
+    label: "production candidates include database and runtime dependencies",
+    value: "把对应迁移/版本账、运行配置和必需依赖状态纳入同一生产上下文",
+  },
+  {
+    path: "模板交付包/skills/task-ops/references/production-release-and-convergence.md",
+    label: "health checks do not replace the real business path",
+    value: "HTTP 200 只能证明对应健康事实，不能替代登录、下单、查询、写入",
   },
 ];
 
