@@ -489,6 +489,14 @@ function setHealthyWorkbench(root) {
   );
 }
 
+function setPausedTakeoverWorkbench(root) {
+  setWorkbench(
+    root,
+    "| 2026-08-05 | 等待老板决定旧任务是否恢复 | 已暂停 | 两个旧任务均保持暂停 | 当前工作台 | 只接手，不自动恢复任务 | 无 |",
+    "| 修复历史导入 | worker-import-old | 已暂停 | 等待外部样本 | 等待外部样本 | evidence/import-old.md | 2026-08-05 |\n| 补齐旧版报表 | worker-report-old | 已暂停 | 等待业务口径 | 等待业务口径 | evidence/report-old.md | 2026-08-05 |",
+  );
+}
+
 function setCheckpointWorkbench(root) {
   setWorkbench(
     root,
@@ -639,7 +647,7 @@ if (!existsSync(sourceAuth)) {
 }
 cpSync(sourceAuth, join(isolatedCodexHome, "auth.json"));
 
-for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration"]) {
+for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration"]) {
   copyProjectFixture(join(casesRoot, caseName));
 }
 
@@ -803,6 +811,10 @@ for (const caseName of ["P10-fresh-project-task", "P11-inherited-context-isolati
   setHealthyWorkbench(root);
   initializeGit(root, `fixture: ${caseName}`);
 }
+
+const p14 = join(casesRoot, "P14-takeover-paused");
+setPausedTakeoverWorkbench(p14);
+initializeGit(p14, "fixture: takeover preserves paused tasks");
 
 const wstSim01 = join(casesRoot, "WST-SIM-01-fail-closed-continuation");
 addFailClosedContinuationFixture(wstSim01);

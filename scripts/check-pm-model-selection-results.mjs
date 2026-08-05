@@ -35,7 +35,7 @@ check('M-01 PM applies the confirmed model policy', /Terra/i.test(taskA) && /Ter
 check('M-02 simple task is not assigned the highest tier', /Terra/i.test(taskA) && (/推理强度[：:][^\n]*(?:低|中)/.test(taskA) || /Terra[^\n]*(?:低|中)/i.test(taskA)));
 check('M-03 complex high-risk task receives Sol with strong reasoning', /Sol/i.test(taskC) && /高|超高|xhigh/i.test(taskC));
 check('M-04 high-volume clear audit uses Luna high reasoning', /Luna/i.test(taskD) && /高/.test(taskD));
-check('M-05 runtime settings stay outside the business packet', /模型(?:能力)?和推理强度.{0,40}不属于(?:业务)?任务包|(?:业务)?任务包.{0,40}不.{0,20}(?:模型|推理)/s.test(output));
+check('M-05 runtime settings stay outside the business packet', /模型(?:能力)?(?:与|和)推理(?:强度|档位).{0,40}(?:不属于|不写进)(?:业务)?任务包|(?:业务)?任务包.{0,40}不.{0,20}(?:模型|推理)/s.test(output));
 check(
   'M-06 model choice stays a runtime setting beside scope and authorization',
   /模型.{0,80}运行配置|运行配置.{0,80}模型/s.test(output)
@@ -44,6 +44,7 @@ check(
 );
 check('M-07 PM does not load Action Skills', ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !commands.includes(name)));
 check('M-08 fixture remains read-only', execFileSync('git', ['status', '--short'], { cwd: join(runtimeRoot, 'cases', 'P13-model-selection'), encoding: 'utf8' }).trim() === '');
+check('M-09 Worker model policy does not change the current PM model', /当前\s*PM.{0,40}(?:不改变|不能改变|不会改变|无权改变)|(?:不改变|不能改变|不会改变|无权改变).{0,40}当前\s*PM/s.test(output));
 
 const failed = results.filter((result) => !result.passed);
 console.log(JSON.stringify({ passed: results.length - failed.length, failed: failed.length, results }, null, 2));

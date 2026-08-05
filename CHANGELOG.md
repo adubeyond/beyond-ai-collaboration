@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.0.8] - 2026-08-05
+
+See the [v3.0.7 → v3.0.8 upgrade guide](docs/en/releases/v3.0.8.md), or read the [Chinese version](docs/releases/v3.0.8.md).
+
+### Changed
+
+- Scope Luna/Terra/Sol routing to newly created Worker tasks; it no longer changes the current PM model, and ambiguous project overrides without a PM/Worker role do not become global model policy.
+- Make project takeover restore the control plane only; old business tasks start or resume only when the same user instruction explicitly asks for that action.
+
+### Fixed
+
+- Add an executable installation verifier that compares all six installed Skills file by file and verifies the versioned managed portion of the project `AGENTS.md`, preventing v3.0.6/v3.0.7 hybrid installations from being reported as complete.
+- Isolate project-specific `AGENTS.md` overrides in a bounded block and require role-scoped model overrides, while keeping the managed entry eligible for project version control and provenance.
+
+
 ## [3.0.7] - 2026-08-05
 
 See the [v3.0.6 → v3.0.7 upgrade guide](docs/en/releases/v3.0.7.md), or read the [Chinese version](docs/releases/v3.0.7.md).
