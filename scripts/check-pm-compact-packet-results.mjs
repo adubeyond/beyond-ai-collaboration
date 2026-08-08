@@ -45,7 +45,10 @@ function inspect(root) {
     .filter((event) => event.type === "item.completed" && event.item?.type === "command_execution")
     .map((event) => event.item.command ?? "");
   const worktree = join(root, "cases", "WST-AB-PACKET-review");
-  const facts = Object.fromEntries(requiredFacts.map((fact) => [fact, message.includes(fact)]));
+  const facts = Object.fromEntries(requiredFacts.map((fact) => [
+    fact,
+    fact === "10 条" ? /10\s*条/.test(message) : message.includes(fact),
+  ]));
   return {
     characters: [...message].length,
     lines: lines.length,

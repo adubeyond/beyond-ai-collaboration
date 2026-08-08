@@ -16,7 +16,8 @@ These documents explain the public product, its operating model, and the first r
 | Previous release | [v3.0.5 Upgrade Guide](releases/v3.0.5.md) | Review the result-first method and production-path changes |
 | Previous release | [v3.0.6 Upgrade Guide](releases/v3.0.6.md) | Review the shorter dispatch, execution, callback, and user-delivery paths |
 | Previous release | [v3.0.7 Upgrade Guide](releases/v3.0.7.md) | Review continuous execution, formal task routing, model selection, and scope control |
-| Current release | [v3.0.8 Upgrade Guide](releases/v3.0.8.md) | Verify the installed runtime and isolate PM models from Worker routing and takeover actions |
+| Previous release | [v3.0.8 Upgrade Guide](releases/v3.0.8.md) | Verify the installed runtime and isolate PM models from Worker routing and takeover actions |
+| Current release | [v3.0.9 Upgrade Guide](releases/v3.0.9.md) | Stabilize formal Worker creation, PM exit, terminal return, and model routing |
 | Real-project adoption | [Template package](../../模板交付包/README.md) → [template entry](../../模板交付包/AGENTS.md) | Understand the formal package, Skills, and initialization boundary |
 | Security and governance review | [Architecture](architecture.md) → [Security Policy](../../SECURITY.en.md) | Understand control rights, authorization, evidence, and risk boundaries |
 

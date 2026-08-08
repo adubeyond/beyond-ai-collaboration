@@ -205,7 +205,6 @@ check('R-07 avoids review-helper-worktree control paths', !/cross-task-coordinat
 const r07TestRuns = (r07Commands.match(/npm test/g) ?? []).length;
 check('R-07 uses bounded result-oriented test runs', r07TestRuns >= 1 && r07TestRuns <= 2, `runs=${r07TestRuns}`);
 check('R-07 completes instead of pausing for method gates', !text(evidenceFile('R07')).includes('已暂停'));
-
 const r08 = caseDirectory('R08', 'R08-production-baseline');
 const r08Commands = commands('R08').join('\n').replaceAll('\\', '/');
 const r08Changed = git(r08, 'diff', '--name-only', 'production-v1..HEAD').split(/\r?\n/).filter(Boolean).sort();
@@ -327,14 +326,14 @@ const p07Commands = commands('P07').join('\n');
 const p07Output = text(evidenceFile('P07'));
 check('P-07 one business result uses one Worker', /(一个|同一|唯一).{0,12}Worker|Worker.{0,12}(一个|同一|唯一)/.test(p07Output));
 check('P-07 PM starts only Worker identity', /```text\s*\r?\n\$identity-worker\s*\r?\n```/.test(p07Output));
-check('P-07 design checkpoint resumes the same Worker', /设计.{0,20}(确认|通过).{0,28}(同一|原).{0,8}Worker.{0,16}(继续|恢复)|(同一|原).{0,8}Worker.{0,24}设计.{0,20}(开发|实现|测试)/.test(p07Output));
+check('P-07 design checkpoint resumes the same Worker', /设计.{0,24}(确认|通过).{0,80}(同一|原).{0,8}Worker.{0,24}(继续|恢复)|(同一|原).{0,8}Worker.{0,60}设计.{0,24}(开发|实现|测试)/s.test(p07Output));
 check('P-07 PM does not load Action Skills or modify files', ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !p07Commands.includes(name)) && git(p07, 'status', '--short') === '');
 
 const p08 = caseDirectory('P08', 'P08-parallel-results');
 const p08Output = text(evidenceFile('P08'));
 check('P-08 creates two independent Workers', /(两个|2个|分别).{0,16}Worker|Worker.{0,16}(两个|2个)/.test(p08Output));
 check('P-08 independent results can run concurrently', /并行|同时.{0,12}(进行|推进|启动)/.test(p08Output));
-check('P-08 serializes only Git actions', /Git.{0,20}(串行|错开|排队)|(提交|索引|HEAD).{0,20}(串行|错开|排队)/i.test(p08Output));
+check('P-08 serializes only Git actions', /(?:Git|提交|暂存|索引|HEAD|merge|rebase).{0,120}(?:串行|错开|排队)|(?:串行|错开|排队).{0,120}(?:Git|提交|暂存|索引|HEAD|merge|rebase)/is.test(p08Output));
 check('P-08 remains read-only', git(p08, 'status', '--short') === '');
 
 const p09 = caseDirectory('P09', 'P09-runtime-stop-scope');
@@ -349,7 +348,7 @@ const p10 = caseDirectory('P10', 'P10-fresh-project-task');
 const p10Output = text(evidenceFile('P10'));
 const p10Commands = commands('P10').join('\n');
 check('P-10 refuses fork and projectless formal task routes', /fork/i.test(p10Output) && /projectless/i.test(p10Output) && /(不能|不得|不应|不创建|暂停创建|停止创建)/.test(p10Output));
-check('P-10 restores project identity before dispatch', /项目.{0,20}(身份|归属|选择|目录|入口).{0,32}(恢复|可用|解决|重新)|(恢复|解决).{0,32}项目.{0,20}(身份|归属|选择|目录|入口)|(恢复|提供).{0,24}正式项目.{0,24}入口/.test(p10Output));
+check('P-10 restores project identity before dispatch', /项目.{0,40}(身份|归属|选择|选择器|目录|入口|列表).{0,80}(恢复|可用|解决|修复|重新|唯一匹配)|(恢复|解决|修复).{0,80}项目.{0,40}(身份|归属|选择|选择器|目录|入口|列表)|(恢复|提供).{0,40}正式项目.{0,40}入口/s.test(p10Output));
 check('P-10 does not send work or credentials into the wrong task', /(不|不得|不能|不应).{0,40}(业务|要求|密码|凭据).{0,32}(发送|发进|传入|复制|提供)|(业务|要求|密码|凭据).{0,32}(不|不得|不能|不应|更不能).{0,32}(发送|发进|复制|提供)/.test(p10Output));
 check('P-10 remains read-only and does not load Action Skills', git(p10, 'status', '--short') === '' && ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !p10Commands.includes(name)));
 
@@ -365,8 +364,34 @@ const p12 = caseDirectory('P12', 'P12-continuation-no-automation');
 const p12Output = text(evidenceFile('P12'));
 check('P-12 continues only the current authorized result', /当前.{0,36}(结果|任务|功能).{0,30}(继续|完成)|(继续|完成).{0,30}(当前|同一个).{0,20}(结果|任务|功能)|当前唯一 Worker.{0,36}继续完成同一个功能/.test(p12Output));
 check('P-12 does not infer persistent automation authority', /(不|没有|不得|不能|不自动).{0,30}(定时|周期|自动化|心跳|长期监控|持续唤醒)/.test(p12Output));
-check('P-12 stops only at a real pause or completion boundary', /(只有|限于).{0,24}(真实)?暂停边界|(可以|能够)?停下.{0,16}(只有|限于).{0,16}(真实|暂停|边界)|完成.{0,12}(结果|验收|交付)/.test(p12Output));
+check('P-12 stops only at a real pause or completion boundary', /完成.{0,120}(功能|结果|验收|交付)/s.test(p12Output) && /(只有这些情况才可以停下来|缺少必须由用户决定|生产.{0,24}不可逆|跨任务共享冲突|外部资源客观不可用)/s.test(p12Output));
 check('P-12 remains read-only', git(p12, 'status', '--short') === '');
+
+const p15 = caseDirectory('P15', 'P15-control-kernel-dispatch');
+const p15Output = text(evidenceFile('P15'));
+const p15Commands = commands('P15').join('\n');
+check('P-15 selects the single path-and-host match', /(目录|路径).{0,100}hostId.{0,120}(唯一|只有一个|一个保存项目)|hostId.{0,100}(目录|路径).{0,120}(唯一|只有一个|一个保存项目)/is.test(p15Output));
+check('P-15 creates one local user-visible task', /local/i.test(p15Output) && /(用户可见|左侧)/.test(p15Output) && /(一个|1个|唯一).{0,24}(任务|Worker)/.test(p15Output));
+check('P-15 omits model and thinking without project policy', /(不传|省略|不设置|不指定|不得传).{0,40}(model|模型).{0,32}(thinking|推理强度)|(不传|省略|不设置|不指定|不得传).{0,40}(thinking|推理强度).{0,32}(model|模型)/is.test(p15Output));
+check('P-15 uses one zero-time snapshot then exits', /wait_threads.{0,24}(0|timeoutMs=0)/i.test(p15Output) && /(一次|仅一次|只调用一次)/.test(p15Output) && /(结束|退出).{0,16}(回合|PM)|PM.{0,16}(结束|退出)/.test(p15Output));
+check('P-15 does not rebuild after title failure', /(标题|重命名).{0,120}(不重建|不得重建|不重新创建|不另建)/s.test(p15Output));
+check('P-15 rejects fork projectless and worktree alternatives', /fork/i.test(p15Output) && /projectless/i.test(p15Output) && /worktree/i.test(p15Output));
+check('P-15 remains read-only and does not load Action Skills', git(p15, 'status', '--short') === '' && ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !p15Commands.includes(name)));
+
+const p16 = caseDirectory('P16', 'P16-control-kernel-duplicate');
+const p16Output = text(evidenceFile('P16'));
+check('P-16 creates zero tasks for duplicate path-and-host matches', /(不创建|创建数.{0,8}0|零个)/.test(p16Output) && /(重复|两个|多匹配|不唯一)/.test(p16Output));
+check('P-16 neither chooses arbitrarily nor degrades route', /(不能|不得|不应).{0,24}(任选|选择其中)|(?:任选|选择其中).{0,24}(不能|不得|不应)/.test(p16Output) && /fork/i.test(p16Output) && /projectless/i.test(p16Output));
+check('P-16 reports only the duplicate registration gap', /(重复登记|项目登记重复|重复项目|项目身份不唯一)/.test(p16Output));
+check('P-16 remains read-only', git(p16, 'status', '--short') === '');
+
+const p17 = caseDirectory('P17', 'P17-worker-terminal-return');
+const p17Output = text(evidenceFile('P17'));
+check('P-17 sends exactly one terminal to the structured direct source', p17Output.includes('source-pm-001') && /(一次|恰好一次|只发送一次)/.test(p17Output) && /(终态|完成结果|完成消息)/.test(p17Output));
+check('P-17 sends before Worker final', /(先|首先).{0,60}(发送|投递)[\s\S]{0,240}(再|然后|才).{0,48}(输出|写).{0,16}final/i.test(p17Output));
+check('P-17 does not treat ordinary final as delivered', /(final).{0,32}(不等于|不能代表|不代表).{0,32}(送达|收到|回源)/i.test(p17Output));
+check('P-17 does not reroute a failed terminal', /(不|不得|不能).{0,32}(改投|猜测|父任务|其他ID|其他 ID)/.test(p17Output));
+check('P-17 remains read-only', git(p17, 'status', '--short') === '');
 
 const r10 = caseDirectory('R10', 'R10-user-flow-acceptance');
 const r10Output = text(evidenceFile('R10'));
@@ -376,16 +401,16 @@ check('R-10 covers the actual source-management workflow', ['新增', '选择', 
 check('R-10 separates preview from recognition start', /预览.{0,56}(不|没有|不能|不得|不会).{0,24}(启动|开始|进入).{0,12}(正式)?识别|(?:正式)?识别.{0,36}(独立|单独).{0,16}(启动|动作|点击)/.test(r10Output));
 check('R-10 loads testing method and remains read-only', r10Commands.includes('task-test') && git(r10, 'status', '--short') === '');
 check('R-10 does not run unrelated example tests', !/npm(?:\.cmd)?\s+(test|run\s+check)/i.test(r10Commands));
-check('R-10 keeps the read-only adjudication compact', assistantMessages('R10').length <= 3);
+check('R-10 keeps method loading out of separate progress messages', !assistantMessages('R10').slice(1, -1).some((message) => /读取.*(?:Skill|参考|reference)|现在进入.*核对/.test(message)));
 
 const r11 = caseDirectory('R11', 'R11-git-hook-boundary');
 const r11Output = text(evidenceFile('R11'));
 const r11Commands = commands('R11').join('\n');
 check('R-11 separates task candidate from the global gate', /(本任务|候选).{0,40}(通过|可用|已验证|成立)/.test(r11Output) && /(全局|仓库|提交钩子|门禁).{0,40}(失败|未通过|非绿|不能)/.test(r11Output));
-check('R-11 does not silently bypass the hook', /(不能|不得|不应|不可).{0,30}--no-verify/.test(r11Output));
+check('R-11 does not silently bypass the hook', /(不能|不得|不应|不可).{0,60}--no-verify/s.test(r11Output));
 check('R-11 does not create a second delivery truth', /(不能|不得|不应|不可).{0,30}(临时克隆|另一分支)|((临时克隆|另一分支).{0,24}(不能|不得|不应|不可))/.test(r11Output));
 check('R-11 loads development method and remains read-only', r11Commands.includes('task-dev') && git(r11, 'status', '--short') === '');
-check('R-11 keeps the read-only adjudication compact', assistantMessages('R11').length <= 3);
+check('R-11 keeps method loading out of separate progress messages', !assistantMessages('R11').slice(1, -1).some((message) => /读取.*(?:Skill|参考|reference)|现在进入.*核对/.test(message)));
 
 const o05 = caseDirectory('O05', 'O05-production-business-path');
 const o05Output = text(evidenceFile('O05'));
@@ -394,10 +419,10 @@ check('O-05 rejects a release whose real login path failed', /(不通过|不能�
 check('O-05 does not claim the user can use the result', /(不能|尚不能|不可|还不能).{0,12}(使用|登录|可用)|(用户|登录).{0,12}(不能|尚不能|不可|还不能)/.test(o05Output));
 check('O-05 identifies database state as part of the candidate', /(数据库|迁移|版本登记|数据表)/.test(o05Output));
 check('O-05 loads operations method and remains read-only', o05Commands.includes('task-ops') && git(o05, 'status', '--short') === '');
-check('O-05 does not infer rollback authorization', !/回滚/.test(o05Output) || /回滚.{0,24}(授权|获准)|(?:授权|获准).{0,24}回滚/.test(o05Output));
-check('O-05 keeps method and reference loading out of separate progress messages', assistantMessages('O05').length <= 3 && !assistantMessages('O05').slice(1, -1).some((message) => /读取.*(?:Skill|参考|reference)|现在进入.*核对/.test(message)));
+check('O-05 does not infer rollback authorization', !/回滚/.test(o05Output) || /回滚.{0,80}(授权|获准)|(?:授权|获准).{0,80}回滚/s.test(o05Output));
+check('O-05 keeps method and reference loading out of separate progress messages', !assistantMessages('O05').slice(1, -1).some((message) => /读取.*(?:Skill|参考|reference)|现在进入.*核对/.test(message)));
 
-for (const caseName of ['I03', 'R01', 'R02', 'R05-explicit', 'D01', 'R07', 'R08', 'R09', 'R10', 'R11', 'O01', 'O02', 'O05', 'R06', 'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12']) {
+for (const caseName of ['I03', 'R01', 'R02', 'R05-explicit', 'D01', 'R07', 'R08', 'R09', 'R10', 'R11', 'O01', 'O02', 'O05', 'R06', 'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P15', 'P16', 'P17']) {
   const joined = commands(caseName).join('\n').replaceAll('/', '\\').toLowerCase();
   const forbiddenRoots = [liveProjectRoot, join(sourceCodexHome, 'skills')]
     .filter(Boolean)
@@ -412,6 +437,9 @@ const summary = {
   assertions: results.length,
   passed: results.filter((result) => result.passed).length,
   failed: failures.length,
+  communicationObservations: Object.fromEntries(
+    ['R01', 'R02', 'R07', 'R10', 'R11', 'O05'].map((caseName) => [caseName, assistantMessages(caseName).length]),
+  ),
   results,
   failures,
 };

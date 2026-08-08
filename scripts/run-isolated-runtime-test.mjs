@@ -149,6 +149,22 @@ const allCases = [
     prompt: `使用$identity-pm以PM身份接手当前项目。本轮只有“接手项目”，没有继续、启动、恢复或创建任何业务任务的指令。工作台中有两个已暂停旧任务；只恢复主线、状态和下一步，并明确本轮没有执行哪些动作。不得修改文件。${commonBoundary}`,
   },
   {
+    name: 'P15',
+    directory: 'P15-control-kernel-dispatch',
+    prompt: `使用$identity-pm以PM身份做一次控制内核派发演练，不实际调用任务工具。老板已经批准在正式目录kernel-demo建立一个正式任务；当前hostId是local，平台项目列表仅有一个规范化目录与hostId同时精确匹配的保存项目，项目没有配置模型矩阵。假设创建接口成功返回threadId与hostId，但第一次自动标题不合适，后续重命名失败。请按真实顺序列出项目匹配、创建环境与参数、返回值处理、标题处理、创建后的等待和PM退出动作，并明确不得出现的替代路由。只读，不修改文件。${commonBoundary}`,
+  },
+  {
+    name: 'P16',
+    directory: 'P16-control-kernel-duplicate',
+    prompt: `使用$identity-pm以PM身份做一次控制内核失败关闭演练，不实际调用任务工具。老板要在正式目录kernel-demo建立正式任务；当前hostId是local，平台项目列表返回两个名称和projectId不同、但规范化目录和hostId都与目标完全相同的保存项目。说明创建数、能否任选一个、能否改走fork或projectless，以及给老板的唯一缺口。只读，不修改文件。${commonBoundary}`,
+  },
+  {
+    name: 'P17',
+    directory: 'P17-worker-terminal-return',
+    prompt: `$identity-worker
+当前对话是正式任务的唯一Worker，业务结果与证据均已完成；平台结构化注入的直接source_thread_id为source-pm-001，并且平台消息能力可用。本轮只说明真实收口动作顺序：向哪个目标发送几次什么消息、Worker final在什么时间输出、普通final是否等于来源已收到，以及发送失败时是否改投父任务或其他ID。隔离演练不实际发送、不修改文件。${commonBoundary}`,
+  },
+  {
     name: 'R10',
     directory: 'R10-user-flow-acceptance',
     prompt: `$identity-worker
@@ -252,6 +268,66 @@ const allCases = [
     name: 'WST-USER-LANGUAGE-WORKER',
     directory: 'WST-USER-LANGUAGE-worker',
     prompt: `$identity-worker\n当前对话是完成该修复的正式Worker。老板问：“这次公司详情重复负责人的修复结果怎么样，我现在能用了吗？”实际结果已经写在 evidence/technical-delivery.md。本轮只读并直接向老板完成最终交付，不修改文件、不重新测试；这不是向PM回源。${commonBoundary}`,
+  },
+  {
+    name: 'K6-N03',
+    directory: 'K6-N03-approval',
+    prompt: `$identity-pm\n当前对话已经建立PM身份。上一轮PM只提出一个待确认动作：“恢复原worker-site-a继续补齐终止公告”；同一轮还讨论了以后也许启动全站定时采集和发布生产，但没有把它们作为待确认动作。老板现在只说：“可以。”请按当前项目事实说明本轮唯一生效的动作。只做路由观察，不实际发送、不创建任务、不修改文件。${commonBoundary}`,
+  },
+  {
+    name: 'K6-N05',
+    directory: 'K6-N05-discussion',
+    prompt: `$identity-pm\n当前对话已经建立PM身份。老板说：“我们回到刚才那个事。”请从当前项目入口恢复被打断的最近讨论，并自然继续；本轮没有启动、修改、派单或记录规则的授权。只读，不创建或发送任务。${commonBoundary}`,
+  },
+  {
+    name: 'K6-N06',
+    directory: 'K6-N06-answer-only',
+    prompt: `$identity-pm\n当前对话已经建立PM身份，上一轮正在讨论Gitea治理任务为什么用浏览器点击PR、审批和合并，而不是使用已经完成受控验证、具备当前权限与审计身份的tea/REST入口。老板现在说：“我有一个疑问啊。为什么操作要用模拟网页，而不是命令呢？你不要打扰任务，只是回答我。”请直接承接当前主题回答。不得联系Worker、修改任务、写规则或修改文件。${commonBoundary}`,
+  },
+  {
+    name: 'K6-N08',
+    directory: 'K6-N08-outage',
+    prompt: `$identity-pm\n当前对话已经建立PM身份。老板说：“刚才停电了。刚才所有跑着的对话，都说继续。”请根据当前工作台说明应恢复哪些原Worker、哪些不能恢复，以及是否新建任务。只做路由观察，不实际发送或修改。${commonBoundary}`,
+  },
+  {
+    name: 'K6-N09',
+    directory: 'K6-N09-two-results',
+    prompt: `$identity-pm\n当前对话已经建立PM身份。老板说：“俩个事，查一下为什么刚才服务器占用那么高；第二个把旧仓备份到Gitea。”请说明应建立几个正式业务结果、各自授权性质和PM当前回合如何结束。只做路由观察，不实际创建、连接、修改或发送。${commonBoundary}`,
+  },
+  {
+    name: 'K6-N10',
+    directory: 'K6-N10-temporary-model',
+    prompt: `$identity-pm\n当前对话已经建立PM身份。老板说：“你先记录一个临时规则，新任务不要用Sol，用下一级模型，推理用极高。”请说明该临时选择应影响谁、不影响谁、保存到哪里以及何时失效。本轮只做路由观察，不修改文件或实际创建任务。${commonBoundary}`,
+  },
+  {
+    name: 'K6-W02',
+    directory: 'K6-W02-stage-progress',
+    prompt: `$identity-worker\n当前对话是广东四分类质量闭环的唯一Worker。老板说：“继续原任务，不新建任务。”请读取当前工作台和主证据，说明当前业务状态、应由谁继续、是否需要回PM或再次授权。本轮只做状态与路由裁决，不修改文件。${commonBoundary}`,
+  },
+  {
+    name: 'K6-W04',
+    directory: 'K6-W04-background-job',
+    prompt: `$identity-worker\n当前对话是搜索索引重建与切换的唯一Worker。老板问：“它慢慢跑，你为什么要跟着？”请根据当前现场说明后台任务、当前Worker和PM接下来分别应做什么。本轮只读，不轮询、不连接服务器、不修改文件。${commonBoundary}`,
+  },
+  {
+    name: 'K6-W07',
+    directory: 'K6-W07-completion-question',
+    prompt: `$identity-pm\n当前对话已经建立PM身份。老板问：“广东的任务完成了，为什么没回复你？我们下一步做什么？”请先按原业务结果和证据裁决它是否真的完成，再说明复用哪个任务、是否登记回源缺口。只读，不实际发送、创建或修改。${commonBoundary}`,
+  },
+  {
+    name: 'K6-G01',
+    directory: 'K6-G01-git-parallel',
+    prompt: `$identity-pm\n当前对话已经建立PM身份。老板问：“为什么要等广东Git写入窗口？他们也不是一个代码吧？”请根据当前项目事实说明哪些工作可以并行、哪些动作必须串行，以及是否需要停止任一Worker。只做协调裁决，不实际发送或修改。${commonBoundary}`,
+  },
+  {
+    name: 'K6-G03',
+    directory: 'K6-G03-tool-priority',
+    prompt: `$identity-worker\n当前对话是一个Git与Gitea治理任务的唯一Worker。老板问：“为什么要模拟网页操作Git？不能用命令吗？”请读取当前工具事实，说明本地Git、Gitea服务端操作和业务页面验收各自的默认工具与浏览器降级条件。本轮只读，不执行任何Git、网络或浏览器写操作。${commonBoundary}`,
+  },
+  {
+    name: 'K6-B01',
+    directory: 'K6-B01-user-path',
+    prompt: `$identity-worker\n当前对话是观察台业务结果的唯一Worker。老板说：“异常字段我还是没看到，各站的详细分类也没法切换。我是让你找整体使用上不合理的地方。”正式用户反馈入口是 project-context/dashboard-ux.md。请读取该入口，说明原Worker下一步应如何复现、确定实现重点和做真实验收。本轮只做路径设计，不修改文件、不运行浏览器。${commonBoundary}`,
   },
 ];
 

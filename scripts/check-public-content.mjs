@@ -370,8 +370,8 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/AGENTS.md",
-    label: "first-minute updates are limited to one decision-changing fact",
-    value: "开工后60秒内，最多补一条确实会改变结论或安全边界的简短更新",
+    label: "first-minute updates require a real decision change",
+    value: "开工后60秒内，只有结论、安全边界或所需用户决定确实变化时才补一条简短更新",
   },
   {
     path: "模板交付包/AGENTS.md",

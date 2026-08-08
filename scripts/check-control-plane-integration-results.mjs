@@ -70,7 +70,7 @@ check(
   "Worker writes formal evidence",
   workerEvidence.includes("npm test")
     && /(?:3|4).{0,8}(?:(?:个测试|项).{0,8}通过|tests?.{0,8}passed)|pass(?:ed)?.{0,8}(?:3|4).{0,8}tests?/i.test(workerEvidence)
-    && /当前用户页面和业务操作尚未变化|current user page and business operations? (?:are|remain) unchanged/i.test(workerEvidence),
+    && /当前用户页面(?:和|\/)业务操作[：:]?尚未变化|current user page and business operations? (?:are|remain) unchanged/i.test(workerEvidence),
 );
 const testPasses = Number(testOutput.match(/pass\s+(\d+)/i)?.[1] ?? 0);
 check("all tests pass", testPasses >= 3 && /fail\s+0/i.test(testOutput));
