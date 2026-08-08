@@ -43,17 +43,14 @@ try {
   const mixedRoot = join(scratch, "mixed");
   cpSync(join(packageRoot, "skills"), join(mixedRoot, "skills"), { recursive: true });
   cpSync(join(packageRoot, "AGENTS.md"), join(mixedRoot, "AGENTS.md"));
-  const oldPm = readFileSync(join(mixedRoot, "skills", "identity-pm", "SKILL.md"), "utf8").replace(
-    "本节模型分档只用于 PM 创建新的正式 Worker任务",
-    "创建任务时",
-  );
+  const oldPm = `${readFileSync(join(mixedRoot, "skills", "identity-pm", "SKILL.md"), "utf8")}\n<!-- simulated stale installed Skill -->\n`;
   writeFileSync(join(mixedRoot, "skills", "identity-pm", "SKILL.md"), oldPm, "utf8");
   run("旧Skill混入", 1, join(mixedRoot, "skills"), join(mixedRoot, "AGENTS.md"), "安装Skill内容不一致");
 
   const oldEntryRoot = join(scratch, "old-entry");
   cpSync(join(packageRoot, "skills"), join(oldEntryRoot, "skills"), { recursive: true });
   const oldEntry = readFileSync(join(packageRoot, "AGENTS.md"), "utf8").replace(
-    "<!-- BEYOND-RUNTIME-VERSION: 3.0.8 -->\n",
+    "<!-- BEYOND-RUNTIME-VERSION: 3.0.9 -->\n",
     "",
   );
   writeFileSync(join(oldEntryRoot, "AGENTS.md"), oldEntry, "utf8");

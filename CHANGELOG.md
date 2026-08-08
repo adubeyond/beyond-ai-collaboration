@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.0.9] - 2026-08-08
+
+See the [v3.0.8 → v3.0.9 upgrade guide](docs/en/releases/v3.0.9.md), or read the [Chinese version](docs/releases/v3.0.9.md).
+
+### Changed
+
+- Give PM one deterministic path for creating a fresh, project-bound, user-visible Worker task; exact project path and host identity must resolve before dispatch, and missing or duplicate registrations fail closed.
+- End the PM dispatch turn after one zero-time snapshot instead of waiting for or relaying ordinary Worker progress; the Worker sends one terminal result to the injected direct source before its own final response.
+- Select models for new Workers by work type before size: Terra/high for ordinary code work, Luna/high for large low-risk non-code review, and Sol/xhigh for complex architecture, debugging, or production risk when the project has adopted that matrix.
+- Keep tool-process communication in the root entry so PM and Worker do not duplicate message-frequency rules.
+
+### Fixed
+
+- Prevent forks, projectless tasks, internal helpers, worktrees, queued client identifiers, title failures, or a second routing method from becoming fallback formal-Worker paths.
+- Expand isolated and real-project regression checks for direct terminal return, project identity, user-path acceptance, scope control, Git coordination, model routing, and platform wording variation.
+
 ## [3.0.8] - 2026-08-05
 
 See the [v3.0.7 → v3.0.8 upgrade guide](docs/en/releases/v3.0.8.md), or read the [Chinese version](docs/releases/v3.0.8.md).

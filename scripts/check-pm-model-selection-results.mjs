@@ -32,15 +32,16 @@ const taskD = taskSection('D', null);
 const results = [];
 const check = (name, passed) => results.push({ name, passed: Boolean(passed) });
 check('M-01 PM applies the confirmed model policy', /Terra/i.test(taskA) && /Terra/i.test(taskB) && /Sol/i.test(taskC) && /Luna/i.test(taskD));
-check('M-02 simple task is not assigned the highest tier', /Terra/i.test(taskA) && (/推理强度[：:][^\n]*(?:低|中)/.test(taskA) || /Terra[^\n]*(?:低|中)/i.test(taskA)));
+check('M-02 ordinary development uses the approved Terra high mapping', /Terra/i.test(taskA) && /高|high/i.test(taskA));
 check('M-03 complex high-risk task receives Sol with strong reasoning', /Sol/i.test(taskC) && /高|超高|xhigh/i.test(taskC));
-check('M-04 high-volume clear audit uses Luna high reasoning', /Luna/i.test(taskD) && /高/.test(taskD));
-check('M-05 runtime settings stay outside the business packet', /模型(?:能力)?(?:与|和)推理(?:强度|档位).{0,40}(?:不属于|不写进)(?:业务)?任务包|(?:业务)?任务包.{0,40}不.{0,20}(?:模型|推理)/s.test(output));
+check('M-04 high-volume clear audit uses Luna high reasoning', /Luna/i.test(taskD) && /高|high/i.test(taskD));
 check(
-  'M-06 model choice stays a runtime setting beside scope and authorization',
-  /模型.{0,80}运行配置|运行配置.{0,80}模型/s.test(output)
-    && output.includes('范围')
-    && output.includes('授权'),
+  'M-05 runtime settings stay outside the business packet',
+  /模型(?:能力)?(?:与|和)推理(?:强度|档位).{0,40}(?:不属于|不写进)(?:业务)?任务包|(?:业务)?任务包(?:里)?.{0,40}不.{0,20}(?:模型|推理)|(?:不应|不该|不得|不要|不).{0,12}写(?:入|进)(?:业务)?任务包[\s\S]{0,120}(?:Luna|Terra|Sol|模型|推理)/s.test(output),
+);
+check(
+  'M-06 model choice is limited to new Worker creation',
+  /(?:创建|新建).{0,40}(?:新的)?(?:正式)?\s*Worker|Worker.{0,40}(?:创建参数|新建时)/is.test(output),
 );
 check('M-07 PM does not load Action Skills', ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !commands.includes(name)));
 check('M-08 fixture remains read-only', execFileSync('git', ['status', '--short'], { cwd: join(runtimeRoot, 'cases', 'P13-model-selection'), encoding: 'utf8' }).trim() === '');

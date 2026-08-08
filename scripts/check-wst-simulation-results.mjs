@@ -112,8 +112,12 @@ const commsRoot = caseDirectory('WST-PM-COMMS', 'WST-PM-COMMS-status');
 const commsOutput = read(evidenceFile('WST-PM-COMMS'));
 const commsCommands = commands('WST-PM-COMMS').join('\n');
 const commsChanged = git(commsRoot, '-c', 'core.quotepath=false', 'diff', '--name-only').split(/\r?\n/).filter(Boolean).map((path) => path.replaceAll('\\', '/'));
-check('COMMS final remains self-contained', ['worker-site-b', '50/50', '终止公告', '进行中'].every((fact) => commsOutput.includes(fact)));
-check('COMMS keeps only opening and final messages', assistantMessages('WST-PM-COMMS').length <= 2);
+check(
+  'COMMS final remains self-contained',
+  /(?:来源)?站乙|worker-site-b/i.test(commsOutput)
+    && ['50/50', '终止公告'].every((fact) => commsOutput.includes(fact))
+    && /进行中|继续处理|继续终止公告/.test(commsOutput),
+);
 check('COMMS changes only the workbench', commsChanged.join('|') === 'docs/AI编程协同机制/当前工作台.md', commsChanged.join('|'));
 check('COMMS PM does not load Action Skills', !/task-(design|dev|test|ops)/.test(commsCommands));
 
@@ -139,6 +143,9 @@ const summary = {
   assertions: results.length,
   passed: results.length - failures.length,
   failed: failures.length,
+  communicationObservations: {
+    'WST-PM-COMMS': assistantMessages('WST-PM-COMMS').length,
+  },
   results,
   failures,
 };

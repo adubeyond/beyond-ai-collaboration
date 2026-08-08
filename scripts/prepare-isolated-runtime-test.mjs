@@ -527,6 +527,94 @@ function setActiveProductWorkbench(root) {
 `);
 }
 
+function setK6ApprovalWorkbench(root) {
+  setWorkbench(
+    root,
+    "| 2026-08-06 | 完成来源站甲当前分类修复 | 进行中 | 原Worker等待继续补齐终止公告 | worker-site-a 与 evidence/site-a.md | 恢复原Worker继续当前分类 | 定时采集与生产发布只是候选讨论 |",
+    "| 来源站甲分类修复 | worker-site-a | 进行中 | 当前分类已定位，尚未补齐终止公告 | 无 | evidence/site-a.md | 2026-08-06 |",
+  );
+  writeFixture(root, "evidence/site-a.md", `# 来源站甲当前事实
+
+- 最近唯一待确认动作：恢复 worker-site-a 继续补齐终止公告。
+- “以后启动全站定时采集”和“随后发布生产”只是PM提出的候选路线，老板尚未授权。
+`);
+}
+
+function setK6DiscussionWorkbench(root) {
+  setWorkbench(
+    root,
+    "| 2026-08-06 | 讨论Gitea操作效率 | 进行中 | 正在比较CLI、API与浏览器路径，尚未形成执行指令 | project-context/gitea-discussion.md | 继续讨论，不创建任务 | 无 |",
+    "| 当前无活动正式任务 | 无 | 已完成 | 本轮只是方法讨论 | 无 | project-context/gitea-discussion.md | 2026-08-06 |",
+  );
+  writeFixture(root, "project-context/gitea-discussion.md", `# 被打断前的讨论
+
+- 老板询问为什么Gitea操作使用网页，而不是命令或API。
+- 当前没有授权修改仓库、Gitea配置或活动任务。
+- 讨论目标是判断更短、更稳定的方法，不是立即建立治理任务。
+`);
+}
+
+function setK6OutageWorkbench(root) {
+  setWorkbench(
+    root,
+    "| 2026-08-06 | 恢复停电前真实活动任务 | 进行中 | 一个活动、一个真实暂停、一个已完成 | 当前工作台 | 只恢复停电前仍在进行的原Worker | 无 |",
+    "| 来源站甲采集 | worker-site-a | 进行中 | 停电前正在安全执行 | 无 | evidence/site-a.md | 2026-08-06 |\n| 生产发布 | worker-release-b | 已暂停 | 等待独立生产授权，停电前已暂停 | 等待生产授权 | evidence/release-b.md | 2026-08-06 |\n| 历史文档整理 | worker-doc-c | 已完成 | 已验收并归档 | 无 | evidence/doc-c.md | 2026-08-05 |",
+  );
+}
+
+function setK6StageProgressWorkbench(root) {
+  setWorkbench(
+    root,
+    "| 2026-08-06 | 完成广东四分类质量闭环 | 进行中 | 40条修复与测试已完成，配额和拒绝账本尚未闭合 | worker-guangdong 与 evidence/guangdong-progress.md | 原Worker继续剩余结果 | 无 |",
+    "| 广东四分类质量闭环 | worker-guangdong | 进行中 | 40条修复通过；仍需补齐分类配额并复核55条拒绝账本 | 无 | evidence/guangdong-progress.md | 2026-08-06 |",
+  );
+  writeFixture(root, "evidence/guangdong-progress.md", `# 广东任务阶段进度
+
+- 已完成：冻结40条修复、121项测试、本地提交。
+- 未完成：四分类有效配额仍为10/8/12/10；55条拒绝账本尚未逐条复核。
+- 当前没有外部阻断，原Worker可以继续。
+`);
+}
+
+function setK6BackgroundWorkbench(root) {
+  setWorkbench(
+    root,
+    "| 2026-08-06 | 完成搜索索引切换与业务验收 | 进行中 | 可恢复后台构建正在运行 | worker-search 与 evidence/background-job.md | 后台自行运行，Worker准备切流与验收 | 无 |",
+    "| 搜索索引重建与切换 | worker-search | 进行中 | 后台已构建58000/209344，进程健康且可观测 | 无 | evidence/background-job.md | 2026-08-06 |",
+  );
+  writeFixture(root, "evidence/background-job.md", `# 后台构建事实
+
+- 服务端任务已脱离当前命令安全运行，失败可从checkpoint恢复。
+- 每条进度可从状态文件读取，但没有必要逐千条查询。
+- 同一业务结果内仍可准备切流、缓存失效、业务验收与回滚步骤。
+- 尚未到切流点，不需要PM或老板的新授权。
+`);
+}
+
+function setK6GitParallelWorkbench(root) {
+  setWorkbench(
+    root,
+    "| 2026-08-06 | 并行修复广东与吉林站点 | 进行中 | 两个站点包互不重叠，共用一个crawler checkout | worker-gd 与 worker-jl | 并行开发测试，Git元数据和最终合流串行 | 无 |",
+    "| 广东站点修复 | worker-gd | 进行中 | 只修改 crawler/sites/gd_ggzy | 无 | evidence/gd.md | 2026-08-06 |\n| 吉林站点修复 | worker-jl | 进行中 | 只修改 crawler/sites/jl_ggzy | 无 | evidence/jl.md | 2026-08-06 |",
+  );
+  writeFixture(root, "project-context/git-layout.md", `# Git现场
+
+- 两个Worker修改不同站点目录，没有共享源码、数据、服务或生成物。
+- 两者共用一个本地checkout，不能同时切换分支或写同一个Git index。
+- 两边可以并行调查、编辑、测试和准备补丁；最终暂存、提交与合流需要错开。
+`);
+}
+
+function setK6CompletionQuestionWorkbench(root) {
+  setK6StageProgressWorkbench(root);
+  writeFixture(root, "evidence/worker-last-final.md", `# Worker最近一次界面final
+
+“40条冻结集修复已完成并通过测试；但正式任务尚未完成，分类配额和55条拒绝账本仍待处理。”
+
+该Worker没有发送完成终态给PM。
+`);
+}
+
 function addFailClosedContinuationFixture(root) {
   writeFixture(root, "src/routeGuard.js", `const parentShellByGroup = new Map([
   ['construction_permit', 'project_detail'],
@@ -647,7 +735,7 @@ if (!existsSync(sourceAuth)) {
 }
 cpSync(sourceAuth, join(isolatedCodexHome, "auth.json"));
 
-for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration"]) {
+for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration", "K6-N03-approval", "K6-N05-discussion", "K6-N06-answer-only", "K6-N08-outage", "K6-N09-two-results", "K6-N10-temporary-model", "K6-W02-stage-progress", "K6-W04-background-job", "K6-W07-completion-question", "K6-G01-git-parallel", "K6-G03-tool-priority", "K6-B01-user-path"]) {
   copyProjectFixture(join(casesRoot, caseName));
 }
 
@@ -806,7 +894,7 @@ const p09 = join(casesRoot, "P09-runtime-stop-scope");
 setActiveProductWorkbench(p09);
 initializeGit(p09, "fixture: runtime stop does not stop development");
 
-for (const caseName of ["P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection"]) {
+for (const caseName of ["P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return"]) {
   const root = join(casesRoot, caseName);
   setHealthyWorkbench(root);
   initializeGit(root, `fixture: ${caseName}`);
@@ -815,6 +903,44 @@ for (const caseName of ["P10-fresh-project-task", "P11-inherited-context-isolati
 const p14 = join(casesRoot, "P14-takeover-paused");
 setPausedTakeoverWorkbench(p14);
 initializeGit(p14, "fixture: takeover preserves paused tasks");
+
+const k6Fixtures = [
+  ["K6-N03-approval", setK6ApprovalWorkbench],
+  ["K6-N05-discussion", setK6DiscussionWorkbench],
+  ["K6-N06-answer-only", setK6DiscussionWorkbench],
+  ["K6-N08-outage", setK6OutageWorkbench],
+  ["K6-N09-two-results", setHealthyWorkbench],
+  ["K6-N10-temporary-model", setHealthyWorkbench],
+  ["K6-W02-stage-progress", setK6StageProgressWorkbench],
+  ["K6-W04-background-job", setK6BackgroundWorkbench],
+  ["K6-W07-completion-question", setK6CompletionQuestionWorkbench],
+  ["K6-G01-git-parallel", setK6GitParallelWorkbench],
+  ["K6-G03-tool-priority", setHealthyWorkbench],
+  ["K6-B01-user-path", setHealthyWorkbench],
+];
+for (const [caseName, setup] of k6Fixtures) {
+  const root = join(casesRoot, caseName);
+  setup(root);
+  if (caseName === "K6-G03-tool-priority") {
+    writeFixture(root, "project-context/git-tools.md", `# 当前工具事实
+
+- 本地Git CLI可用。
+- Gitea已配置受控tea入口和REST凭据入口；本轮不实际连接。
+- 浏览器登录会话存在，但不是唯一合法入口。
+- 业务页面的DOM与视觉验收仍使用浏览器。
+`);
+  }
+  if (caseName === "K6-B01-user-path") {
+    writeFixture(root, "project-context/dashboard-ux.md", `# 观察台用户反馈
+
+- 老板进入异常字段页后看不到当前站点的详细分类，也无法按分类查看异常。
+- 左侧把物理表名称表现成业务分类，数量口径不清楚，多处列表没有排序说明。
+- 现有74项自动测试通过，但没有覆盖老板从站点进入分类异常的完整操作链。
+- 本轮只要求给出原Worker应如何复现、设计与验收，不实际修改页面。
+`);
+  }
+  initializeGit(root, `fixture: K6 real-world language ${caseName}`);
+}
 
 const wstSim01 = join(casesRoot, "WST-SIM-01-fail-closed-continuation");
 addFailClosedContinuationFixture(wstSim01);
