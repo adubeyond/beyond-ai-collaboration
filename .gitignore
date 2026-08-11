@@ -13,6 +13,7 @@
 !.env.*.example
 
 # Runtime and tool caches
+/.obsidian/
 **/node_modules/
 **/__pycache__/
 **/.pytest_cache/

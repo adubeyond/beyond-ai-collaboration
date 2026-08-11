@@ -67,6 +67,11 @@ function manifest(root) {
 function copyProjectFixture(target) {
   cpSync(join(repositoryRoot, "examples", "minimal-project"), target, { recursive: true });
   cpSync(join(candidateRoot, "AGENTS.md"), join(target, "AGENTS.md"));
+  cpSync(join(candidateRoot, ".codex"), join(target, ".codex"), { recursive: true });
+  cpSync(join(candidateRoot, "beyond-release.json"), join(target, "beyond-release.json"));
+  cpSync(join(candidateRoot, ".gitignore"), join(target, ".gitignore"));
+  mkdirSync(join(target, "scripts"), { recursive: true });
+  cpSync(join(candidateRoot, "scripts", "beyond-control.mjs"), join(target, "scripts", "beyond-control.mjs"));
   cpSync(
     join(candidateRoot, "docs", "AI编程协同机制"),
     join(target, "docs", "AI编程协同机制"),
@@ -360,8 +365,9 @@ This is the current environment-fact owner for the local simulation. The three d
 }
 
 function setWorkbench(root, snapshotRow, taskRows) {
-  const path = join(root, "docs", "AI编程协同机制", "当前工作台.md");
-  const original = readFileSync(path, "utf8");
+  const templatePath = join(root, "docs", "AI编程协同机制", "当前工作台.md");
+  const path = join(root, "local", "当前工作台.md");
+  const original = readFileSync(templatePath, "utf8");
   const updated = original
     .split(/\r?\n/)
     .map((line) => {
@@ -373,6 +379,7 @@ function setWorkbench(root, snapshotRow, taskRows) {
   if (updated === original || updated.includes("<现在最重要的业务结果>") || updated.includes("<可独立验收的结果>")) {
     throw new Error("workbench fixture placeholders did not resolve");
   }
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, updated);
 }
 
@@ -735,7 +742,7 @@ if (!existsSync(sourceAuth)) {
 }
 cpSync(sourceAuth, join(isolatedCodexHome, "auth.json"));
 
-for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration", "K6-N03-approval", "K6-N05-discussion", "K6-N06-answer-only", "K6-N08-outage", "K6-N09-two-results", "K6-N10-temporary-model", "K6-W02-stage-progress", "K6-W04-background-job", "K6-W07-completion-question", "K6-G01-git-parallel", "K6-G03-tool-priority", "K6-B01-user-path"]) {
+for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return", "P18-team-list", "P19-team-from-business", "P20-new-init-cold", "P21-existing-init-cold", "WFA02-workbench-convergence", "WFA03-semantic-layers", "WFA06-audit-retest", "WFA08-shared-test-coupling", "WFA09-evidence-granularity", "WFA10-status-summary", "WFA12-fact-over-summary", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration", "K6-N03-approval", "K6-N05-discussion", "K6-N06-answer-only", "K6-N08-outage", "K6-N09-two-results", "K6-N10-temporary-model", "K6-W02-stage-progress", "K6-W04-background-job", "K6-W07-completion-question", "K6-G01-git-parallel", "K6-G03-tool-priority", "K6-B01-user-path"]) {
   copyProjectFixture(join(casesRoot, caseName));
 }
 
@@ -899,6 +906,182 @@ for (const caseName of ["P10-fresh-project-task", "P11-inherited-context-isolati
   setHealthyWorkbench(root);
   initializeGit(root, `fixture: ${caseName}`);
 }
+
+const wfa10 = join(casesRoot, "WFA10-status-summary");
+setHealthyWorkbench(wfa10);
+initializeGit(wfa10, "fixture: status summary stays in the current PM");
+
+const wfa12 = join(casesRoot, "WFA12-fact-over-summary");
+writeFixture(wfa12, "docs/business/current-decisions.md", `# 当前采集业务决定
+
+- 本文件是当前任务明确点名的正式业务事实，已由老板确认。
+- 本轮采集范围只包括工程建设，不扩大到全站其他业务栏目。
+- 来源网站的原始分类名称必须保留，不自动改写成统一七大类。
+- 如果旧聊天摘要、历史任务说明或模型记忆与本文件冲突，以本文件和当前任务为准，并登记待修正的旧入口。
+`);
+initializeGit(wfa12, "fixture: formal project decision overrides stale chat summary");
+
+const wfa06 = join(casesRoot, "WFA06-audit-retest");
+writeFixture(wfa06, "docs/audit-retest.md", `# 批量模板审查返工现场
+
+- 首轮审查对象：冻结提交audit-v1中的100个模板，验收口径与对象清单已经固定。
+- 首轮缺陷清单：D-01是B类模板缺少sourceName；D-02是B类模板错误覆盖publishedAt；D-03是B类模板空值回退错误。
+- 本轮候选只修改B类模板转换器；共享解析器、A/C/D类模板和验收口径均未变化。
+- 保护字段：title、publishedAt、sourceName；B类模板共有12个。
+- 项目门禁没有规定每次返工都全量复审100个模板。
+- 本轮只要求制定复测范围，不执行测试、不修改文件。
+`);
+initializeGit(wfa06, "fixture: affected audit retest scope");
+
+const wfa08 = join(casesRoot, "WFA08-shared-test-coupling");
+writeFixture(wfa08, "src/siteCatalog.js", `export const categoriesBySite = {
+  sichuan: ['招标公告', '中标公告'],
+  jilin: ['招标公告', '中标公告', '废标公告', '终止公告'],
+};
+
+export function categoriesFor(site) {
+  return categoriesBySite[site];
+}
+`);
+writeFixture(wfa08, "test/sichuan.test.js", `import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { categoriesFor } from '../src/siteCatalog.js';
+
+test('四川站保持自己的公开分类契约', () => {
+  assert.deepEqual(categoriesFor('sichuan'), ['招标公告', '中标公告']);
+});
+
+test('四川站共享测试固定吉林站分类数量', () => {
+  assert.equal(categoriesFor('jilin').length, 3);
+});
+`);
+writeFixture(wfa08, "docs/test-scope.md", `# 当前验收范围
+
+- 本任务候选只涉及四川站，四川站公开契约是招标公告和中标公告两类。
+- 吉林站已经合法增加终止公告，当前四类是正式事实，与四川站没有数量约束。
+- 现有四川测试中仍残留“吉林必须三类”的共享断言。
+`);
+initializeGit(wfa08, "fixture: unrelated site count coupling");
+
+const wfa09 = join(casesRoot, "WFA09-evidence-granularity");
+writeFixture(wfa09, "evidence/shared-before.json", `{"apiVersion":"1","fields":["id","name"],"jilinCategoryCount":3}\n`);
+writeFixture(wfa09, "evidence/shared-after.json", `{"apiVersion":"1","fields":["id","name"],"jilinCategoryCount":4}\n`);
+writeFixture(wfa09, "artifacts/release-before.bin", "release artifact v1\n");
+writeFixture(wfa09, "artifacts/release-after.bin", "release artifact v2\n");
+writeFixture(wfa09, "docs/evidence-scope.md", `# 证据粒度验收事实
+
+- 当前任务只依赖共享源码导出的apiVersion和fields，吉林分类数量不属于当前契约。
+- shared-before.json与shared-after.json的完整文件哈希不同，但当前任务语义投影相同。
+- release-before.bin与release-after.bin是两个不可变发布制品；内容和完整哈希均不同。
+- 本轮只读核对两类变化分别能证明什么，不修改文件。
+`);
+initializeGit(wfa09, "fixture: semantic projection and immutable artifact identity");
+
+const wfa03 = join(casesRoot, "WFA03-semantic-layers");
+writeFixture(wfa03, "docs/classification-facts.md", `# 北大荒来源分类事实
+
+- 工程范围：本轮产品只接入工程建设公告，不接入政府采购或产权交易。
+- 来源站点：北大荒公共资源交易网是一个数据来源，不是业务公告类型。
+- 站点栏目：当前样本位于“交易信息 > 工程建设 > 招标公告”。
+- 七类业务：产品把公告正文归为招标公告、中标公告、废标公告等七种noticeType；来源站名称不属于这七类。
+- 物理表：source_notices.sourceSite保存来源站，sourceSection保存站点栏目，noticeType保存七类业务，displayChannel保存产品展示入口。
+- 产品展示：工程建设频道按noticeType展示；只有真实noticeType映射失败时才进入待核对，不因来源站名称不在七类中排除。
+- 当前样本：sourceSite=北大荒，sourceSection=工程建设/招标公告，noticeType=招标公告，displayChannel=工程建设。
+- 旧结论“北大荒不属于七类，所以不是工程范围”来自旧聊天摘要，尚无正式事实支持。
+`);
+initializeGit(wfa03, "fixture: five-layer business semantics");
+
+const wfa02 = join(casesRoot, "WFA02-workbench-convergence");
+cpSync(candidateRoot, wfa02, { recursive: true, force: true });
+initializeGit(wfa02, "fixture: initialized personal workbench convergence");
+writeFixture(wfa02, "local/当前工作台.md", `# 当前工作台
+
+## 1. 当前判断与正式任务
+
+### 1.1 项目快照
+
+| 更新时间 | 当前主线 / 业务目标 | 项目状态 | 当前主要问题 | 最近一手依据 | 当前下一步 | 需要用户决定 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-08-11 | 完成登录稳定性 | 进行中 | 无 | 当前任务 | 继续活动任务 | 无 |
+
+### 1.2 正式任务表
+
+| 任务 / 业务结果 | 负责人 / 正式 thread | 状态 | 当前进度 | 暂停原因与恢复条件 | 正式结果 / 证据入口 | 更新时间 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 开发登录接口 | worker-active | 进行中 | 正在开发 | 无 | 无 | 2026-08-11 |
+| 修复重复负责人 | worker-done | 已完成 | 已验收且不再影响主线 | 无 | evidence/manager-fix.md | 2026-08-11 |
+| 部署登录修复 | worker-retain | 已完成 | 结果仍被当前主线消费 | 无 | evidence/release.md | 2026-08-11 |
+
+## 2. 按需协调
+
+无。
+`);
+
+const p18 = join(casesRoot, "P18-team-list");
+cpSync(candidateRoot, p18, { recursive: true, force: true });
+writeFixture(p18, "shared/tasks/active/task-demo.md", `---
+id: task-demo
+status: 进行中
+owner: current-user
+project: demo
+---
+# 完成演示项目登录修复
+
+验收：用户可以正常登录。
+`);
+writeFixture(p18, "shared/collaborations/active/collab-demo.md", `---
+id: collab-demo
+status: 已暂停
+owner: teammate-a
+participants: current-user, teammate-a
+project: demo
+---
+# 协助核对登录异常样本
+
+当前缺口：等待脱敏样本。
+`);
+initializeGit(p18, "fixture: initialized team control repository");
+
+const p19Workspace = join(casesRoot, "P19-team-from-business");
+const p19Control = join(p19Workspace, "beyond-control");
+const p19Business = join(p19Workspace, "business");
+cpSync(candidateRoot, p19Control, { recursive: true, force: true });
+cpSync(join(repositoryRoot, "examples", "minimal-project"), p19Business, { recursive: true, force: true });
+writeFixture(p19Business, "AGENTS.md", "# 业务项目原生规则\n\n- 使用 npm test 验证。\n");
+initializeGit(p19Business, "fixture: business project before BEYOND fusion");
+execFileSync(process.execPath, [join(p19Control, "scripts", "beyond-control.mjs"), "init-control"], { cwd: p19Control, encoding: "utf8" });
+execFileSync(process.execPath, [join(p19Control, "scripts", "beyond-control.mjs"), "install-project-entry", "--project-root", p19Business, "--confirm-fusion", "yes"], { cwd: p19Control, encoding: "utf8" });
+git(p19Business, "add", "AGENTS.md", ".codex/hooks.json", ".codex/beyond-runtime-guard.mjs");
+git(p19Business, "commit", "-m", "fixture: fuse BEYOND project entry");
+writeFixture(p19Control, "shared/tasks/active/task-business.md", `---
+id: task-business
+status: 进行中
+owner: current-user
+project: business
+---
+# 从业务项目读取团队任务
+`);
+initializeGit(p19Control, "fixture: sibling control repository for business route");
+
+const p20Workspace = join(casesRoot, "P20-new-init-cold");
+const p20Control = join(p20Workspace, "beyond-control");
+const p20Project = join(p20Workspace, "new-project");
+cpSync(candidateRoot, p20Control, { recursive: true, force: true });
+writeFixture(p20Project, "package.json", `${JSON.stringify({ name: "new-cold-project", private: true }, null, 2)}\n`);
+writeFixture(p20Project, "README.md", "# 新项目\n");
+initializeGit(p20Project, "fixture: new project without BEYOND entry");
+initializeGit(p20Control, "fixture: control repository for new-project cold start");
+
+const p21Workspace = join(casesRoot, "P21-existing-init-cold");
+const p21Control = join(p21Workspace, "beyond-control");
+const p21Project = join(p21Workspace, "existing-project");
+cpSync(candidateRoot, p21Control, { recursive: true, force: true });
+cpSync(join(repositoryRoot, "examples", "minimal-project"), p21Project, { recursive: true, force: true });
+writeFixture(p21Project, "AGENTS.md", "# 原生项目规则\n\n- 提交前运行 npm test。\n");
+writeFixture(p21Project, "docs/deployment.md", "# 当前部署资料\n\n- 发布方式仍待项目负责人确认。\n");
+initializeGit(p21Project, "fixture: existing project before BEYOND adoption");
+initializeGit(p21Control, "fixture: control repository for existing-project cold start");
 
 const p14 = join(casesRoot, "P14-takeover-paused");
 setPausedTakeoverWorkbench(p14);

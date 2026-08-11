@@ -1,0 +1,53 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/beyond-runtime-guard.mjs",
+            "timeout": 10,
+            "statusMessage": "恢复 BEYOND 任务身份"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/beyond-runtime-guard.mjs",
+            "timeout": 10,
+            "statusMessage": "核对 BEYOND 任务身份"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/beyond-runtime-guard.mjs",
+            "timeout": 10,
+            "statusMessage": "核对 PM 执行边界"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/beyond-runtime-guard.mjs",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

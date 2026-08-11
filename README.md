@@ -1,4 +1,4 @@
-# BEYOND 3.0
+# BEYOND 3.1
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -10,13 +10,14 @@ BEYOND is a document-driven AI engineering collaboration system for Codex. It tu
 
 Most AI coding tools focus on generating code faster. BEYOND focuses on a harder problem: helping AI understand a real project, stay within authorization, finish a complete business task, prove the result, and become more effective as project knowledge grows.
 
-[Quick Start](docs/en/quick-start.md) · [v3.0.9 Upgrade Guide](docs/en/releases/v3.0.9.md) · [Architecture](docs/en/architecture.md) · [Template Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
+[Quick Start](docs/en/quick-start.md) · [v3.1.0 Upgrade Guide](docs/en/releases/v3.1.0.md) · [Architecture](docs/en/architecture.md) · [Control Repository Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
 
-> The current release is `v3.0.9`. Version `v3.0.2` was abandoned and never entered the public mainline. Version 3.0.9 adds no identity, state, or approval; it stabilizes formal Worker creation, terminal return, PM exit, and new-Worker model routing.
+> The current version is `v3.1.0`. It preserves the v3.0.9 identities, three states, formal Worker, PM exit, and ordinary execution path. It adds optional team tasks and collaboration, an external control repository, guided new/existing-project initialization, and a PM identity-continuity guard.
 
 ## What BEYOND changes
 
-- Stable goals live in the project overview, team progress lives in the PM workbench, and reusable engineering knowledge lives in project facts rather than only in chat history.
+- BEYOND documents and stable project facts live in a sibling control repository; each member's PM workbench remains local and Git-ignored.
+- When real teammates collaborate, one internal control repository shares team tasks and collaboration records. Personal mode does not load that path.
 - Design, development, testing, and operations advance one business result continuously without stage approvals.
 - Ordinary implementation and test failures are repaired and retested in the same task; only a required business choice, high-risk action, real shared conflict, or unavailable external resource pauses work.
 - Technology stacks, test commands, environments, servers, and release procedures become reusable project facts instead of being rediscovered in every task.
@@ -100,7 +101,7 @@ This structure keeps the safety core complete without forcing every task to read
 
 ## Quick start
 
-The repository includes a zero-dependency Node.js fixture. You can use it to verify template import, cold start, formal task creation, development, testing, evidence, and write-back without touching Git or production.
+The repository includes a zero-dependency Node.js fixture. Use the template package as a sibling `beyond-control` repository, initialize it, and fuse the complete runtime kernel plus the project-level identity guard into the fixture. Existing project Hooks are backed up and preserved. Review and trust the BEYOND Hook once after its first installation or a content change; it is not a per-task approval.
 
 Requirements:
 
@@ -140,7 +141,7 @@ BEYOND/
 ├─ README.zh-CN.md                   Complete Chinese product home
 ├─ docs/                             Product documentation
 ├─ examples/minimal-project/         Zero-dependency public fixture
-├─ 模板交付包/                        Project template and six Skills
+├─ 模板交付包/                        Control repository template, fixed actions, and six Skills
 ├─ scripts/                          Public validation
 ├─ .github/                          Issues, PR template, and CI
 ├─ CHANGELOG.md                      Public version history

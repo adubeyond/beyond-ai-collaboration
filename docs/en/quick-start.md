@@ -1,11 +1,11 @@
-# BEYOND 3.0 Quick Start
+# BEYOND 3.1 Quick Start
 
 **English** | [简体中文](../快速开始.md)
 
 This guide uses the repository's zero-dependency Node.js fixture to verify three things:
 
 1. The template can enter a clean project.
-2. Codex can understand the project through the root `AGENTS.md` and the minimum document chain.
+2. Codex can understand the project through a fused root `AGENTS.md` and the external document chain.
 3. One clear development task can move through design, development, testing, evidence, and write-back without repeated stage routing.
 
 The guide does not touch a real server, database, production environment, or remote Git repository.
@@ -29,35 +29,31 @@ npm --version
 
 Copy [`examples/minimal-project`](../../examples/minimal-project) to a new writable directory such as `beyond-demo`.
 
-From the [template package](../../模板交付包), copy the following into the demo root:
+Copy the complete [control-repository package](../../模板交付包) next to the demo and name it `beyond-control`. Do not copy the whole BEYOND document and Skill tree into the business project:
 
 ```text
-AGENTS.md
-beyond-release.json
-docs/AI编程协同机制/
-skills/
+workspace/
+├─ beyond-control/
+└─ beyond-demo/
 ```
 
-Keep the fixture's own `README.md`; do not overwrite it with the template package README. The result should contain at least:
+Initialize the control repository, inspect the business project, and install the fused project entry only after explicitly confirming BEYOND-led fusion:
 
 ```text
-beyond-demo/
-├─ AGENTS.md
-├─ README.md
-├─ package.json
-├─ docs/AI编程协同机制/
-├─ skills/
-├─ src/calc.js
-└─ test/calc.test.js
+node beyond-control/scripts/beyond-control.mjs init-control
+node beyond-control/scripts/beyond-control.mjs inspect-project --project-root "beyond-demo"
+node beyond-control/scripts/beyond-control.mjs install-project-entry --project-root "beyond-demo" --confirm-fusion yes
 ```
 
-The project overview, workbench, and project-fact files are intentionally empty. Do not prefill them with unverified demo results.
+The business project receives only the fused root `AGENTS.md`. BEYOND documents and project registration remain in the control repository; the personal workbench is under its Git-ignored `local/`. Empty project facts are expected and must not be filled with guesses.
 
-For an existing project, do not overwrite its documentation tree. During the initial import or an upgrade, check only the root and active nested `AGENTS.md` files, current subproject entries, and fact indexes. Keep project-specific boundaries and fact links, but move obsolete workbench-activation gates, task states, and duplicated Skill methods out of those project documents. This compatibility check is not part of the normal task hot path.
+Local fusion does not push automatically. The fixed script creates a shared project record, a minimal project overview, and a minimal facts index so the fused entry is immediately reachable. If teammates need them, authorize remote Git separately, then use the `project-registration` scope to push only these three foundation files for the same project.
+
+An unadopted project does not yet have the BEYOND root entry. Start with `$identity-pm`, then use `Use BEYOND to initialize this new project.` or `Use BEYOND to adopt or upgrade this existing project.` Inspect code, Git, `AGENTS.md`, and Markdown first for an existing project, then ask the user to confirm each fusion or migration group. Do not overwrite or delete the original documentation tree automatically. This compatibility check is not part of the normal task hot path.
 
 ## Install the Skills
 
-Install or explicitly reference these six directories from `skills/`:
+Install or explicitly reference these six directories from `beyond-control/skills/`:
 
 ```text
 identity-pm
@@ -71,10 +67,10 @@ task-ops
 Before restarting Codex, verify the actual installed copy from the immutable release checkout:
 
 ```text
-node 模板交付包/scripts/verify-install-integrity.mjs --installed-skills-root "<Codex Skills directory>" --project-agents "<project root>/AGENTS.md"
+node beyond-control/scripts/verify-install-integrity.mjs --installed-skills-root "<Codex Skills directory>" --project-agents "<business project root>/AGENTS.md"
 ```
 
-Installation or upgrade is complete only when this command exits with code `0` and confirms that all six Skills and the managed project entry match. A non-zero result means that an old, residual, or mixed runtime is still present; a model's statement that an upgrade completed is not evidence. Restart Codex only after this verification, then create a new task from the demo root.
+Installation or upgrade is complete only when this command exits with code `0` and confirms that all six Skills, the control-repository structure, and the full project runtime kernel match. A non-zero result means that an old, residual, weak, or mixed runtime is still present. Restart Codex only after verification, then create a new task from the demo root.
 
 ## Run the initial baseline
 
@@ -152,6 +148,6 @@ Also verify:
 - Project documents contain only investigated or verified facts.
 - Git, services, network, servers, production, and data show zero operations.
 
-For a second run, delete only the disposable demo directory, create a fresh copy of the original fixture, import the template again, restart Codex, and repeat the baseline. Do not force-clean a directory containing personal work, and do not copy runtime facts back into this repository's original fixture.
+For a second run, keep the control repository, delete only the disposable demo directory, create a fresh fixture copy, and fuse its project entry again. Do not force-clean a directory containing personal work, and do not copy runtime facts back into this repository's original fixture.
 
 Continue with the [Architecture Overview](architecture.md) before adopting BEYOND in a real project.

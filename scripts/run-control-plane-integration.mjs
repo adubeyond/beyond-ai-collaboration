@@ -56,19 +56,20 @@ function run(stage, args, prompt) {
 
 function initialArgs(ephemeral = true) {
   const args = [
+    "--enable",
+    "hooks",
     "exec",
-    "--ignore-user-config",
     "--disable",
     "plugins",
-    "--sandbox",
-    "danger-full-access",
+    "--dangerously-bypass-approvals-and-sandbox",
+    "--dangerously-bypass-hook-trust",
     "--json",
     "--color",
     "never",
     "-C",
     caseRoot,
   ];
-  if (ephemeral) args.splice(1, 0, "--ephemeral");
+  if (ephemeral) args.splice(3, 0, "--ephemeral");
   return args;
 }
 
@@ -97,7 +98,7 @@ if (closeoutOnly) {
   workerThreadId = resumeWorkerThreadId;
   const resumedWorker = run(
     "02b-worker-resume",
-    ["exec", "--disable", "plugins", "resume", "--ignore-user-config", "--dangerously-bypass-approvals-and-sandbox", "--json", workerThreadId],
+    ["--enable", "hooks", "exec", "--disable", "plugins", "resume", "--dangerously-bypass-approvals-and-sandbox", "--dangerously-bypass-hook-trust", "--json", workerThreadId],
     `上轮隔离平台在相关测试已经通过后发生响应流中断。请沿用当前同一Worker、Git现场和已有结果继续：复核当前事实，完成 evidence/worker-result.md、精确本地提交和面向老板的最终交付。不要从头重做，不回PM申请普通步骤。${boundary}`,
   );
   timings.push({ stage: resumedWorker.stage, durationMs: resumedWorker.durationMs });
@@ -111,7 +112,7 @@ if (closeoutOnly) {
   writeFileSync(join(evidenceRoot, "task-packet.txt"), `${dispatch.message}\n`);
   writeFileSync(
     join(evidenceRoot, "workbench-after-dispatch.md"),
-    readFileSync(join(caseRoot, "docs", "AI编程协同机制", "当前工作台.md")),
+    readFileSync(join(caseRoot, "local", "当前工作台.md")),
   );
 
   const worker = run(
@@ -130,7 +131,7 @@ if (closeoutOnly) {
 } else {
   callback = run(
     "03-worker-callback",
-    ["exec", "--disable", "plugins", "resume", "--ignore-user-config", "--dangerously-bypass-approvals-and-sandbox", "--json", workerThreadId],
+    ["--enable", "hooks", "exec", "--disable", "plugins", "resume", "--dangerously-bypass-approvals-and-sandbox", "--dangerously-bypass-hook-trust", "--json", workerThreadId],
     `现在只生成应投递给来源PM的一次完成回传正文，不做新业务工作、不修改文件，也不要声称已经实际发送。完整工程证据仍在当前Worker任务和 evidence/worker-result.md；回传只传控制面增量。${boundary}`,
   );
   timings.push({ stage: callback.stage, durationMs: callback.durationMs });
@@ -147,7 +148,7 @@ timings.push({ stage: closeout.stage, durationMs: closeout.durationMs });
 
 writeFileSync(
   join(evidenceRoot, "workbench-after-closeout.md"),
-  readFileSync(join(caseRoot, "docs", "AI编程协同机制", "当前工作台.md")),
+  readFileSync(join(caseRoot, "local", "当前工作台.md")),
 );
 writeFileSync(join(evidenceRoot, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);
 

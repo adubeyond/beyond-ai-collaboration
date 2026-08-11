@@ -49,12 +49,45 @@ const collaboration = read("模板交付包/docs/AI编程协同机制/机制/03-
 const workerCollaboration = read("模板交付包/skills/identity-worker/references/collaboration-and-rework.md");
 const workerCapability = read("模板交付包/skills/identity-worker/references/capability-correction-and-cost.md");
 const installVerifier = read("模板交付包/scripts/verify-install-integrity.mjs");
+const controlScript = read("模板交付包/scripts/beyond-control.mjs");
+const runtimeHooks = read("模板交付包/.codex/hooks.json");
+const runtimeGuard = read("模板交付包/.codex/beyond-runtime-guard.mjs");
+const realCompaction = read("scripts/run-real-pm-compaction-cli.mjs");
+const realInstalledGuard = read("scripts/run-real-installed-guard.mjs");
+const teamCollaboration = read("模板交付包/docs/AI编程协同机制/团队任务与协同.md");
 const releaseManifest = read("模板交付包/beyond-release.json");
 const pmCoordination = read("模板交付包/skills/identity-pm/references/cross-task-coordination.md");
 const pmDispatch = read("模板交付包/skills/identity-pm/references/dispatch-and-init.md");
 const pmLifecycle = read("模板交付包/skills/identity-pm/references/lifecycle-and-closeout.md");
 const workbench = read("模板交付包/docs/AI编程协同机制/当前工作台.md");
 const gitCloseout = read("模板交付包/skills/task-ops/references/git-and-resource-closeout.md");
+
+// 运行时身份连续性：文档声明之外必须存在可安装、可验真的机械护栏。
+for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse", "SessionEnd"]) {
+  requireText(`身份Hook包含${event}`, runtimeHooks, `"${event}"`);
+}
+requireText("身份Hook调用固定护栏", runtimeHooks, "node .codex/beyond-runtime-guard.mjs");
+requireText("PM显式入口登记身份", runtimeGuard, "$identity-pm");
+requireText("压缩恢复身份上下文", runtimeHooks, "startup|resume|compact");
+requireText("PM写入使用机械拒绝", runtimeGuard, "permissionDecision: \"deny\"");
+requireText("固定控制脚本必须是单一Node命令", runtimeGuard, "singleFixedNodeCommand");
+requireText("会话结束回收身份", runtimeGuard, "event.hook_event_name === \"SessionEnd\"");
+requireText("根入口替换后仍使用安装绑定", runtimeGuard, "installedControlRoot");
+requireText("PM自然语言入口有Hook兜底", pm, "runtime-identity --role pm");
+requireText("PM首次接入不被Hook循环阻断", pm, "项目尚无BEYOND Hook是初始化前的客观状态");
+requireText("PM首次接入完成后停止并重启", pm, "融合完成后停止并提示用户信任Hook、重启Codex");
+requireText("项目安装合并既有Hook", controlScript, "hooks: group.hooks.filter((handler) => !beyondHook(handler))");
+requireText("项目Hook绑定控制仓", controlScript, "--control-root");
+requireText("项目Hook绑定项目身份", controlScript, "--project-id");
+requireText("安装验真核对身份护栏", installVerifier, "项目身份护栏脚本与控制仓候选不一致");
+requireText("版本清单登记运行Hook", releaseManifest, "\"runtimeHooks\": \".codex/hooks.json\"");
+requireText("版本清单登记身份脚本", releaseManifest, "\"runtimeGuard\": \".codex/beyond-runtime-guard.mjs\"");
+requireText("真实压缩使用平台接口", realCompaction, "thread/compact/start");
+requireText("真实压缩恢复同一会话", realCompaction, "exec\",\n  \"--disable\",\n  \"plugins\",\n  \"resume\"");
+requireText("真实压缩核对恢复Hook", realCompaction, "identityRestoreHookSeen");
+requireText("真实安装护栏从固定脚本建立", realInstalledGuard, "install-project-entry");
+requireText("真实安装护栏替换根入口", realInstalledGuard, "根入口已被外部替换");
+requireText("真实安装护栏核对恢复", realInstalledGuard, "restoredAfterReplacement");
 
 // S1：普通局部 BUG。
 requireText("S1清晰请求不制造任务", agents, "清晰请求不先输出接手确认，不把初始化仪式当成答案，也不凭空制造正式任务");
@@ -107,6 +140,15 @@ requireText("任务包默认不编号", pm, "默认不编号、不另起章节")
 requireText("任务包不重复系统通则", pm, "系统通则已经生效时不在每个任务中重述");
 requireText("PM过程沟通继承根入口", pm, "工具过程沟通直接遵循根入口");
 requireText("PM最终答复保持自包含", pm, "最终答复仍须自包含");
+requireText("安装PM从项目根映射团队入口", pm, "当前项目根`AGENTS.md`在“规则所有者”中映射的团队任务与协同入口");
+forbidText("安装PM不使用安装目录相对团队链接", pm, "../../docs/AI编程协同机制/团队任务与协同.md");
+requireText("安装PM从项目根映射跨任务入口", pm, "当前项目根`AGENTS.md`在“规则所有者”中映射的跨任务协同与共享对象机制");
+requireText("安装Worker从项目根映射跨任务入口", worker, "当前项目根`AGENTS.md`在“规则所有者”中映射的跨任务协同与共享对象机制");
+requireText("安装设计reference从项目根映射文档入口", complexDesign, "当前项目根`AGENTS.md`在“规则所有者”中映射的项目文档入口");
+forbidText("安装Skills不保留源码树项目文档相对链接", `${pm}\n${worker}\n${workerCollaboration}\n${complexDesign}`, "../docs/AI编程协同机制");
+requireText("业务项目按融合标记定位控制脚本", teamCollaboration, "`BEYOND-CONTROL-ROOT`定位同一控制仓脚本");
+requireText("入口融合改写控制脚本路径", controlScript, "source.replace(/`scripts\\//g");
+requireText("安装验真反向归一控制脚本路径", installVerifier, '["docs", "scripts", "local", "projects"]');
 requireText("复杂派单在业务契约闭合后停止", pmDispatch, "PM在业务契约闭合后停止编译");
 requireText("复杂任务不扩写章节", pmDispatch, "不因复杂就把字段扩成章节");
 requireText("设计检查点不拆第二Worker", pm, "不得再建立一个实施 Worker");
@@ -182,6 +224,9 @@ requireText("根入口任务目标高于流程", agents, "任务目标高于方�
 requireText("Worker不按方法拆任务", worker, "不按 Skill、步骤或文件数量机械拆任务");
 requireText("Worker首个专业动作加载方法", worker, "进入第一个专业动作前必须完整读取一个与主要问题匹配的 Action Skill");
 requireText("Worker不用身份说明替代方法", worker, "不能用 Worker 通用说明代替专业方法，也不一次性预读全部 Skill");
+requireText("正式任务只读一个起始方法", agents, "完整读取且只读取一个起始 Action Skill");
+requireText("局部开发不并读测试方法", agents, "开发方法能够运行现有测试并完成验收就不加载测试 Skill");
+requireText("真实测试专业问题才切方法", agents, "后续真实需要复杂覆盖、跨层联调、测试专业裁决或明确独立性时才切换");
 requireText("简单单路径不启助手", worker, "简单、连续、单路径任务由Worker直接完成");
 requireText("旧长任务包先收敛业务契约", worker, "旧任务包或上游说明过长时，先收敛为上述六个问题再执行");
 requireText("已读方法入口不重复加载", worker, "已经完整读取且未变化的Skill或reference不重复读取");
@@ -253,13 +298,29 @@ forbidText("不再提供worktree创建清单", gitCloseout, "创建前必须明�
 requireText("健康工作台优先于文档治理入口", agents, "先恢复当前主线、正式任务和下一步");
 requireText("文档治理入口只在真实命中时读取", agents, "工作台缺失、仍为空模板、互相冲突，或当前需要处理事实归位、文档创建更新、入口纠偏和历史回收时");
 requireText("00入口承接异常文档治理", documentEntry, "只有项目初始化、项目接手发现工作台缺失/冲突或需要处理事实归位、文档创建更新与历史回收");
-requireText("升级只做一次兼容核对", agents, "该核对只属于初始化或升级，不进入普通任务热路径");
-requireText("升级核对当前直接事实入口", agents, "事实索引及其声明为当前的直接入口");
-requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.0.9");
+requireText("初始化不进入普通任务热路径", agents, "不得把初始化问卷带入普通任务");
+requireText("升级先核对当前直接事实", agents, "已有项目或升级先只读检查现有`AGENTS.md`、代码、Git和Markdown");
+requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.1.0");
 requireText("项目覆盖有专用边界", agents, "BEGIN BEYOND PROJECT OVERRIDES");
 requireText("安装逐文件对账六个Skill", installVerifier, "安装Skill内容不一致");
-requireText("安装核对项目通用入口", installVerifier, "项目入口的BEYOND通用内容与候选不一致");
-requireText("安装清单声明补丁版本", releaseManifest, '"releaseVersion": "3.0.9"');
+requireText("安装核对项目完整运行内核", installVerifier, "项目入口的BEYOND运行内核与控制仓候选不一致");
+requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.1.0"');
+requireText("个人路径不读取团队共享区", agents, "普通项目接手、正式 Worker任务、Action Skill切换和个人任务不读取共享区");
+requireText("团队协同不替代正式Worker", agents, "不替代 3.0.9 的正式 Worker");
+requireText("PM协同Git权限严格限域", pm, "两条例外都不扩张到后续项目事实正文、其他项目文档、业务代码、仓库配置、成员权限或发布资料");
+requireText("PM冷启动补齐默认称呼信号", pm, "这只补齐冷启动，不复制其他根入口规则");
+requireText("跨任务规则变化真实读取两层入口", pm, "当前还要安排依赖、接力、规则变化或冲突时，再完整读取");
+requireText("项目登记推送使用专用范围", pmDispatch, "`project-registration`范围精确提交这三份固定基础文件");
+requireText("remote登记剥离HTTP凭据", controlScript, "url.username = \"\"");
+requireText("归档编号拒绝路径分隔符", controlScript, "归档编号无效");
+requireText("控制仓拒绝自我融合", controlScript, "控制仓不能登记或融合为业务项目");
+requireText("工作台支持只读汇总", controlScript, 'workbench --action list');
+requireText("工作台只收拢已完成任务", controlScript, "只有已完成任务可以移出高频区");
+requireText("工作台收拢先备份本机状态", controlScript, 'backupLocal("workbench-archive")');
+requireText("PM而非脚本判断完成", pmLifecycle, "脚本只负责备份、移行和本机月度归档，不能替PM判断完成或自动选择任务");
+requireText("工作台自动化不接管验收", workbench, "脚本不判断验收、不自动选择任务，也不能移动进行中或已暂停任务");
+requireText("完成后正常收口不是暂停", worker, "任务停止只有两类边界：满足第8节完成条件后正常收口");
+requireText("团队路径先读规则再调脚本", pm, "必须先完整读取当前项目根`AGENTS.md`在“规则所有者”中映射的团队任务与协同入口");
 requireText("兼容核对包含嵌套AGENTS", documentEntry, "根与嵌套 `AGENTS.md`只保留对应目录的稳定边界、特殊风险和事实入口");
 requireText("兼容核对收敛环境入口冲突", documentEntry, "同一环境指向不同主机、SSH别名或凭据来源");
 requireText("旧工作台激活门禁退出项目入口", documentEntry, "不得要求“工作台先激活”“PM先派单”");

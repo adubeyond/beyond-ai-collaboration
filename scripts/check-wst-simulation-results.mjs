@@ -82,13 +82,13 @@ check('SIM-01 stayed in the original Worker without PM round-trip', !sim01Comman
 check('SIM-01 did not create a worktree', git(sim01Root, 'worktree', 'list', '--porcelain').split(/\r?\n/).filter((line) => line.startsWith('worktree ')).length === 1);
 
 const sim02Root = caseDirectory('WST-SIM-02', 'WST-SIM-02-acceptance-correction');
-const sim02Workbench = read(join(sim02Root, 'docs', 'AI编程协同机制', '当前工作台.md'));
+const sim02Workbench = read(join(sim02Root, 'local', '当前工作台.md'));
 const sim02Output = read(evidenceFile('WST-SIM-02'));
 const sim02Commands = commands('WST-SIM-02').join('\n');
 const sim02Changed = git(sim02Root, '-c', 'core.quotepath=false', 'diff', '--name-only').split(/\r?\n/).filter(Boolean).map((path) => path.replaceAll('\\', '/'));
 const sim02WorkerIds = [...`${sim02Workbench}\n${sim02Output}`.matchAll(/worker-site-[a-z0-9-]+/g)].map((match) => match[0]);
 
-check('SIM-02 changed only the PM workbench', sim02Changed.join('|') === 'docs/AI编程协同机制/当前工作台.md', sim02Changed.join('|'));
+check('SIM-02 changed only the PM workbench', sim02Changed.length === 0 && /beyond-control\.mjs.+workbench.+--action\s+(?:upsert|snapshot)/s.test(sim02Commands), sim02Changed.join('|'));
 check('SIM-02 kept the already-valid station A completed', /来源站甲分类采集与质量审查\s*\|\s*worker-site-a\s*\|\s*已完成/.test(sim02Workbench));
 check('SIM-02 reopened station B on its original Worker', /来源站乙分类采集与质量审查\s*\|\s*worker-site-b\s*\|\s*进行中/.test(sim02Workbench));
 check('SIM-02 reopened station C on its original Worker', /来源站丙分类采集与质量审查\s*\|\s*worker-site-c\s*\|\s*进行中/.test(sim02Workbench));
@@ -118,7 +118,7 @@ check(
     && ['50/50', '终止公告'].every((fact) => commsOutput.includes(fact))
     && /进行中|继续处理|继续终止公告/.test(commsOutput),
 );
-check('COMMS changes only the workbench', commsChanged.join('|') === 'docs/AI编程协同机制/当前工作台.md', commsChanged.join('|'));
+check('COMMS changes only the workbench', commsChanged.length === 0 && /beyond-control\.mjs.+workbench.+--action\s+upsert/s.test(commsCommands), commsChanged.join('|'));
 check('COMMS PM does not load Action Skills', !/task-(design|dev|test|ops)/.test(commsCommands));
 
 const callbackOutput = read(evidenceFile('WST-WORKER-CALLBACK'));
