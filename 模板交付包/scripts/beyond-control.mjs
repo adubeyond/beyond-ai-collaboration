@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
+  copyFileSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -144,6 +145,145 @@ function registeredProjectId(projectRoot, remote) {
   return [...matches][0] ?? null;
 }
 
+const ignoredDiscoveryDirectories = new Set([
+  ".git", ".next", ".pytest_cache", ".tmp", ".codex_build", ".codex_exports",
+  ".codex_release", ".codex-artifacts", ".codex-out", "node_modules", "dist",
+  "build", "coverage", "vendor", "artifacts", "logs", "tmp", "_publish", ".tmp_publish",
+]);
+
+function repositoryFacts(repositoryRoot) {
+  const remoteResult = runGit(["remote", "get-url", "origin"], repositoryRoot, true);
+  const branchResult = runGit(["branch", "--show-current"], repositoryRoot, true);
+  const statusResult = runGit(["status", "--porcelain=v1", "--untracked-files=all"], repositoryRoot, true);
+  const statusLines = statusResult.status === 0 ? statusResult.stdout.split("\n").filter(Boolean) : [];
+  const remote = remoteResult.status === 0 ? safeRemote(remoteResult.stdout) : null;
+  return {
+    path: display(repositoryRoot),
+    remote,
+    normalizedRemote: remote ? normalizedRemote(remote) : null,
+    branch: branchResult.status === 0 && branchResult.stdout ? branchResult.stdout : null,
+    trackedChanges: statusLines.filter((line) => !line.startsWith("??")).length,
+    untracked: statusLines.filter((line) => line.startsWith("??")).length,
+  };
+}
+
+function discoverRepositories(projectRoot, rootGit) {
+  const roots = new Set();
+  if (rootGit) roots.add(rootGit);
+  for (const entry of readdirSync(projectRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.isSymbolicLink() || ignoredDiscoveryDirectories.has(entry.name)) continue;
+    const candidate = join(projectRoot, entry.name);
+    if (existsSync(join(candidate, ".git"))) roots.add(candidate);
+  }
+  const repositories = [...roots].sort((left, right) => left.localeCompare(right)).map(repositoryFacts);
+  const byRemote = new Map();
+  for (const repository of repositories) {
+    if (!repository.normalizedRemote) continue;
+    const paths = byRemote.get(repository.normalizedRemote) ?? [];
+    paths.push(repository.path);
+    byRemote.set(repository.normalizedRemote, paths);
+  }
+  const remoteConflicts = [...byRemote.entries()]
+    .filter(([, paths]) => paths.length > 1)
+    .map(([remote, paths]) => ({ remote, paths }));
+  return { repositories, remoteConflicts };
+}
+
+function discoveryClass(relativePath) {
+  const normalized = relativePath.replace(/\\/g, "/");
+  const lower = normalized.toLowerCase();
+  if (/(^|\/)agents\.md$/.test(lower)) return "formal";
+  if (/^(readme(?:\.[^/]+)?\.md|docs\/readme(?:\.[^/]+)?\.md)$/.test(lower)) return "formal";
+  if (/(^|\/)docs\/ai编程协同机制\/(00-模板入口|当前工作台|项目总览)\.md$/.test(lower)
+    || /(^|\/)docs\/ai编程协同机制\/项目事实\/readme\.md$/.test(lower)) return "formal";
+  if (/(部署|运维|发布|回滚|架构|工程|开发|测试).*(索引|说明|流程|手册).*\.md$/i.test(normalized)) return "formal";
+  if (/(^|\/)(归档|archive|history|历史|记录)(\/|$)/i.test(normalized)) return "archive";
+  return "normal";
+}
+
+function discoverMarkdown(projectRoot) {
+  const records = [];
+  const excluded = new Map();
+  function walk(current) {
+    for (const entry of readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.isSymbolicLink()) continue;
+      const path = join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (ignoredDiscoveryDirectories.has(entry.name)) {
+          const key = display(relative(projectRoot, path));
+          excluded.set(key, entry.name);
+        } else walk(path);
+      } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
+        const relativePath = display(relative(projectRoot, path));
+        records.push({ path: relativePath, class: discoveryClass(relativePath) });
+      }
+    }
+  }
+  walk(projectRoot);
+  const rank = { formal: 0, normal: 1, archive: 2 };
+  records.sort((left, right) => rank[left.class] - rank[right.class] || left.path.localeCompare(right.path));
+  const counts = { formal: 0, normal: 0, archive: 0 };
+  for (const record of records) counts[record.class] += 1;
+  return {
+    markdown: records.slice(0, 200),
+    markdownTotal: records.length,
+    markdownCounts: counts,
+    markdownTruncated: records.length > 200,
+    excludedDirectories: [...excluded.keys()].sort(),
+  };
+}
+
+function legacyWorkbenchFacts(projectRoot) {
+  const candidates = [
+    join(projectRoot, "docs", "AI编程协同机制", "当前工作台.md"),
+    join(projectRoot, "AI编程协同机制", "当前工作台.md"),
+    join(projectRoot, "当前工作台.md"),
+  ];
+  const source = candidates.find((path) => existsSync(path) && lstatSync(path).isFile());
+  if (!source) return null;
+  const lines = readUtf8(source, "旧项目当前工作台").split("\n");
+  const section = lines.findIndex((line) => /^###\s+1\.2\s+正式任务表\s*$/.test(line.trim()));
+  if (section < 0) return { path: display(source), parseable: false, reason: "缺少1.2正式任务表" };
+  const headerLine = lines.findIndex((line, index) => index > section && line.trim().startsWith("|"));
+  const header = headerLine >= 0 ? markdownCells(lines[headerLine]) : null;
+  if (!header || header.length < 3) return { path: display(source), parseable: false, reason: "任务表表头无效" };
+  const indexes = {
+    task: header.findIndex((cell) => cell.includes("任务")),
+    worker: header.findIndex((cell) => cell.includes("负责人")),
+    status: header.findIndex((cell) => cell === "状态"),
+    progress: header.findIndex((cell) => cell.includes("当前进度")),
+    pause: header.findIndex((cell) => cell.includes("暂停原因")),
+    result: header.findIndex((cell) => cell.includes("正式结果")),
+    updated: header.findIndex((cell) => cell.includes("更新时间")),
+  };
+  if (Object.values(indexes).some((index) => index < 0)) {
+    return { path: display(source), parseable: false, reason: "任务表缺少必要列" };
+  }
+  const records = [];
+  for (let index = headerLine + 2; index < lines.length; index += 1) {
+    if (!lines[index].trim().startsWith("|")) break;
+    const cells = markdownCells(lines[index]);
+    if (!cells || cells.length !== header.length) continue;
+    const status = cells[indexes.status];
+    if (!["进行中", "已暂停", "已完成"].includes(status)) continue;
+    records.push(Object.fromEntries(Object.entries(indexes).map(([key, column]) => [key, cells[column]])));
+  }
+  const counts = { 进行中: 0, 已暂停: 0, 已完成: 0 };
+  for (const record of records) counts[record.status] += 1;
+  return {
+    path: display(source),
+    parseable: true,
+    counts,
+    active: records.filter((record) => record.status !== "已完成"),
+    completed: records.filter((record) => record.status === "已完成").map((record) => ({
+      task: record.task,
+      worker: record.worker,
+      result: record.result,
+      updated: record.updated,
+    })),
+  };
+}
+
 function inspectProject(projectRootValue) {
   if (!projectRootValue) fail("缺少 --project-root <业务项目目录>", 2);
   const projectRoot = resolve(projectRootValue);
@@ -158,21 +298,9 @@ function inspectProject(projectRootValue) {
   const remote = remoteResult.status === 0 ? safeRemote(remoteResult.stdout) : null;
   const identity = remote ? normalizedRemote(remote) : projectRoot.toLowerCase();
   const projectId = registeredProjectId(projectRoot, remote) ?? stableId(remote ? "project" : "local", identity);
-  const markdown = [];
-  const ignored = new Set([".git", "node_modules", ".next", "dist", "build", "coverage", "vendor"]);
-  function walk(current) {
-    if (markdown.length >= 200) return;
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      if (ignored.has(entry.name) || entry.isSymbolicLink()) continue;
-      const path = join(current, entry.name);
-      if (entry.isDirectory()) walk(path);
-      else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
-        markdown.push(display(relative(projectRoot, path)));
-      }
-      if (markdown.length >= 200) return;
-    }
-  }
-  walk(projectRoot);
+  const discovery = discoverMarkdown(projectRoot);
+  const repositoryDiscovery = discoverRepositories(projectRoot, gitRoot);
+  const legacyWorkbench = legacyWorkbenchFacts(projectRoot);
   return {
     projectId,
     name: basename(projectRoot),
@@ -182,8 +310,14 @@ function inspectProject(projectRootValue) {
     hostId: arg("--host-id"),
     codexProjectId: arg("--codex-project-id"),
     agentsPath: existsSync(join(projectRoot, "AGENTS.md")) ? display(join(projectRoot, "AGENTS.md")) : null,
-    markdown,
-    markdownTruncated: markdown.length >= 200,
+    ...discovery,
+    repositories: repositoryDiscovery.repositories,
+    remoteConflicts: repositoryDiscovery.remoteConflicts,
+    legacyWorkbench,
+    adoptionRequired: Boolean(
+      repositoryDiscovery.remoteConflicts.length
+      || legacyWorkbench?.parseable && (legacyWorkbench.counts.进行中 + legacyWorkbench.counts.已暂停 > 0)
+    ),
   };
 }
 
@@ -694,16 +828,98 @@ function registerProject(project, nameValue = null) {
 - [返回项目总览](../项目总览.md)
 `);
   }
-  writeUtf8(localPath, `---\nid: ${project.projectId}\nname: ${name}\npath: ${project.projectRoot}\nremote: ${project.remote ?? ""}\nhost_id: ${project.hostId ?? ""}\ncodex_project_id: ${project.codexProjectId ?? ""}\nupdated_at: ${new Date().toISOString()}\n---\n\n# ${name} 本机登记\n\n- 本机项目路径：${project.projectRoot}\n- 根入口：${project.agentsPath ?? "尚未建立"}\n- Codex主机：${project.hostId ?? "待登记"}\n- Codex项目：${project.codexProjectId ?? "待登记"}\n`);
+  const canonicalRepositories = project.canonicalRepositories?.length
+    ? project.canonicalRepositories.map((item) => `- ${item.remote} → ${item.path}`).join("\n")
+    : "- 无重复remote需要选择。";
+  writeUtf8(localPath, `---\nid: ${project.projectId}\nname: ${name}\npath: ${project.projectRoot}\nremote: ${project.remote ?? ""}\nhost_id: ${project.hostId ?? ""}\ncodex_project_id: ${project.codexProjectId ?? ""}\nupdated_at: ${new Date().toISOString()}\n---\n\n# ${name} 本机登记\n\n- 本机项目路径：${project.projectRoot}\n- 根入口：${project.agentsPath ?? "尚未建立"}\n- Codex主机：${project.hostId ?? "待登记"}\n- Codex项目：${project.codexProjectId ?? "待登记"}\n\n## 重复remote的本机正式路径\n\n${canonicalRepositories}\n`);
   return { sharedPath, overviewPath, factsPath, localPath, localBackup };
+}
+
+function selectCanonicalRepositories(project) {
+  if (!project.remoteConflicts.length) return [];
+  const requested = (arg("--canonical-repositories") ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => resolve(value).toLowerCase());
+  const selected = [];
+  for (const conflict of project.remoteConflicts) {
+    const matches = conflict.paths.filter((path) => requested.includes(resolve(path).toLowerCase()));
+    if (matches.length !== 1) {
+      fail(`同一remote对应多个本地仓库，必须用 --canonical-repositories 为每组准确选择一个正式路径：\n${conflict.remote}: ${conflict.paths.join(", ")}`, 2);
+    }
+    selected.push({ remote: conflict.remote, path: matches[0] });
+  }
+  if (requested.length !== selected.length) fail("--canonical-repositories包含不属于重复remote组或重复的路径", 2);
+  return selected;
+}
+
+function adoptLegacyWorkbench(project) {
+  const legacy = project.legacyWorkbench;
+  if (!legacy?.parseable || legacy.active.length === 0) return null;
+  const workbenchPath = join(controlRoot, "local", "当前工作台.md");
+  const parsed = workbenchTasks(readUtf8(workbenchPath, "本机当前工作台"));
+  const lines = [...parsed.lines];
+  const imported = [];
+  for (const record of legacy.active) {
+    const sameThread = parsed.records.filter((item) => item.worker === record.worker);
+    if (sameThread.length > 1) fail(`本机工作台已有重复正式thread：${record.worker}`);
+    if (sameThread.length === 1) continue;
+    if (parsed.records.some((item) => item.task === record.task && item.worker !== record.worker)) {
+      fail(`本机工作台已有同名任务但正式thread不同，停止迁移：${record.task}`);
+    }
+    const normalized = {
+      task: record.task,
+      worker: record.worker,
+      status: record.status,
+      progress: record.progress || "从旧项目工作台迁入，待当前现场重证",
+      pause: record.pause || "无",
+      result: record.result || "无",
+      updated: /^\d{4}-\d{2}-\d{2}$/.test(record.updated) ? record.updated : new Date().toISOString().slice(0, 10),
+    };
+    lines.splice(parsed.separatorLine + 1, 0, workbenchRecordLine(parsed, normalized));
+    imported.push(normalized);
+  }
+  const placeholders = parsed.records.filter((item) => item.task === "当前无活动正式任务" && item.worker === "无");
+  for (const placeholder of placeholders.sort((left, right) => right.lineIndex - left.lineIndex)) {
+    lines.splice(placeholder.lineIndex + imported.length, 1);
+  }
+  const backup = backupLocal("before-legacy-workbench-adoption");
+  writeUtf8(workbenchPath, lines.join("\n").replace(/\n*$/, "\n"));
+  const historyPath = join(controlRoot, "local", "history", "legacy", `${project.projectId}-workbench.md`);
+  const completedRows = legacy.completed.length
+    ? legacy.completed.map((record) => `| ${markdownCell(record.task)} | ${markdownCell(record.worker)} | ${markdownCell(record.result)} | ${markdownCell(record.updated)} |`).join("\n")
+    : "| 无 | 无 | 无 | 无 |";
+  writeUtf8(historyPath, `# ${project.name}旧工作台接入记录
+
+- 原工作台：${legacy.path}
+- 接入时间：${new Date().toISOString()}
+- 活动任务迁入：${imported.length}
+- 已完成任务仅归档：${legacy.completed.length}
+- 迁入内容只是恢复线索；状态、代码、Git和环境仍需从当前一手现场重证。
+
+| 已完成任务 | 原负责人 / thread | 原结果入口 | 原更新时间 |
+| --- | --- | --- | --- |
+${completedRows}
+`);
+  return { imported: imported.length, historyPath, backup };
 }
 
 function installProjectEntry(project) {
   if (arg("--confirm-fusion") !== "yes") {
     fail("写入项目AGENTS.md前必须由用户确认融合，并传入 --confirm-fusion yes", 2);
   }
+  project.canonicalRepositories = selectCanonicalRepositories(project);
+  if (project.legacyWorkbench && !project.legacyWorkbench.parseable && arg("--confirm-legacy-skip") !== "yes") {
+    fail(`发现旧工作台但无法安全解析：${project.legacyWorkbench.path}（${project.legacyWorkbench.reason}）。请人工核对后传入 --confirm-legacy-skip yes，不能静默建立空工作台。`, 2);
+  }
+  if (project.legacyWorkbench?.parseable && project.legacyWorkbench.active.length > 0
+    && arg("--adopt-legacy-workbench") !== "yes") {
+    fail(`旧工作台仍有${project.legacyWorkbench.active.length}个活动任务；请确认后传入 --adopt-legacy-workbench yes，将活动任务迁入本机工作台、已完成任务进入历史。`, 2);
+  }
   const runtimeGuard = prepareProjectRuntimeGuard(project);
   registerProject(project, arg("--name"));
+  const adoption = arg("--adopt-legacy-workbench") === "yes" ? adoptLegacyWorkbench(project) : null;
   const target = join(project.projectRoot, "AGENTS.md");
   const existing = existsSync(target) ? readUtf8(target) : "";
   const hadRuntimeHooks = existsSync(runtimeGuard.targetHooksPath);
@@ -712,15 +928,15 @@ function installProjectEntry(project) {
   const backupStamp = timestamp();
   if (existing) {
     mkdirSync(backupDirectory, { recursive: true });
-    writeUtf8(join(backupDirectory, `${backupStamp}-AGENTS.md`), existing);
+    copyFileSync(target, join(backupDirectory, `${backupStamp}-AGENTS.md`));
   }
   if (hadRuntimeHooks) {
     mkdirSync(backupDirectory, { recursive: true });
-    writeUtf8(join(backupDirectory, `${backupStamp}-hooks.json`), readUtf8(runtimeGuard.targetHooksPath));
+    copyFileSync(runtimeGuard.targetHooksPath, join(backupDirectory, `${backupStamp}-hooks.json`));
   }
   if (hadRuntimeGuard) {
     mkdirSync(backupDirectory, { recursive: true });
-    writeUtf8(join(backupDirectory, `${backupStamp}-beyond-runtime-guard.mjs`), readUtf8(runtimeGuard.targetGuardPath));
+    copyFileSync(runtimeGuard.targetGuardPath, join(backupDirectory, `${backupStamp}-beyond-runtime-guard.mjs`));
   }
   const rendered = renderProjectEntry(project, existing);
   writeUtf8(target, rendered.text);
@@ -733,6 +949,7 @@ function installProjectEntry(project) {
     runtimeHooks: runtimeGuard.targetHooksPath,
     backupDirectory: existing || hadRuntimeHooks || hadRuntimeGuard ? backupDirectory : null,
     controlRelative: rendered.controlRelative,
+    adoption,
   };
 }
 
@@ -899,6 +1116,105 @@ function restoreLocal() {
   console.log(`本机工作台已恢复；恢复前快照：${display(currentBackup)}`);
 }
 
+function sha256File(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function runtimeProjectIdentity(projectRootValue) {
+  if (!projectRootValue) fail("缺少 --project-root <业务项目目录>", 2);
+  const projectRoot = resolve(projectRootValue);
+  const agentsPath = join(projectRoot, "AGENTS.md");
+  const agents = readUtf8(agentsPath, "项目AGENTS.md");
+  const projectId = agents.match(/<!-- BEYOND-PROJECT-ID: ([^\n]+) -->/)?.[1].trim();
+  const mappedControl = agents.match(/<!-- BEYOND-CONTROL-ROOT: ([^\n]+) -->/)?.[1].trim();
+  if (!projectId || !mappedControl) fail("项目AGENTS.md缺少完整的BEYOND项目编号或控制仓映射", 2);
+  if (resolve(projectRoot, mappedControl).toLowerCase() !== controlRoot.toLowerCase()) {
+    fail("项目AGENTS.md映射的控制仓不是当前控制仓", 2);
+  }
+  return { projectRoot, projectId, agentsPath };
+}
+
+function currentRuntimeBinding(projectRoot) {
+  const hooksPath = join(projectRoot, runtimeHooksRelative);
+  const guardPath = join(projectRoot, runtimeGuardRelative);
+  if (!existsSync(hooksPath) || !existsSync(guardPath)) return null;
+  return {
+    hooksPath,
+    guardPath,
+    hooksSha256: sha256File(hooksPath),
+    guardSha256: sha256File(guardPath),
+  };
+}
+
+function hookProbe() {
+  const hookSession = arg("--hook-session");
+  if (!hookSession || !/^[a-f0-9]{64}$/i.test(hookSession)) {
+    fail("Hook运行探针没有经过PreToolUse签注；不能把文件存在当成Hook已运行", 2);
+  }
+  const identity = runtimeProjectIdentity(arg("--project-root"));
+  const binding = currentRuntimeBinding(identity.projectRoot);
+  if (!binding) fail("项目缺少Hook配置或身份护栏脚本", 2);
+  const observedPath = join(controlRoot, "local", "runtime", "hook-observed.json");
+  const observed = existsSync(observedPath) ? parseJson(readUtf8(observedPath), "Hook观察记录") : null;
+  const matching = observed?.events?.filter((event) => event.event === "PreToolUse"
+    && event.tool === "Bash"
+    && event.session === hookSession.slice(0, 16)) ?? [];
+  const latest = matching.at(-1);
+  if (!latest || Number.isNaN(Date.parse(latest.observedAt)) || Date.now() - Date.parse(latest.observedAt) > 5 * 60 * 1000) {
+    fail("没有找到同一会话五分钟内的真实PreToolUse观察记录；运行探针失败", 2);
+  }
+  const manifest = parseJson(readUtf8(join(controlRoot, "beyond-release.json"), "BEYOND版本清单"), "BEYOND版本清单");
+  const proof = {
+    schemaVersion: 1,
+    releaseVersion: manifest.releaseVersion,
+    projectId: identity.projectId,
+    projectRoot: display(identity.projectRoot),
+    hooksSha256: binding.hooksSha256,
+    guardSha256: binding.guardSha256,
+    hookSession: hookSession.slice(0, 16),
+    observedAt: latest.observedAt,
+    verifiedAt: new Date().toISOString(),
+  };
+  const proofPath = join(controlRoot, "local", "runtime", "hook-probes", `${identity.projectId}.json`);
+  writeUtf8(proofPath, `${JSON.stringify(proof, null, 2)}\n`);
+  console.log(JSON.stringify({ runtimeProbePassed: true, proofPath: display(proofPath), ...proof }, null, 2));
+}
+
+function hookDoctor() {
+  const identity = runtimeProjectIdentity(arg("--project-root"));
+  const binding = currentRuntimeBinding(identity.projectRoot);
+  const version = run("codex", ["--version"], { cwd: identity.projectRoot });
+  const features = run("codex", ["features", "list"], { cwd: identity.projectRoot });
+  const proofPath = join(controlRoot, "local", "runtime", "hook-probes", `${identity.projectId}.json`);
+  let proof = null;
+  if (existsSync(proofPath)) {
+    try {
+      proof = JSON.parse(readFileSync(proofPath, "utf8"));
+    } catch {
+      proof = null;
+    }
+  }
+  const manifest = parseJson(readUtf8(join(controlRoot, "beyond-release.json"), "BEYOND版本清单"), "BEYOND版本清单");
+  const runtimeProbePassed = Boolean(binding && proof
+    && proof.releaseVersion === manifest.releaseVersion
+    && proof.projectId === identity.projectId
+    && proof.projectRoot.toLowerCase() === display(identity.projectRoot).toLowerCase()
+    && proof.hooksSha256 === binding.hooksSha256
+    && proof.guardSha256 === binding.guardSha256);
+  console.log(JSON.stringify({
+    projectId: identity.projectId,
+    projectRoot: display(identity.projectRoot),
+    codexVersion: version.status === 0 ? version.stdout : null,
+    codexFeaturesAvailable: features.status === 0,
+    runtimeFilesPresent: Boolean(binding),
+    runtimeProbePassed,
+    proofPath: existsSync(proofPath) ? display(proofPath) : null,
+    nextAction: runtimeProbePassed
+      ? "Hook已经由真实PreToolUse探针验证。"
+      : "在项目根目录启动Codex CLI，输入 /hooks，审核并信任当前项目Hook；随后在Codex任务中运行hook-probe。项目可信不等于Hook定义已信任。",
+  }, null, 2));
+}
+
 function runtimeIdentity() {
   if (arg("--role") !== "pm") fail("runtime-identity只接受 --role pm", 2);
   const hookSession = arg("--hook-session");
@@ -913,7 +1229,7 @@ function printHelp() {
     `  init-control\n` +
     `  inspect-project --project-root <目录> [--host-id <主机>] [--codex-project-id <项目>]\n` +
     `  register-project --project-root <目录> [--name <名称>] [--host-id <主机>] [--codex-project-id <项目>]\n` +
-    `  install-project-entry --project-root <目录> --confirm-fusion yes [--host-id <主机>] [--codex-project-id <项目>]\n` +
+    `  install-project-entry --project-root <目录> --confirm-fusion yes [--adopt-legacy-workbench yes] [--canonical-repositories <每组重复remote选择一个正式路径>] [--confirm-legacy-skip yes] [--host-id <主机>] [--codex-project-id <项目>]\n` +
     `  list [--git-account <已确认账号> | --all]\n` +
     `  workbench --action list\n` +
     `  workbench --action upsert --task <业务结果> --thread <正式thread> --status 进行中|已暂停|已完成 --progress <当前进度> [--pause <原因与恢复条件>] [--result <证据入口>] [--updated <YYYY-MM-DD>]\n` +
@@ -924,6 +1240,8 @@ function printHelp() {
     `  archive --type task|collaboration --id <编号> --result <最终结果>\n` +
     `  backup-local [--reason <原因>]\n` +
     `  restore-local --snapshot <备份目录> --confirm-restore yes\n` +
+    `  hook-doctor --project-root <目录>  # 只读诊断Hook文件、CLI能力与运行探针\n` +
+    `  hook-probe --project-root <目录>  # 必须由真实PreToolUse Hook签注\n` +
     `  runtime-identity --role pm  # 只由identity-pm在显式入口未登记时调用`);
 }
 
@@ -942,9 +1260,25 @@ else if (command === "init-control") {
 } else if (command === "install-project-entry") {
   const project = inspectProject(arg("--project-root"));
   const result = installProjectEntry(project);
-  console.log(JSON.stringify({ projectId: project.projectId, ...Object.fromEntries(Object.entries(result).map(([key, value]) => [key, value ? display(value) : null])) }, null, 2));
+  console.log(JSON.stringify({
+    projectId: project.projectId,
+    target: display(result.target),
+    runtimeGuard: display(result.runtimeGuard),
+    runtimeHooks: display(result.runtimeHooks),
+    backupDirectory: result.backupDirectory ? display(result.backupDirectory) : null,
+    controlRelative: result.controlRelative,
+    adoption: result.adoption ? {
+      imported: result.adoption.imported,
+      historyPath: display(result.adoption.historyPath),
+      backup: display(result.adoption.backup),
+    } : null,
+  }, null, 2));
 } else if (command === "runtime-identity") {
   runtimeIdentity();
+} else if (command === "hook-doctor") {
+  hookDoctor();
+} else if (command === "hook-probe") {
+  hookProbe();
 } else if (command === "list") {
   ensureControl();
   const account = has("--all") ? null : detectGitAccount();

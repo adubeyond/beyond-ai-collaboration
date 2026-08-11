@@ -20,10 +20,11 @@ function valueAfter(flag) {
 const installedSkillsRoot = valueAfter("--installed-skills-root");
 const projectAgentsPath = valueAfter("--project-agents");
 const projectRoot = projectAgentsPath ? dirname(projectAgentsPath) : null;
+const contentOnly = process.argv.includes("--content-only");
 
 if (!installedSkillsRoot || !projectAgentsPath) {
   console.error(
-    "用法：node verify-install-integrity.mjs --installed-skills-root <Codex skills目录> --project-agents <项目AGENTS.md>",
+    "用法：node verify-install-integrity.mjs --installed-skills-root <Codex skills目录> --project-agents <项目AGENTS.md> [--content-only]",
   );
   process.exit(2);
 }
@@ -281,6 +282,7 @@ if (manifest) {
   }
 
   const controlMatch = installedAgents?.match(/<!-- BEYOND-CONTROL-ROOT: ([^\n]+) -->/);
+  const projectMatch = installedAgents?.match(/<!-- BEYOND-PROJECT-ID: ([^\n]+) -->/);
   if (controlMatch) {
     const mappedControlRoot = resolve(projectRoot, controlMatch[1].trim());
     const mappedManifest = readUtf8(join(mappedControlRoot, "beyond-release.json"), "项目映射的控制仓版本清单");
@@ -292,6 +294,25 @@ if (manifest) {
     if (mappedControlScript && candidateControlScript && mappedControlScript !== candidateControlScript) {
       errors.push("项目映射的控制仓固定脚本与当前候选不一致");
     }
+    if (!contentOnly && projectMatch) {
+      const projectId = projectMatch[1].trim();
+      const proofText = readUtf8(join(mappedControlRoot, "local", "runtime", "hook-probes", `${projectId}.json`), "Hook运行探针证据");
+      const installedHooksPath = join(projectRoot, manifest.runtimeHooks);
+      const installedGuardPath = join(projectRoot, manifest.runtimeGuard);
+      if (proofText && existsSync(installedHooksPath) && existsSync(installedGuardPath)) {
+        const proof = parseJson(proofText, "Hook运行探针证据");
+        if (!proof
+          || proof.releaseVersion !== manifest.releaseVersion
+          || proof.projectId !== projectId
+          || resolve(proof.projectRoot ?? "").toLowerCase() !== projectRoot.toLowerCase()
+          || proof.hooksSha256 !== sha256(installedHooksPath)
+          || proof.guardSha256 !== sha256(installedGuardPath)) {
+          errors.push("Hook运行探针与当前项目、版本、Hook配置或身份护栏不一致");
+        }
+      }
+    }
+  } else if (!contentOnly) {
+    errors.push("完整安装验真需要项目控制仓映射和真实Hook运行探针；仅核对文件请显式使用 --content-only");
   }
 
   const controlScript = readUtf8(join(candidateRoot, manifest.controlScript), "控制仓固定动作脚本");
@@ -318,4 +339,6 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`BEYOND ${manifest.releaseVersion}安装验真通过：六个Skill、控制仓结构、项目运行内核与身份护栏一致`);
+console.log(contentOnly
+  ? `BEYOND ${manifest.releaseVersion}内容验真通过：文件一致，但未证明Hook已被平台信任和真实执行`
+  : `BEYOND ${manifest.releaseVersion}安装验真通过：六个Skill、控制仓结构、项目运行内核与真实Hook运行探针一致`);

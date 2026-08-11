@@ -95,7 +95,7 @@ try {
 
   controlCommand(["install-project-entry", "--project-root", project, "--confirm-fusion", "yes"]);
   const firstEntry = readFileSync(join(project, "AGENTS.md"), "utf8");
-  check("项目入口包含完整3.1内核", firstEntry.includes("BEYOND-RUNTIME-VERSION: 3.1.0"));
+  check("项目入口包含完整3.1内核", firstEntry.includes("BEYOND-RUNTIME-VERSION: 3.1.1"));
   check("项目入口登记控制仓", firstEntry.includes("BEYOND-CONTROL-ROOT: ../beyond control"));
   check("带空格控制仓文档链接使用有效Markdown目标", firstEntry.includes("](<../beyond control/docs/AI编程协同机制/00-模板入口.md>)"));
   check("项目入口把控制脚本映射到控制仓", firstEntry.includes("`../beyond control/scripts/beyond-control.mjs"));
@@ -131,8 +131,9 @@ try {
       join(control, "skills"),
       "--project-agents",
       join(crossDriveProject, "AGENTS.md"),
+      "--content-only",
     ], control);
-    check("不同盘符融合入口通过安装验真", crossDriveVerify.output.includes("安装验真通过"), crossDriveVerify.output);
+    check("不同盘符融合入口通过内容验真", crossDriveVerify.output.includes("内容验真通过"), crossDriveVerify.output);
   } else {
     check("不同盘符控制仓路径保持绝对定位", true, "当前测试环境控制仓与源码仓同盘");
     check("不同盘符融合入口通过安装验真", true, "当前测试环境控制仓与源码仓同盘");
@@ -149,8 +150,9 @@ try {
     join(control, "skills"),
     "--project-agents",
     join(project, "AGENTS.md"),
+    "--content-only",
   ], control);
-  check("融合入口通过安装验真", verify.output.includes("安装验真通过"), verify.output);
+  check("融合入口通过内容验真", verify.output.includes("内容验真通过"), verify.output);
 
   const localMarker = join(control, "local", "backup-probe.md");
   writeFileSync(localMarker, "before\n", "utf8");

@@ -17,10 +17,10 @@ function check(name, condition, detail = "") {
   else errors.push(`${name}${detail ? `：${detail}` : ""}`);
 }
 
-function event(value) {
-  const result = spawnSync(process.execPath, [guardPath], {
-    cwd: controlRoot,
-    input: JSON.stringify({ cwd: controlRoot, ...value }),
+function event(value, path = guardPath, extraArgs = [], cwd = controlRoot) {
+  const result = spawnSync(process.execPath, [path, ...extraArgs], {
+    cwd,
+    input: JSON.stringify({ cwd, ...value }),
     encoding: "utf8",
   });
   let body = null;
@@ -189,6 +189,42 @@ try {
     "pm",
   ], { cwd: controlRoot, encoding: "utf8" });
   check("未经过Hook的PM兜底命令失败", rawFallback.status === 2 && rawFallback.stderr.includes("身份护栏未生效"));
+
+  const businessRoot = join(scratch, "business-project");
+  cpSync(join(controlRoot, ".codex"), join(businessRoot, ".codex"), { recursive: true });
+  const businessAgents = readFileSync(join(controlRoot, "AGENTS.md"), "utf8").replace(
+    "<!-- BEYOND-RUNTIME-VERSION: 3.1.1 -->",
+    "<!-- BEYOND-RUNTIME-VERSION: 3.1.1 -->\n<!-- BEYOND-CONTROL-ROOT: ../beyond-control -->\n<!-- BEYOND-PROJECT-ID: project-probe -->",
+  );
+  writeFileSync(join(businessRoot, "AGENTS.md"), businessAgents, "utf8");
+  const businessGuard = join(businessRoot, ".codex", "beyond-runtime-guard.mjs");
+  const probeCommand = `node ${JSON.stringify(join(controlRoot, "scripts", "beyond-control.mjs"))} hook-probe --project-root ${JSON.stringify(businessRoot)}`;
+  const probeHook = event({
+    session_id: "probe-session",
+    hook_event_name: "PreToolUse",
+    tool_name: "Bash",
+    tool_input: { command: probeCommand },
+  }, businessGuard, ["--control-root", "../beyond-control", "--project-id", "project-probe"], businessRoot);
+  const signedProbe = probeHook.body?.hookSpecificOutput?.updatedInput?.command ?? "";
+  const probeToken = signedProbe.match(/--hook-session\s+([a-f0-9]{64})/i)?.[1];
+  check("Hook运行探针由PreToolUse签注", probeHook.body?.hookSpecificOutput?.permissionDecision === "allow" && Boolean(probeToken));
+  const probeRun = spawnSync(process.execPath, [
+    join(controlRoot, "scripts", "beyond-control.mjs"),
+    "hook-probe",
+    "--project-root",
+    businessRoot,
+    "--hook-session",
+    probeToken ?? "missing",
+  ], { cwd: businessRoot, encoding: "utf8" });
+  check("真实Hook观察可生成绑定探针", probeRun.status === 0
+    && existsSync(join(controlRoot, "local", "runtime", "hook-probes", "project-probe.json")));
+  const rawProbe = spawnSync(process.execPath, [
+    join(controlRoot, "scripts", "beyond-control.mjs"),
+    "hook-probe",
+    "--project-root",
+    businessRoot,
+  ], { cwd: businessRoot, encoding: "utf8" });
+  check("未经过Hook的运行探针失败", rawProbe.status === 2 && rawProbe.stderr.includes("没有经过PreToolUse签注"));
 
   event({ session_id: "pm-session", hook_event_name: "SessionEnd", reason: "other" });
   const pmStateCount = readdirSync(stateRoot).length;

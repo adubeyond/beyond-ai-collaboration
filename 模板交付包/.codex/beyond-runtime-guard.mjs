@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const projectRoot = resolve(dirname(scriptPath), "..");
-const runtimeVersion = "3.1.0";
+const runtimeVersion = "3.1.1";
 
 function arg(name) {
   const index = process.argv.indexOf(name);
@@ -98,6 +98,12 @@ function singleFixedNodeCommand(command, scriptName) {
 function registerRequest(command) {
   return singleFixedNodeCommand(command, "beyond-control.mjs")
     && /beyond-control\.mjs["']?\s+runtime-identity\s+--role\s+pm\s*$/i.test(command);
+}
+
+function hookProbeRequest(command) {
+  return singleFixedNodeCommand(command, "beyond-control.mjs")
+    && /beyond-control\.mjs["']?\s+hook-probe(?:\s|$)/i.test(command)
+    && !/\s--hook-session(?:\s|$)/i.test(command);
 }
 
 function fixedControlCommand(command) {
@@ -256,6 +262,21 @@ if (event.hook_event_name !== "PreToolUse") process.exit(0);
 const toolName = String(event.tool_name ?? "");
 const toolInput = event.tool_input && typeof event.tool_input === "object" ? event.tool_input : {};
 const command = String(toolInput.command ?? "");
+
+if (toolName === "Bash" && hookProbeRequest(command)) {
+  output({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "allow",
+      permissionDecisionReason: "BEYOND Hook运行探针已由真实PreToolUse事件签注。",
+      updatedInput: {
+        ...toolInput,
+        command: `${command} --hook-session ${sessionKey(sessionId)}`,
+      },
+    },
+  });
+  process.exit(0);
+}
 
 if (toolName === "Bash" && registerRequest(command)) {
   if (!register("pm", "pm-skill-fallback")) {

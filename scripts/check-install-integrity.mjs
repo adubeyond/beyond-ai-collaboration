@@ -1,4 +1,5 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -11,14 +12,16 @@ const scratch = mkdtempSync(join(tmpdir(), "beyond-install-integrity-"));
 let passed = 0;
 const errors = [];
 
-function run(name, expectedStatus, skillsRoot, agentsPath, expectedText) {
-  const result = spawnSync(process.execPath, [
+function run(name, expectedStatus, skillsRoot, agentsPath, expectedText, contentOnly = true) {
+  const args = [
     verifier,
     "--installed-skills-root",
     skillsRoot,
     "--project-agents",
     agentsPath,
-  ], { encoding: "utf8" });
+  ];
+  if (contentOnly) args.push("--content-only");
+  const result = spawnSync(process.execPath, args, { encoding: "utf8" });
   const output = `${result.stdout}\n${result.stderr}`;
   if (result.status !== expectedStatus || (expectedText && !output.includes(expectedText))) {
     errors.push(`${name}：期望退出码${expectedStatus}且包含“${expectedText}”，实际退出码${result.status}\n${output}`);
@@ -46,19 +49,37 @@ function bindRuntime(root, controlRelative, projectId) {
   writeFileSync(path, `${JSON.stringify(hooks, null, 2)}\n`, "utf8");
 }
 
+function sha256(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function writeRuntimeProof(controlRoot, projectRoot, projectId) {
+  const proofPath = join(controlRoot, "local", "runtime", "hook-probes", `${projectId}.json`);
+  mkdirSync(dirname(proofPath), { recursive: true });
+  writeFileSync(proofPath, `${JSON.stringify({
+    schemaVersion: 1,
+    releaseVersion: "3.1.1",
+    projectId,
+    projectRoot: projectRoot.replace(/\\/g, "/"),
+    hooksSha256: sha256(join(projectRoot, ".codex", "hooks.json")),
+    guardSha256: sha256(join(projectRoot, ".codex", "beyond-runtime-guard.mjs")),
+    verifiedAt: new Date().toISOString(),
+  }, null, 2)}\n`, "utf8");
+}
+
 try {
   const exactRoot = join(scratch, "exact");
   cpSync(join(packageRoot, "skills"), join(exactRoot, "skills"), { recursive: true });
   cpSync(join(packageRoot, "AGENTS.md"), join(exactRoot, "AGENTS.md"));
   copyRuntime(exactRoot);
-  run("完全一致安装", 0, join(exactRoot, "skills"), join(exactRoot, "AGENTS.md"), "安装验真通过");
+  run("完全一致安装", 0, join(exactRoot, "skills"), join(exactRoot, "AGENTS.md"), "内容验真通过");
 
   const explicitOverride = readFileSync(join(exactRoot, "AGENTS.md"), "utf8").replace(
     "<!-- 没有项目特有覆盖时保持为空。 -->",
     "- 正式工作目录：项目根目录。\n- Worker批量数据核对使用Luna高推理。",
   );
   writeFileSync(join(exactRoot, "AGENTS.md"), explicitOverride, "utf8");
-  run("合法项目覆盖", 0, join(exactRoot, "skills"), join(exactRoot, "AGENTS.md"), "安装验真通过");
+  run("合法项目覆盖", 0, join(exactRoot, "skills"), join(exactRoot, "AGENTS.md"), "内容验真通过");
 
   const fusedRoot = join(scratch, "fused");
   cpSync(packageRoot, join(scratch, "beyond-control"), { recursive: true });
@@ -66,8 +87,8 @@ try {
   copyRuntime(fusedRoot);
   const fused = readFileSync(join(packageRoot, "AGENTS.md"), "utf8")
     .replace(
-      "<!-- BEYOND-RUNTIME-VERSION: 3.1.0 -->",
-      "<!-- BEYOND-RUNTIME-VERSION: 3.1.0 -->\n<!-- BEYOND-CONTROL-ROOT: ../beyond-control -->\n<!-- BEYOND-PROJECT-ID: project-demo -->",
+      "<!-- BEYOND-RUNTIME-VERSION: 3.1.1 -->",
+      "<!-- BEYOND-RUNTIME-VERSION: 3.1.1 -->\n<!-- BEYOND-CONTROL-ROOT: ../beyond-control -->\n<!-- BEYOND-PROJECT-ID: project-demo -->",
     )
     .replace(/\]\(docs\//g, "](../beyond-control/docs/")
     .replace(/\]\(local\//g, "](../beyond-control/local/")
@@ -75,14 +96,15 @@ try {
     "\n\n<!-- BEGIN PROJECT NATIVE RULES -->\n# 原项目规则\n\n- 保留真实测试命令。\n<!-- END PROJECT NATIVE RULES -->\n";
   writeFileSync(join(fusedRoot, "AGENTS.md"), fused, "utf8");
   bindRuntime(fusedRoot, "../beyond-control", "project-demo");
-  run("完整融合项目入口", 0, join(fusedRoot, "skills"), join(fusedRoot, "AGENTS.md"), "安装验真通过");
+  writeRuntimeProof(join(scratch, "beyond-control"), fusedRoot, "project-demo");
+  run("完整融合项目入口", 0, join(fusedRoot, "skills"), join(fusedRoot, "AGENTS.md"), "安装验真通过", false);
 
   const wrongControlRoot = join(scratch, "wrong-control");
   cpSync(join(packageRoot, "skills"), join(wrongControlRoot, "skills"), { recursive: true });
   copyRuntime(wrongControlRoot);
   writeFileSync(join(wrongControlRoot, "AGENTS.md"), fused.replaceAll("../beyond-control", "../missing-control"), "utf8");
   bindRuntime(wrongControlRoot, "../missing-control", "project-demo");
-  run("错误控制仓映射", 1, join(wrongControlRoot, "skills"), join(wrongControlRoot, "AGENTS.md"), "项目映射的控制仓版本清单不存在");
+  run("错误控制仓映射", 1, join(wrongControlRoot, "skills"), join(wrongControlRoot, "AGENTS.md"), "项目映射的控制仓版本清单不存在", false);
 
   const mixedRoot = join(scratch, "mixed");
   cpSync(join(packageRoot, "skills"), join(mixedRoot, "skills"), { recursive: true });
@@ -96,7 +118,7 @@ try {
   cpSync(join(packageRoot, "skills"), join(oldEntryRoot, "skills"), { recursive: true });
   copyRuntime(oldEntryRoot);
   const oldEntry = readFileSync(join(packageRoot, "AGENTS.md"), "utf8").replace(
-    "<!-- BEYOND-RUNTIME-VERSION: 3.1.0 -->\n",
+    "<!-- BEYOND-RUNTIME-VERSION: 3.1.1 -->\n",
     "",
   );
   writeFileSync(join(oldEntryRoot, "AGENTS.md"), oldEntry, "utf8");
