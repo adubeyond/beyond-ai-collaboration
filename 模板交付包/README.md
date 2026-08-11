@@ -40,7 +40,7 @@
 
 Skill 无法识别时优先检查 UTF-8 无 BOM、文件头、frontmatter、安装副本和加载缓存。slash 命令只有在具体工具已另行配置映射时才有效，不是本模板默认入口。
 
-安装或升级后，先在Codex的Hook入口审核并信任BEYOND身份护栏，再运行[安装验真脚本](scripts/verify-install-integrity.mjs)，同时指定实际 Codex Skills目录和已经完成融合的项目根`AGENTS.md`。脚本会逐文件对账六个 Skill、项目Hook和护栏脚本，核对控制仓结构，并忽略项目覆盖和原生规则保留区后校验完整运行内核；退出码非零时仍是旧版、弱入口、残留版或混合版本，不能宣布升级完成。验真通过后再重启 Codex并创建新任务。Hook内容变化后需要重新信任一次；这不是每个任务的审批。
+安装或升级后，在项目根目录启动 Codex CLI并输入`/hooks`，审核并信任BEYOND身份护栏；项目可信不等于Hook定义已信任。随后在 Codex项目任务中运行固定脚本`hook-probe --project-root <项目目录>`，再运行[安装验真脚本](scripts/verify-install-integrity.mjs)，同时指定实际 Codex Skills目录和已经完成融合的项目根`AGENTS.md`。脚本会逐文件对账六个 Skill、项目Hook和护栏脚本，核对控制仓结构与真实PreToolUse探针，并忽略项目覆盖和原生规则保留区后校验完整运行内核；退出码非零时仍是旧版、弱入口、残留版、混合版本或Hook尚未真实运行，不能宣布升级完成。只想核对文件时必须显式使用`--content-only`，其通过不等于安装成功。CLI没有`/hooks`或信任后探针仍失败时，记录`codex --version`和`codex features list`结果并报告兼容性缺口，不反复寻找桌面菜单。Hook内容变化后需要重新信任并重跑探针；这不是每个任务的审批。
 
 项目特有稳定覆盖写在`AGENTS.md`的专用覆盖区，原有长规则保存在项目原生规则区。模型策略必须明确适用于 PM还是 Worker；用于新 Worker的模型分档不会改变当前 PM模型。初始化或升级后应把不含秘密的根入口纳入业务项目版本管理，否则未来无法可靠追溯规则由谁写入。
 

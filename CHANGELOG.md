@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-08-11
+
+### Fixed
+
+- Require a real `PreToolUse` runtime probe for full installation verification instead of treating copied Hook files as proof that Codex trusted and executed them.
+- Replace the ambiguous Desktop “Hook entry” instruction with the official Codex CLI `/hooks` trust path and a read-only compatibility diagnosis.
+- Prioritize formal documents when inspecting existing projects, exclude generated/temp trees, detect nested Git repositories and duplicate remotes, and prevent active legacy workbenches from being replaced by an empty mainline.
+- Migrate active legacy tasks into the local workbench and compact completed legacy tasks into history only after explicit adoption confirmation.
+- Preserve existing project entry and Hook files with byte-exact backups before fusion.
+
 ## [3.1.0] - 2026-08-11
 
 ### Added

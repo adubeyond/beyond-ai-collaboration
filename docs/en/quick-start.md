@@ -45,6 +45,8 @@ node beyond-control/scripts/beyond-control.mjs inspect-project --project-root "b
 node beyond-control/scripts/beyond-control.mjs install-project-entry --project-root "beyond-demo" --confirm-fusion yes
 ```
 
+Existing-project inspection prioritizes formal documents, legacy workbenches, nested repositories, and duplicate remotes. If active legacy tasks exist, add `--adopt-legacy-workbench yes`; if the same remote has multiple local directories, select exactly one path per duplicate-remote group with `--canonical-repositories "<path1>,<path2>"`. The script will not silently replace those facts with an empty workbench.
+
 The business project receives only the fused root `AGENTS.md`. BEYOND documents and project registration remain in the control repository; the personal workbench is under its Git-ignored `local/`. Empty project facts are expected and must not be filled with guesses.
 
 Local fusion does not push automatically. The fixed script creates a shared project record, a minimal project overview, and a minimal facts index so the fused entry is immediately reachable. If teammates need them, authorize remote Git separately, then use the `project-registration` scope to push only these three foundation files for the same project.
@@ -64,13 +66,19 @@ task-test
 task-ops
 ```
 
+From the business-project root, start Codex CLI and enter `/hooks` to review and trust the project Hook. Project trust and Hook-definition trust are separate. Then run this fixed command from a Codex project task:
+
+```text
+node beyond-control/scripts/beyond-control.mjs hook-probe --project-root "<business project root>"
+```
+
 Before restarting Codex, verify the actual installed copy from the immutable release checkout:
 
 ```text
 node beyond-control/scripts/verify-install-integrity.mjs --installed-skills-root "<Codex Skills directory>" --project-agents "<business project root>/AGENTS.md"
 ```
 
-Installation or upgrade is complete only when this command exits with code `0` and confirms that all six Skills, the control-repository structure, and the full project runtime kernel match. A non-zero result means that an old, residual, weak, or mixed runtime is still present. Restart Codex only after verification, then create a new task from the demo root.
+Installation or upgrade is complete only when this command exits with code `0` and confirms that all six Skills, the control-repository structure, the full project runtime kernel, and the real Hook probe match. `--content-only` checks files but does not prove that Codex executed the Hook. If `/hooks` is unavailable or the probe still fails after trust, record `codex --version` and `codex features list` and report a compatibility gap instead of searching for an undocumented Desktop menu. Restart Codex only after verification, then create a new task from the demo root.
 
 ## Run the initial baseline
 

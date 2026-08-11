@@ -75,8 +75,9 @@ try {
     join(controlRoot, "skills"),
     "--project-agents",
     join(projectRoot, "AGENTS.md"),
+    "--content-only",
   ]);
-  check("融合安装验真通过", verify.status === 0 && verify.stdout.includes("身份护栏一致"), verify.stderr || verify.stdout);
+  check("融合内容验真通过", verify.status === 0 && verify.stdout.includes("内容验真通过"), verify.stderr || verify.stdout);
 
   const guardCommand = handlers.UserPromptSubmit.find((handler) => handler.command?.includes("beyond-runtime-guard.mjs")).command;
   const controlRelative = guardCommand.match(/--control-root\s+"([^"]+)"/)?.[1];
