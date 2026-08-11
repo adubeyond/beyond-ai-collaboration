@@ -1,4 +1,4 @@
-# BEYOND 3.0 Architecture Overview
+# BEYOND 3.1 Architecture Overview
 
 **English** | [简体中文完整版](../系统架构与运行机制.md)
 
@@ -12,10 +12,12 @@ BEYOND turns Codex into a PM-led agent team. Its purpose is to complete real bus
 | PM | Mainline, task allocation, workbench, shared conflicts, and acceptance |
 | Worker | One business result from investigation through delivery |
 | Action Skills | Professional design, development, testing, and operations methods |
-| Project documents | Stable goals, reusable facts, and the PM's current team view |
+| Control-repository documents | Stable goals, reusable project facts, optional shared team records, and each member's Git-ignored local PM view |
 | Git and tools | File versions, execution, and first-hand reality |
 
 PM and Worker are agent identities. Design, development, testing, and operations are methods, not additional agents.
+
+Version 3.1 preserves the v3.0.9 ordinary task path. It adds one optional sibling `beyond-control` repository containing BEYOND documents, project-level documents, team tasks, and collaboration records. Business code remains in each business repository. Personal tasks do not load the shared team path.
 
 ## Default task flow
 
@@ -47,13 +49,15 @@ A hotfix binds to the source identity of its formal target. If the current branc
 
 ## Workbench and project facts
 
-The PM workbench is a team dashboard. It records the task, responsible Worker/thread, one of three states, one current business milestone, blocking risk, one formal result or evidence entry, and update time. It does not copy route counts, test totals, command logs, or repeated attempts, and it is not a Git HEAD mirror or an execution permit. Completed tasks leave the high-frequency table once their result has a stable entry and no longer affects the current mainline or shared objects.
+Each member's PM workbench is a local dashboard under the control repository's Git-ignored `local/`. It records the task, responsible Worker/thread, one of three states, one current business milestone, blocking risk, one formal result or evidence entry, and update time. Shared team tasks and collaboration are separate Markdown records under `shared/`; neither side is a full mirror of the other.
 
 Project facts preserve reusable knowledge such as the technology stack, build and test commands, module boundaries, servers, services, logs, deployment steps, and rollback paths. Missing facts do not block unrelated work. A Worker investigates and writes reusable facts in the same business task when needed.
 
 A production task establishes one current context for its target, running version, source and complete artifact, database/configuration/runtime dependencies, allowed effects, health and business checks, rollback, and authorization. After that context is closed, preflight, release, verification, and pre-authorized rollback continue without repeated PM round trips. Only facts that actually change are refreshed. Process health, a reachable page, or HTTP 200 does not replace the real changed business path such as login, query, or write.
 
 Project facts do not use an `uninitialized / refresh-needed / available` runtime state machine.
+
+A project-level Codex Hook binds PM or Worker identity to the current session, restores that identity after resume or compaction, and mechanically blocks PM business writes while preserving user-visible task controls. Existing project Hooks are merged, not replaced. The user reviews and trusts the BEYOND Hook once after first installation or a content change. This is a Codex pre-tool guardrail, not an operating-system security boundary; a removed or untrusted Hook, or a platform-specific tool path that bypasses Hooks, must fail installation claims rather than be described as mechanically blocked.
 
 ## Three business states
 

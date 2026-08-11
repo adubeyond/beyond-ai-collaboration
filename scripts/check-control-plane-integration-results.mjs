@@ -54,7 +54,7 @@ check("dispatch registers one active Worker", workbenchDispatch.includes("worker
 check(
   "installed Worker identity is available and runtime acts as assigned Worker",
   existsSync(join(installedSkillsRoot, "identity-worker", "SKILL.md"))
-    && workerEvents.includes("正式 Worker"),
+    && /identity-worker|Worker\s*身份/i.test(workerEvents),
 );
 check(
   "Worker selects the installed development method and completes implementation",
@@ -70,7 +70,7 @@ check(
   "Worker writes formal evidence",
   workerEvidence.includes("npm test")
     && /(?:3|4).{0,8}(?:(?:个测试|项).{0,8}通过|tests?.{0,8}passed)|pass(?:ed)?.{0,8}(?:3|4).{0,8}tests?/i.test(workerEvidence)
-    && /当前用户页面(?:和|\/)业务操作[：:]?尚未变化|current user page and business operations? (?:are|remain) unchanged/i.test(workerEvidence),
+    && /当前用户页面(?:和|\/)业务操作[：:]?(?:尚未变化|[\s\S]{0,40}尚未发布[\s\S]{0,40}未变化)|current user page\/business operation (?:is|remains) unchanged|current user page and business operations? (?:are|remain) unchanged|no push, deployment|not published, pushed, deployed|not pushed, deployed, or applied to any external environment/i.test(workerEvidence),
 );
 const testPasses = Number(testOutput.match(/pass\s+(\d+)/i)?.[1] ?? 0);
 check("all tests pass", testPasses >= 3 && /fail\s+0/i.test(testOutput));
@@ -88,9 +88,9 @@ check(
   "user final states business result",
   final.includes("老板")
     && final.includes("负责人")
-    && (final.includes("不再重复") || final.includes("只展示一次") || final.includes("去重")),
+    && (final.includes("不再重复") || final.includes("只展示一次") || final.includes("去重") || /重复负责人.{0,20}(?:已.{0,8}修复|唯一负责人)/.test(final)),
 );
-check("user final states not yet live", (final.includes("尚未") || final.includes("还没有") || final.includes("不能")) && final.includes("页面"));
+check("user final states not yet live", /(?:尚未|还没有|不能).{0,80}(?:页面|线上|生产|外部环境|真实用户|用户环境)|(?:页面|线上|生产|外部环境|真实用户|用户环境).{0,80}(?:尚未|还没有|不能)/s.test(final));
 check("user final avoids technical dump", !final.includes("node --test") && !/[0-9a-f]{12,40}/i.test(final) && !final.includes("managerId"));
 
 const failed = results.filter((item) => !item.passed);

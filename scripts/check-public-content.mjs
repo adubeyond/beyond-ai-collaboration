@@ -1,4 +1,5 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -206,6 +207,15 @@ if (strictCandidate) {
     if (entry.name === ".git") {
       continue;
     }
+    try {
+      execFileSync("git", ["check-ignore", "--quiet", "--", entry.name], {
+        cwd: repositoryRoot,
+        stdio: "ignore",
+      });
+      continue;
+    } catch {
+      // A non-zero exit means the entry is not explicitly excluded by Git.
+    }
     if (!publicTopLevel.has(entry.name)) {
       errors.push(`严格候选包含未授权顶层入口：${entry.name}`);
     }
@@ -287,6 +297,11 @@ const requiredSkillFacts = [
     path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "worker loads one matching action method before professional work",
     value: "进入第一个专业动作前必须完整读取一个与主要问题匹配的 Action Skill",
+  },
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "local development does not preload testing method",
+    value: "开发方法能够运行现有测试并完成验收就不加载测试 Skill",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
@@ -629,6 +644,91 @@ for (const fact of requiredSkillFacts) {
   const text = readFileSync(path, "utf8");
   if (!text.includes(fact.value)) {
     errors.push(`关键 Skill 规则缺失：${fact.label} (${fact.path})`);
+  }
+}
+
+const requiredTeamFacts = [
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "3.1 keeps team collaboration off the personal hot path",
+    value: "普通项目接手、正式 Worker任务、Action Skill切换和个人任务不读取共享区",
+  },
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "3.1 preserves the 3.0.9 formal Worker",
+    value: "不替代 3.0.9 的正式 Worker",
+  },
+  {
+    path: "模板交付包/skills/identity-pm/SKILL.md",
+    label: "PM control-repository Git exception is narrowly scoped",
+    value: "两条例外都不扩张到后续项目事实正文、其他项目文档、业务代码、仓库配置、成员权限或发布资料",
+  },
+  {
+    path: "模板交付包/skills/identity-pm/SKILL.md",
+    label: "cold-start PM preserves the default user-path signal",
+    value: "这只补齐冷启动，不复制其他根入口规则",
+  },
+  {
+    path: "模板交付包/skills/identity-pm/SKILL.md",
+    label: "installed PM resolves the team entry through the project root",
+    value: "当前项目根`AGENTS.md`在“规则所有者”中映射的团队任务与协同入口",
+  },
+  {
+    path: "模板交付包/docs/AI编程协同机制/团队任务与协同.md",
+    label: "team records reuse the three business states",
+    value: "任务和协同只使用`进行中 / 已暂停 / 已完成`",
+  },
+  {
+    path: "模板交付包/docs/AI编程协同机制/团队任务与协同.md",
+    label: "team collaboration does not create an HR lifecycle",
+    value: "不建立成员退出、强制交接或人事流程",
+  },
+  {
+    path: "模板交付包/docs/AI编程协同机制/团队任务与协同.md",
+    label: "business projects resolve the control script through the fused marker",
+    value: "按项目根`AGENTS.md`中的`BEYOND-CONTROL-ROOT`定位同一控制仓脚本",
+  },
+  {
+    path: "模板交付包/scripts/beyond-control.mjs",
+    label: "ordinary PM pushes are limited to team records",
+    value: "PM普通协同推送不允许该路径",
+  },
+  {
+    path: "模板交付包/.gitignore",
+    label: "personal workspace is excluded from the team repository",
+    value: "/local/",
+  },
+  {
+    path: "模板交付包/README.md",
+    label: "new-project initialization prompt is public",
+    value: "使用 BEYOND 初始化这个新项目。",
+  },
+  {
+    path: "模板交付包/README.md",
+    label: "existing-project initialization prompt is public",
+    value: "使用 BEYOND 接入或升级这个已有项目。",
+  },
+  {
+    path: "模板交付包/README.md",
+    label: "initialization prompts include the cold-start PM identity entry",
+    value: "$identity-pm\n使用 BEYOND 初始化这个新项目。",
+  },
+  {
+    path: "模板交付包/skills/identity-pm/references/dispatch-and-init.md",
+    label: "PM initialization reference preserves the cold-start identity entry",
+    value: "$identity-pm\n使用 BEYOND 接入或升级这个已有项目。",
+  },
+];
+
+for (const fact of requiredTeamFacts) {
+  const path = join(repositoryRoot, ...fact.path.split("/"));
+  if (!existsSync(path)) {
+    errors.push(`团队协同关键文件缺失：${fact.path}`);
+    continue;
+  }
+  const text = readFileSync(path, "utf8");
+  if (!text.includes(fact.value)) {
+    errors.push(`团队协同关键规则缺失：${fact.label} (${fact.path})`);
   }
 }
 

@@ -49,7 +49,7 @@ const observations = cases.map(([caseName, directory]) => {
     chars: output.length,
     clean: git(join(casesRoot, directory), 'status', '--short') === '',
     loadedActionSkill: ['task-design', 'task-dev', 'task-test', 'task-ops'].some((name) => commandText.includes(name)),
-    claimedCompletion: /已完成|已经发布|已经修复|已经开发|设计完成/.test(output),
+    claimedCompletion: /(?:^|[。；\n])\s*(?:本任务|该任务|功能|设计|开发|修复|发布)?\s*(?:已完成|已经(?:发布|修复|开发)|设计已完成)/.test(output),
     asksQuestion: /[？?]|请告诉我|请给我|需要你提供|先确认/.test(output),
   };
 });

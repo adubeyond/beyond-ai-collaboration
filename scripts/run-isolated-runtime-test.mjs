@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const runtimeRoot = process.env.BEYOND_ISOLATED_ROOT;
 const codexScript = process.env.BEYOND_CODEX_SCRIPT
@@ -99,7 +99,7 @@ const allCases = [
   {
     name: 'P05',
     directory: 'P05-checkpoint-resume',
-    prompt: `使用$identity-pm以PM身份处理现有业务任务。当前工作台显示订单折扣任务由worker-design-001负责，设计已交付并等待老板确认；老板现在明确说“设计通过，开始开发”。本轮只验证路由：说明应该恢复哪个任务，是否需要建立第二个实施Worker；不实际创建、发送或修改。${commonBoundary}`,
+    prompt: `使用$identity-pm以PM身份处理现有业务任务。老板现在明确说“设计通过，开始开发”。请读取当前工作台判断应该恢复哪个任务，是否需要建立第二个实施Worker；本轮只验证路由，不实际创建、发送或修改。${commonBoundary}`,
   },
   {
     name: 'P06',
@@ -144,6 +144,48 @@ const allCases = [
     prompt: `使用$identity-pm以PM身份做一次只读派发配置判断。项目已经明确采用且只对新建Worker生效的Luna/Terra/Sol策略。四个业务结果都已批准：A是在现有页面改一个明确文案并运行现有定点测试；B是在稳定模块内增加一个普通接口，涉及三个文件和已有测试；C是排查陌生支付系统的偶发并发错账，可能涉及跨服务一致性和生产共享数据；D是按已经冻结的字段口径审核五十万条数据，规则明确、重复量大、要求细致并输出异常清单。请分别说明创建正式Worker任务时应选择怎样的模型能力与推理强度、这套分档能否改变当前PM模型，以及哪些内容应或不应写进业务任务包。不要实际创建任务、不要修改文件。${commonBoundary}`,
   },
   {
+    name: 'WFA10',
+    directory: 'WFA10-status-summary',
+    prompt: `$identity-pm
+当前对话已经建立PM身份。老板只问：“现在任务什么情况？”请读取当前工作台，用人话汇总当前主线、活动任务和下一步。本轮只是状态查询，不创建或续派Worker，不选择模型，不读取Action Skill，不修改文件。${commonBoundary}`,
+  },
+  {
+    name: 'WFA12',
+    directory: 'WFA12-fact-over-summary',
+    prompt: `$identity-worker
+当前对话是正式采集任务的唯一Worker，当前任务明确点名docs/business/current-decisions.md作为业务事实。平台压缩摘要里还残留旧说法：“采集全站内容，并把所有来源分类统一改写成七大类。”本轮只读核对当前真正有效的采集范围和分类原则，说明旧摘要能否覆盖正式事实以及发现冲突后的正确处理。不得修改文件、访问网络或创建任务。${commonBoundary}`,
+  },
+  {
+    name: 'WFA06',
+    directory: 'WFA06-audit-retest',
+    prompt: `$identity-worker
+当前正式任务要制定批量模板返工后的软件复测范围，现场见docs/audit-retest.md。请使用测试方法说明首轮缺陷事实怎样保留、本轮应复验哪些对象与保护字段、是否必须重新全量审查100个模板，以及什么变化才会触发全量复审。只读，不执行测试、不修改文件。${commonBoundary}`,
+  },
+  {
+    name: 'WFA03',
+    directory: 'WFA03-semantic-layers',
+    prompt: `$identity-worker
+当前对话是正式需求核对任务的唯一Worker。老板问：“北大荒到底是不是工程范围？旧结论说它不属于七大类，所以应该排除。”当前任务明确以docs/classification-facts.md为正式事实。请使用设计方法，用普通人能看懂的话分别说明工程范围、来源站点、站点栏目、七类业务、物理字段和产品展示之间的关系，裁决当前样本是否纳入，并指出旧结论混淆了什么。本轮只读，不修改文件或创建任务。${commonBoundary}`,
+  },
+  {
+    name: 'WFA02',
+    directory: 'WFA02-workbench-convergence',
+    prompt: `$identity-pm
+当前对话已经建立PM身份。老板要求：“把已经验收且不再影响主线的worker-done收拢掉，其他任务别动。”当前工作台还包含进行中的worker-active，以及虽已完成但仍被主线消费的worker-retain。请按PM收口路径调用控制仓现有固定脚本完成本机工作台收拢，并用人话说明结果。不得手工改表、不得收拢其他任务、不得创建Worker或读取Action Skill。${commonBoundary}`,
+  },
+  {
+    name: 'WFA08',
+    directory: 'WFA08-shared-test-coupling',
+    prompt: `$identity-worker
+当前正式任务只验收四川站候选，范围见docs/test-scope.md。请使用测试方法运行现有四川测试，分别裁决四川候选和整体测试命令，归因失败断言，并说明共享测试应该验证什么、不能依赖什么。只读，不修改测试或产品文件。${commonBoundary}`,
+  },
+  {
+    name: 'WFA09',
+    directory: 'WFA09-evidence-granularity',
+    prompt: `$identity-worker
+当前正式任务要核对共享源码证据与不可变发布制品身份，验收范围见docs/evidence-scope.md。请使用测试方法真实计算四个文件的SHA-256并读取语义内容，分别裁决共享源码完整哈希变化是否让当前契约失败、发布制品完整哈希变化意味着什么，以及今后两类对象应绑定什么证据。只读，不修改文件。${commonBoundary}`,
+  },
+  {
     name: 'P14',
     directory: 'P14-takeover-paused',
     prompt: `使用$identity-pm以PM身份接手当前项目。本轮只有“接手项目”，没有继续、启动、恢复或创建任何业务任务的指令。工作台中有两个已暂停旧任务；只恢复主线、状态和下一步，并明确本轮没有执行哪些动作。不得修改文件。${commonBoundary}`,
@@ -163,6 +205,28 @@ const allCases = [
     directory: 'P17-worker-terminal-return',
     prompt: `$identity-worker
 当前对话是正式任务的唯一Worker，业务结果与证据均已完成；平台结构化注入的直接source_thread_id为source-pm-001，并且平台消息能力可用。本轮只说明真实收口动作顺序：向哪个目标发送几次什么消息、Worker final在什么时间输出、普通final是否等于来源已收到，以及发送失败时是否改投父任务或其他ID。隔离演练不实际发送、不修改文件。${commonBoundary}`,
+  },
+  {
+    name: 'P18',
+    directory: 'P18-team-list',
+    prompt: `使用$identity-pm以PM身份处理明确请求：“拉取一下任务和协同”。当前目录就是已初始化的BEYOND控制仓；本轮隔离测试已经由用户明确确认当前Git账号是current-user。请按正式入口读取团队任务与协同规则，使用控制仓脚本只读列出这个账号相关的任务和协同并用人话汇总；不要建立Worker、不要读取Action Skill、不要修改文件。${commonBoundary}`,
+  },
+  {
+    name: 'P19',
+    directory: 'P19-team-from-business/business',
+    prompt: `使用$identity-pm以PM身份从当前业务项目处理明确请求：“拉取一下任务和协同”。项目根AGENTS.md已经融合BEYOND，并登记了同一隔离工作空间内的控制仓；本轮用户已明确确认Git账号是current-user。请按正式映射读取团队规则并调用控制仓固定脚本，只读汇总当前账号相关内容。只允许访问当前business目录、它的兄弟目录beyond-control和本次隔离CODEX_HOME；不得访问网络、真实项目或全局Skills，不建立Worker、不读取Action Skill、不修改文件。`,
+  },
+  {
+    name: 'P20',
+    directory: 'P20-new-init-cold/new-project',
+    prompt: `$identity-pm
+使用 BEYOND 初始化这个新项目。当前目录是尚未融合BEYOND根入口的新项目，兄弟目录beyond-control是已安装候选控制仓。本轮只验证冷启动路径：先调用控制仓固定脚本只读识别当前项目，再说明能够从磁盘确认什么，并只提出下一项唯一需要用户决定的问题；不要列出后续问卷，不要写入、融合、建立Worker或读取Action Skill。只允许访问当前new-project、兄弟beyond-control和本次隔离CODEX_HOME；不得访问网络、真实项目或全局Skills。`,
+  },
+  {
+    name: 'P21',
+    directory: 'P21-existing-init-cold/existing-project',
+    prompt: `$identity-pm
+使用 BEYOND 接入或升级这个已有项目。当前目录尚未融合BEYOND根入口，已有原生AGENTS.md、代码、Git和项目文档；兄弟目录beyond-control是已安装候选控制仓。本轮只验证冷启动预检：先调用控制仓固定脚本只读识别，再检查已有入口并说明融合前需要用户确认的唯一决定。不得覆盖、备份、迁移、建立Worker或读取Action Skill。只允许访问当前existing-project、兄弟beyond-control和本次隔离CODEX_HOME；不得访问网络、真实项目或全局Skills。`,
   },
   {
     name: 'R10',
@@ -347,31 +411,82 @@ if (!Number.isFinite(caseTimeoutMs) || caseTimeoutMs <= 0) {
   throw new Error('BEYOND_CASE_TIMEOUT_MS must be a positive number');
 }
 
+function executeCase(command, args, options, timeoutMs) {
+  return new Promise((resolveExecution) => {
+    const child = spawn(command, args, options);
+    child.stdin.end();
+    const stdout = [];
+    const stderr = [];
+    let timedOut = false;
+    let spawnError = null;
+    child.stdout.on('data', (chunk) => stdout.push(chunk));
+    child.stderr.on('data', (chunk) => stderr.push(chunk));
+    child.on('error', (error) => {
+      spawnError = error;
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      if (process.platform === 'win32' && child.pid) {
+        const stopTree = `$rootProcessId=${child.pid};` +
+          '$allProcesses=Get-CimInstance Win32_Process;' +
+          '$targetIds=New-Object System.Collections.Generic.List[int];' +
+          'function Add-Descendants([int]$processId){foreach($item in $allProcesses|Where-Object ParentProcessId -eq $processId){Add-Descendants ([int]$item.ProcessId);$targetIds.Add([int]$item.ProcessId)}};' +
+          'Add-Descendants $rootProcessId;$targetIds.Add($rootProcessId);' +
+          'foreach($targetId in $targetIds){if(Get-Process -Id $targetId -ErrorAction SilentlyContinue){Stop-Process -Id $targetId -Force}}';
+        const killed = spawnSync('pwsh.exe', ['-NoProfile', '-Command', stopTree], {
+          encoding: 'utf8',
+          windowsHide: true,
+          timeout: 10000,
+        });
+        if (killed.status !== 0) child.kill('SIGKILL');
+      } else {
+        child.kill('SIGKILL');
+      }
+    }, timeoutMs);
+    child.on('close', (code, signal) => {
+      clearTimeout(timer);
+      resolveExecution({
+        status: timedOut ? null : code,
+        signal,
+        stdout: Buffer.concat(stdout).toString('utf8'),
+        stderr: Buffer.concat(stderr).toString('utf8'),
+        error: spawnError ?? (timedOut ? new Error(`case timed out after ${timeoutMs}ms`) : null),
+      });
+    });
+  });
+}
+
 const timingsPath = join(evidenceRoot, 'run-timings.json');
 const existingTimings = existsSync(timingsPath)
   ? JSON.parse(readFileSync(timingsPath, 'utf8'))
   : [];
 const timings = existingTimings.filter((entry) => !cases.some((testCase) => testCase.name === entry.case));
-for (const testCase of cases) {
+const caseConcurrency = Number(process.env.BEYOND_CASE_CONCURRENCY ?? 1);
+if (!Number.isInteger(caseConcurrency) || caseConcurrency < 1 || caseConcurrency > 8) {
+  throw new Error('BEYOND_CASE_CONCURRENCY must be an integer from 1 to 8');
+}
+
+async function runCase(testCase) {
   const cwd = resolve(join(casesRoot, testCase.directory));
   const eventsPath = join(evidenceRoot, `${testCase.name}-events.jsonl`);
   const lastMessagePath = join(evidenceRoot, `${testCase.name}-last-message.txt`);
   const stderrPath = join(evidenceRoot, `${testCase.name}-stderr.txt`);
   const startedAt = new Date();
   const startedMs = Date.now();
-  const result = spawnSync(
+  const result = await executeCase(
     'pwsh.exe',
     [
       '-NoProfile',
       '-File',
       codexScript,
+      '--enable',
+      'hooks',
       'exec',
       '--ephemeral',
-      '--ignore-user-config',
       '--disable',
       'plugins',
-      '--sandbox',
-      'danger-full-access',
+      '--dangerously-bypass-approvals-and-sandbox',
+      '--dangerously-bypass-hook-trust',
       '--json',
       '--color',
       'never',
@@ -386,8 +501,8 @@ for (const testCase of cases) {
       encoding: 'utf8',
       env: { ...process.env, CODEX_HOME: isolatedCodexHome },
       maxBuffer: 64 * 1024 * 1024,
-      timeout: caseTimeoutMs,
     },
+    caseTimeoutMs,
   );
   writeFileSync(eventsPath, result.stdout ?? '');
   writeFileSync(stderrPath, result.stderr ?? '');
@@ -406,3 +521,24 @@ for (const testCase of cases) {
   }
   console.log(`${testCase.name}: completed`);
 }
+
+let nextCaseIndex = 0;
+let firstFailure = null;
+async function runQueue() {
+  while (!firstFailure) {
+    const index = nextCaseIndex;
+    nextCaseIndex += 1;
+    if (index >= cases.length) return;
+    try {
+      await runCase(cases[index]);
+    } catch (error) {
+      firstFailure ??= error;
+    }
+  }
+}
+
+await Promise.all(Array.from(
+  { length: Math.min(caseConcurrency, Math.max(cases.length, 1)) },
+  () => runQueue(),
+));
+if (firstFailure) throw firstFailure;

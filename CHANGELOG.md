@@ -6,6 +6,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-08-11
+
+### Added
+
+- Add an optional sibling `beyond-control` repository that keeps BEYOND documents, project-level documents, team tasks, and collaboration records together while business code stays in its existing repositories.
+- Add a fixed-action Node.js script for control-repository initialization, project inspection and registration, full project-entry fusion with backup, local-workbench backup/restore, shared-record summaries, precise synchronization, and compact archives.
+- Add explicit new-project and existing-project/upgrade prompts so installation no longer pretends that project adoption has already completed.
+- Add a project-level Codex Hook that persists PM/Worker identity across continuation, resume, and compaction, and mechanically blocks PM business writes while preserving user-visible task controls.
+
+### Changed
+
+- Keep each member's PM workbench under Git-ignored `local/`, while shared team tasks and collaboration use Markdown under `shared/`.
+- Preserve the v3.0.9 PM/Worker, three-state, user-visible Worker, same-Worker Action Skill, Git, test, release, and rollback paths for ordinary personal tasks.
+
+### Fixed
+
+- Verify the six installed Skills, control-repository structure, and the full fused project runtime kernel instead of accepting a weak pointer or a partial project entry.
+- Merge rather than replace existing project Hooks, bind the identity guard to the control repository independently of the root `AGENTS.md`, and verify both installed runtime files.
+- Limit ordinary PM Git writes to the current team-task or collaboration files and reject business code, project documents, repository configuration, permissions, and release files.
+
 ## [3.0.9] - 2026-08-08
 
 See the [v3.0.8 → v3.0.9 upgrade guide](docs/en/releases/v3.0.9.md), or read the [Chinese version](docs/releases/v3.0.9.md).
