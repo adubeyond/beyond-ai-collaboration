@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.1.4] - 2026-08-12
+
+### Fixed
+
+- Correct the Chinese and English Quick Start so installing Skills does not imply a mandatory Codex restart; restart is only needed when the current client demonstrably retains stale Skill content.
+- Remove the obsolete project-level identity-guard statement from the English Quick Start while preserving unrelated third-party Hooks during legacy migration.
+
 ## [3.1.3] - 2026-08-12
 
 ### Changed

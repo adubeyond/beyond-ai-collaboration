@@ -59,7 +59,7 @@ function check(name, passed, detail = '') {
 const agents = read(join(repositoryRoot, '模板交付包', 'AGENTS.md'));
 const release = JSON.parse(read(join(repositoryRoot, '模板交付包', 'beyond-release.json')));
 const preflight = JSON.parse(read(join(evidenceRoot, 'preflight.json')));
-check('WFA-01 source and release manifest identify v3.1.3', agents.includes('BEYOND-RUNTIME-VERSION: 3.1.3') && release.releaseVersion === '3.1.3');
+check('WFA-01 source and release manifest identify v3.1.4', agents.includes('BEYOND-RUNTIME-VERSION: 3.1.4') && release.releaseVersion === '3.1.4');
 check('WFA-01 isolated Skill install matches the candidate', preflight.installMismatch.length === 0 && preflight.candidateSkillFiles === preflight.installedSkillFiles);
 
 const bounded = output('R12');

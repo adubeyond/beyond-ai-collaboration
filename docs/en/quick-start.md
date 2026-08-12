@@ -18,7 +18,7 @@ The guide does not touch a real server, database, production environment, or rem
 - Node.js 18 or later. The fixture uses only built-in modules and needs no `npm install`.
 - A writable local directory.
 
-If you want to invoke `$identity-pm`, `$identity-worker`, and `$task-*` directly, install the six Skills from this repository and restart Codex. If they are not installed, explicitly reference their project-local `SKILL.md` paths.
+If you want to invoke `$identity-pm`, `$identity-worker`, and `$task-*` directly, install the six Skills from this repository. Restart Codex only if the current client demonstrably retains stale Skill content. If the Skills are not installed, explicitly reference their project-local `SKILL.md` paths.
 
 Confirm the environment:
 
@@ -51,7 +51,7 @@ node beyond-control/scripts/beyond-control.mjs install-project-entry --project-r
 
 Existing-project inspection prioritizes formal documents, legacy workbenches, nested repositories, and duplicate remotes. If active legacy tasks exist, add `--adopt-legacy-workbench yes`; if the same remote has multiple local directories, select exactly one path per duplicate-remote group with `--canonical-repositories "<path1>,<path2>"`. The script will not silently replace those facts with an empty workbench.
 
-The business project receives the fused root `AGENTS.md` and project-level `.codex` guard. BEYOND documents and project registration remain in the project-local control repository; the personal workbench is under its Git-ignored `local/`. When the project root is a Git repository, initialization also ignores `/beyond-control/` and `/.beyond-local-backups/` there so neither the independent control repository nor local backups are accidentally staged as business code. Empty project facts are expected and must not be filled with guesses.
+The business project receives the fused root `AGENTS.md`. Existing third-party Hooks are preserved; a legacy BEYOND identity guard is removed precisely during migration. BEYOND documents and project registration remain in the project-local control repository; the personal workbench is under its Git-ignored `local/`. When the project root is a Git repository, initialization also ignores `/beyond-control/` and `/.beyond-local-backups/` there so neither the independent control repository nor local backups are accidentally staged as business code. Empty project facts are expected and must not be filled with guesses.
 
 Local fusion does not push automatically. The fixed script creates a shared project record, a minimal project overview, and a minimal facts index so the fused entry is immediately reachable. If teammates need them, authorize remote Git separately, then use the `project-registration` scope to push only these three foundation files for the same project.
 
