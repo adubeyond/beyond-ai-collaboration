@@ -22,7 +22,8 @@ These documents explain the public product, its operating model, and the first r
 | Previous release | [v3.1.0 Upgrade Guide](releases/v3.1.0.md) | Add a sibling control repository, guided adoption, team tasks, collaboration, and a PM identity-continuity guard without changing the v3.0.9 ordinary task path |
 | Previous release | [v3.1.1 Upgrade Guide](releases/v3.1.1.md) | Repair false-positive Hook verification and preserve formal documents, tasks, repository identity, and exact backups during existing-project adoption |
 | Previous release | [v3.1.2 Upgrade Guide](releases/v3.1.2.md) | Restore project-local control as the default while retaining explicitly selected external sharing |
-| Current source candidate | [v3.1.3 Upgrade Guide](releases/v3.1.3.md) | Remove Hook trust, runtime probes, and mandatory restarts from the standard runtime while precisely cleaning legacy BEYOND Hook state |
+| Previous release | [v3.1.3 Upgrade Guide](releases/v3.1.3.md) | Remove Hook trust, runtime probes, and mandatory restarts from the standard runtime while precisely cleaning legacy BEYOND Hook state |
+| Current source candidate | [v3.1.4 Upgrade Guide](releases/v3.1.4.md) | Correct stale mandatory-restart and identity-guard wording in the Quick Start |
 | Real-project adoption | [Template package](../../模板交付包/README.md) → [template entry](../../模板交付包/AGENTS.md) | Understand the formal package, Skills, and initialization boundary |
 | Security and governance review | [Architecture](architecture.md) → [Security Policy](../../SECURITY.en.md) | Understand control rights, authorization, evidence, and risk boundaries |
 
