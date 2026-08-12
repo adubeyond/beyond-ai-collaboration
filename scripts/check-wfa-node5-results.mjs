@@ -70,11 +70,11 @@ check('P18 creates no Worker or Action Skill detour', !/create_thread|fork_threa
 check('P18 remains read-only', gitClean(p18));
 
 const p19Business = join(casesRoot, 'P19-team-from-business', 'business');
-const p19Control = join(casesRoot, 'P19-team-from-business', 'beyond-control');
+const p19Control = join(p19Business, 'beyond-control');
 const p19Output = output('P19');
 const p19Commands = commands('P19').join('\n').replace(/[\\/]+/g, '/');
 const p19Results = commandResults('P19');
-check('P19 reads the mapped sibling control rule', /\.\.\/beyond-control\/docs\/AI编程协同机制\/团队任务与协同\.md/.test(p19Commands));
+check('P19 reads the mapped project-local control rule', /\.\/beyond-control\/docs\/AI编程协同机制\/团队任务与协同\.md/.test(p19Commands));
 check('P19 invokes the mapped control script successfully', p19Results.some((result) => /beyond-control\.mjs.+\blist\b.+--git-account\s+['"]?current-user/i.test(result.command) && effectiveExitCode(result) === 0 && result.output.includes('task-business')));
 check('P19 does not depend on a business-project script copy', !existsSync(join(p19Business, 'scripts', 'beyond-control.mjs')));
 check('P19 reports the mapped team task', p19Output.includes('从业务项目读取团队任务'));
@@ -85,11 +85,11 @@ for (const [caseName, workspace, projectName] of [
   ['P21', 'P21-existing-init-cold', 'existing-project'],
 ]) {
   const project = join(casesRoot, workspace, projectName);
-  const control = join(casesRoot, workspace, 'beyond-control');
+  const control = join(project, 'beyond-control');
   const caseOutput = output(caseName);
   const caseCommands = commands(caseName).join('\n').replace(/[\\/]+/g, '/');
   const caseResults = commandResults(caseName);
-  check(`${caseName} inspects through the sibling control script`, caseResults.some((result) => /beyond-control\.mjs.+inspect-project/i.test(result.command) && effectiveExitCode(result) === 0));
+  check(`${caseName} inspects through the project-local control script`, caseResults.some((result) => /beyond-control\.mjs.+inspect-project/i.test(result.command) && effectiveExitCode(result) === 0));
   check(`${caseName} loads no Action Skill`, ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !caseCommands.includes(name)));
   check(`${caseName} remains read-only`, gitClean(project) && gitClean(control));
   check(`${caseName} asks only for a real initialization decision`, caseName === 'P20' ? /最低接入|融合|项目登记|确认|是否允许/.test(caseOutput) : /融合|确认/.test(caseOutput));

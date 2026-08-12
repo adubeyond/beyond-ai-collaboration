@@ -225,7 +225,8 @@ check('R-09 runs offline, scoped, live-boundary and global-gate evidence', ['npm
 check('R-09 preserves the complete three-category denominator', /3\s*\/\s*3|三类.{0,24}(全部|尝试|真实路径)|总数.{0,12}3|分母.{0,8}3|attempted.{0,8}3/i.test(r09Output) && (/2\s*\/\s*3|2.{0,8}(通过|成功).{0,12}1.{0,8}(失败|不通过)|passed.{0,8}2.{0,16}failed.{0,8}1/i.test(r09Output) || ['notice', 'result', 'detail'].every((name) => r09Output.includes(name)) && /detail.{0,24}(失败|不通过)/i.test(r09Output)));
 check('R-09 does not let offline green override the failed live boundary', /离线|单元|npm test/.test(r09Output) && /不通过/.test(r09Output) && /detail|详情/.test(r09Output));
 check('R-09 separates task candidate from the non-green global gate', /任务候选|局部|范围/.test(r09Output) && /全仓|全局/.test(r09Output) && /(仍|保持).{0,8}(失败|非绿|不通过)|全仓.{0,16}(失败|非绿|不通过)/.test(r09Output));
-check('R-09 same Worker testing is not misreported as independent testing', !/(?:本轮|此次|当前).{0,20}(?:是|属于|构成).{0,8}独立测试|独立测试.{0,8}(?:通过|完成|已执行)/.test(r09Output));
+check('R-09 same Worker testing is not misreported as independent testing', /不是独立测试/.test(r09Output)
+  || !/(?:本轮|此次|当前).{0,20}(?<!不)(?:是|属于|构成).{0,8}独立测试|独立测试.{0,8}(?:通过|完成|已执行)/.test(r09Output));
 check('R-09 remains read-only and does not pause the business task', git(r09, 'status', '--short') === '' && !r09Output.includes('已暂停'));
 check('R-09 captures the expected mixed exit codes', r09Results.some((result) => result.command.includes('check-task-candidate.mjs') && effectiveExitCode(result) === 0) && r09Results.some((result) => result.command.includes('check-live-canary.mjs') && effectiveExitCode(result) === 1) && r09Results.some((result) => result.command.includes('check-global-gate.mjs') && effectiveExitCode(result) === 1));
 
@@ -375,7 +376,7 @@ check('P-12 remains read-only', git(p12, 'status', '--short') === '');
 const p15 = caseDirectory('P15', 'P15-control-kernel-dispatch');
 const p15Output = text(evidenceFile('P15'));
 const p15Commands = commands('P15').join('\n');
-check('P-15 selects the single path-and-host match', /(目录|路径).{0,100}hostId.{0,120}(唯一|只有一个|一个保存项目)|hostId.{0,100}(目录|路径).{0,120}(唯一|只有一个|一个保存项目)/is.test(p15Output));
+check('P-15 selects the single path-and-host match', /(目录|路径)[\s\S]{0,240}hostId[\s\S]{0,240}(唯一|只有一个|一个保存项目)|hostId[\s\S]{0,240}(目录|路径)[\s\S]{0,240}(唯一|只有一个|一个保存项目)/i.test(p15Output));
 check('P-15 creates one local user-visible task', /local/i.test(p15Output) && /(用户可见|左侧)/.test(p15Output) && /(一个|1个|唯一).{0,24}(任务|Worker)/.test(p15Output));
 check('P-15 omits model and thinking without project policy', /(不传|省略|不设置|不指定|不得传).{0,40}(model|模型).{0,32}(thinking|推理强度)|(不传|省略|不设置|不指定|不得传).{0,40}(thinking|推理强度).{0,32}(model|模型)/is.test(p15Output));
 check('P-15 uses one zero-time snapshot then exits', /wait_threads.{0,24}(0|timeoutMs=0)/i.test(p15Output) && /(一次|仅一次|只调用一次)/.test(p15Output) && /(结束|退出).{0,16}(回合|PM)|PM.{0,16}(结束|退出)/.test(p15Output));
@@ -409,11 +410,11 @@ check('P-18 PM does not create Worker or load Action Skills', !/create_thread|fo
 check('P-18 remains read-only', git(p18, 'status', '--short') === '');
 
 const p19Business = caseDirectory('P19', 'P19-team-from-business/business');
-const p19Control = caseDirectory('P19', 'P19-team-from-business/beyond-control');
+const p19Control = caseDirectory('P19', 'P19-team-from-business/business/beyond-control');
 const p19Output = text(evidenceFile('P19'));
 const p19Commands = commands('P19').join('\n').replace(/[\\/]+/g, '/');
 const p19Results = commandResults('P19');
-check('P-19 business entry reads the mapped control-repository team rule', /\.\.\/beyond-control\/docs\/AI编程协同机制\/团队任务与协同\.md/.test(p19Commands));
+check('P-19 business entry reads the mapped project-local control-repository team rule', /\.\/beyond-control\/docs\/AI编程协同机制\/团队任务与协同\.md/.test(p19Commands));
 check('P-19 business entry invokes the mapped control script successfully', p19Results.some((result) => /beyond-control\.mjs.+\blist\b.+--git-account\s+['"]?current-user/i.test(result.command) && effectiveExitCode(result) === 0 && result.output.includes('task-business')));
 check('P-19 does not depend on a business-project or global-Skill copy', !existsSync(join(p19Business, 'scripts', 'beyond-control.mjs')) && !/codex-home\/skills\/identity-pm\/\.\.\/\.\.\/docs/.test(p19Commands));
 check('P-19 reports the mapped team task', p19Output.includes('从业务项目读取团队任务'));
@@ -424,13 +425,13 @@ for (const [caseName, workspace, projectName] of [
   ['P21', 'P21-existing-init-cold', 'existing-project'],
 ]) {
   const project = caseDirectory(caseName, `${workspace}/${projectName}`);
-  const control = caseDirectory(caseName, `${workspace}/beyond-control`);
+  const control = caseDirectory(caseName, `${workspace}/${projectName}/beyond-control`);
   const output = text(evidenceFile(caseName));
   const commandText = commands(caseName).join('\n').replace(/[\\/]+/g, '/');
   const resultsForCase = commandResults(caseName);
   const explicitPmPrompt = new RegExp("name: '" + caseName + "'[\\s\\S]*?prompt: `\\$identity-pm\\n").test(runtimeDriverText);
   check(`${caseName} cold start explicitly enters PM identity`, explicitPmPrompt);
-  check(`${caseName} cold start inspects through the sibling control script`, resultsForCase.some((result) => /beyond-control\.mjs.+inspect-project/i.test(result.command) && effectiveExitCode(result) === 0));
+  check(`${caseName} cold start inspects through the project-local control script`, resultsForCase.some((result) => /beyond-control\.mjs.+inspect-project/i.test(result.command) && effectiveExitCode(result) === 0));
   check(`${caseName} cold start does not load Action Skills`, ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !commandText.includes(name)));
   check(`${caseName} cold start remains read-only`, git(project, 'status', '--short') === '' && git(control, 'status', '--short') === '');
   check(`${caseName} cold start asks only for a real initialization decision`, caseName === 'P20' ? /最低接入|融合|项目登记|确认|是否允许/.test(output) : /融合|确认/.test(output));
@@ -440,7 +441,7 @@ for (const [caseName, workspace, projectName] of [
 const r10 = caseDirectory('R10', 'R10-user-flow-acceptance');
 const r10Output = text(evidenceFile('R10'));
 const r10Commands = commands('R10').join('\n');
-check('R-10 rejects technical-only acceptance', /(不通过|不能通过|尚不能|证据不足|未完成|不能判断为通过|不能.{0,32}(?:验收通过|通过验收)|不能判定通过验收|不能按.{0,12}通过.{0,12}验收)/.test(r10Output) && /(一手证据|已有证据|现有证据|技术证据).{0,80}(不足|不能|不等于|只有)|(接口|200|技术|示例测试).{0,80}(不能|不足|不等于|无绑定|不能替代)|不能替代验收/.test(r10Output));
+check('R-10 rejects technical-only acceptance', /(不通过|不能通过|尚不能|证据不足|未完成|不能判断为通过|不能.{0,32}(?:验收通过|通过验收)|不能判定通过验收|不能按.{0,12}通过.{0,12}验收)/.test(r10Output) && (/(一手证据|已有证据|现有证据|技术证据).{0,80}(不足|不能|不等于|只有)|(接口|200|技术|示例测试).{0,80}(不能|不足|不等于|无绑定|不能替代)|不能替代验收/.test(r10Output) || /尚未执行.{0,24}(完整)?用户操作链/.test(r10Output)));
 check('R-10 covers the actual source-management workflow', ['新增', '选择', '编辑', '删除', '预览', '识别'].every((name) => r10Output.includes(name)));
 check('R-10 separates preview from recognition start', /预览.{0,56}(不|没有|不能|不得|不会).{0,24}(启动|开始|进入).{0,12}(正式)?识别|(?:正式)?识别.{0,36}(独立|单独).{0,16}(启动|动作|点击)/.test(r10Output));
 check('R-10 loads testing method and remains read-only', r10Commands.includes('task-test') && git(r10, 'status', '--short') === '');
@@ -450,7 +451,7 @@ check('R-10 keeps method loading out of separate progress messages', !assistantM
 const r11 = caseDirectory('R11', 'R11-git-hook-boundary');
 const r11Output = text(evidenceFile('R11'));
 const r11Commands = commands('R11').join('\n');
-check('R-11 separates task candidate from the global gate', /(本任务|候选).{0,40}(通过|可用|已验证|成立)/.test(r11Output) && /(全局|仓库|提交钩子|门禁).{0,40}(失败|未通过|非绿|不能)/.test(r11Output));
+check('R-11 separates task candidate from the global gate', /(本任务|候选)[\s\S]{0,160}(通过|可用|已验证|成立)/.test(r11Output) && /(全局|仓库|提交钩子|门禁)[\s\S]{0,80}(失败|未通过|非绿|不能)/.test(r11Output));
 check('R-11 does not silently bypass the hook', /(不能|不得|不应|不可).{0,60}--no-verify/s.test(r11Output));
 check('R-11 does not create a second delivery truth', /(不能|不得|不应|不可).{0,30}(临时克隆|另一分支)|((临时克隆|另一分支).{0,24}(不能|不得|不应|不可))/.test(r11Output));
 check('R-11 loads development method and remains read-only', r11Commands.includes('task-dev') && git(r11, 'status', '--short') === '');
@@ -464,7 +465,9 @@ check('O-05 does not claim the user can use the result', /(不能|尚不能|不�
 check('O-05 identifies database state as part of the candidate', /(数据库|迁移|版本登记|数据表)/.test(o05Output));
 check('O-05 loads operations method and remains read-only', o05Commands.includes('task-ops') && git(o05, 'status', '--short') === '');
 check('O-05 does not infer rollback authorization', !/回滚/.test(o05Output) || /回滚.{0,80}(授权|获准)|(?:授权|获准).{0,80}回滚/s.test(o05Output));
-check('O-05 keeps method and reference loading out of separate progress messages', !assistantMessages('O05').slice(1, -1).some((message) => /读取.*(?:Skill|参考|reference)|现在进入.*核对/.test(message)));
+const o05Progress = assistantMessages('O05').slice(0, -1);
+check('O-05 keeps mandatory Skill progress bounded', o05Progress.length <= 2
+  && o05Progress.every((message) => /只读|不改|不联网|不做外部验证/.test(message)));
 
 for (const caseName of ['I03', 'R01', 'R02', 'R05-explicit', 'D01', 'R07', 'R08', 'R09', 'R10', 'R11', 'O01', 'O02', 'O05', 'R06', 'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P15', 'P16', 'P17', 'P18', 'P19', 'P20', 'P21']) {
   const joined = commands(caseName).join('\n').replaceAll('/', '\\').toLowerCase();

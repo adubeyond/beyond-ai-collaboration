@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.1.2] - 2026-08-12
+
+### Fixed
+
+- Restore `beyond-control/` under the current project root as the default installation layout; keep an external shared control repository as an explicit user choice.
+- Exclude the project-local control repository from project discovery and exclude both it and local BEYOND backups from the business repository's Git index, including Windows short-path/long-path normalization.
+- Keep project Hook commands and installation verification identical for project-local and explicitly external control repositories.
+
 ## [3.1.1] - 2026-08-11
 
 ### Fixed

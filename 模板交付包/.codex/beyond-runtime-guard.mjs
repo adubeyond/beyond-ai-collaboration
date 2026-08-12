@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const projectRoot = resolve(dirname(scriptPath), "..");
-const runtimeVersion = "3.1.1";
+const runtimeVersion = "3.1.2";
 
 function arg(name) {
   const index = process.argv.indexOf(name);

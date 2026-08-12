@@ -7,6 +7,7 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   renameSync,
   rmSync,
@@ -42,6 +43,24 @@ function has(name) {
 
 function display(path) {
   return path.split(sep).join("/");
+}
+
+function canonicalPath(value) {
+  const absolute = resolve(value);
+  try {
+    return realpathSync.native(absolute);
+  } catch {
+    return absolute;
+  }
+}
+
+function samePath(left, right) {
+  return canonicalPath(left).toLowerCase() === canonicalPath(right).toLowerCase();
+}
+
+function isInside(parent, child) {
+  const nested = relative(canonicalPath(parent), canonicalPath(child));
+  return Boolean(nested) && !nested.startsWith(`..${sep}`) && nested !== ".." && !isAbsolute(nested);
 }
 
 function readUtf8(path, label = path) {
@@ -173,6 +192,7 @@ function discoverRepositories(projectRoot, rootGit) {
   for (const entry of readdirSync(projectRoot, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.isSymbolicLink() || ignoredDiscoveryDirectories.has(entry.name)) continue;
     const candidate = join(projectRoot, entry.name);
+    if (samePath(candidate, controlRoot)) continue;
     if (existsSync(join(candidate, ".git"))) roots.add(candidate);
   }
   const repositories = [...roots].sort((left, right) => left.localeCompare(right)).map(repositoryFacts);
@@ -209,6 +229,7 @@ function discoverMarkdown(projectRoot) {
       if (entry.isSymbolicLink()) continue;
       const path = join(current, entry.name);
       if (entry.isDirectory()) {
+        if (samePath(path, controlRoot)) continue;
         if (ignoredDiscoveryDirectories.has(entry.name)) {
           const key = display(relative(projectRoot, path));
           excluded.set(key, entry.name);
@@ -348,6 +369,33 @@ function ensureControl() {
     const source = join(controlRoot, "docs", "AI编程协同机制", "当前工作台.md");
     writeUtf8(workbench, existsSync(source) ? readUtf8(source) : "# 当前工作台\n");
   }
+}
+
+function ensureProjectControlIsolation(project) {
+  if (!isInside(project.projectRoot, controlRoot)) {
+    fail("项目内初始化要求beyond-control位于 --project-root 目录之下；外置控制仓请不要传 --project-root", 2);
+  }
+  if (!project.gitRoot || !samePath(project.gitRoot, project.projectRoot)) {
+    return { changed: false, rules: [], backup: null };
+  }
+  const nestedControl = display(relative(project.projectRoot, controlRoot));
+  const rules = [`/${nestedControl}/`, "/.beyond-local-backups/"];
+  const ignorePath = join(project.projectRoot, ".gitignore");
+  const existing = existsSync(ignorePath) ? readUtf8(ignorePath, "项目.gitignore") : "";
+  const existingRules = new Set(existing.split("\n").map((line) => line.trim()));
+  const missingRules = rules.filter((rule) => !existingRules.has(rule));
+  if (!missingRules.length) {
+    return { changed: false, rules, backup: null };
+  }
+  let backup = null;
+  if (existing) {
+    const backupDirectory = join(controlRoot, "local", "backups", "project-init", project.projectId);
+    mkdirSync(backupDirectory, { recursive: true });
+    backup = join(backupDirectory, `${timestamp()}-gitignore`);
+    copyFileSync(ignorePath, backup);
+  }
+  writeUtf8(ignorePath, `${existing.trimEnd()}\n${missingRules.join("\n")}\n`.replace(/^\n/, ""));
+  return { changed: true, rules, backup };
 }
 
 function activeRecords(root, type) {
@@ -722,7 +770,10 @@ function prepareProjectRuntimeGuard(project) {
   const sourceHooksText = readUtf8(sourceHooksPath, "BEYOND Hook配置");
   const sourceHooks = parseJson(sourceHooksText, "BEYOND Hook配置");
   if (!sourceHooks.hooks || typeof sourceHooks.hooks !== "object") fail("BEYOND Hook配置缺少hooks对象");
-  const controlRelative = display(relative(project.projectRoot, controlRoot)) || ".";
+  const controlRelativeRaw = relative(project.projectRoot, controlRoot) || ".";
+  const controlRelative = isAbsolute(controlRelativeRaw)
+    ? display(controlRoot)
+    : display(controlRelativeRaw).replace(/^(?!\.)/, "./");
   const commandSuffix = ` --control-root ${JSON.stringify(controlRelative)} --project-id ${JSON.stringify(project.projectId)}`;
   const installedGroups = Object.fromEntries(Object.entries(sourceHooks.hooks).map(([event, groups]) => [
     event,
@@ -761,8 +812,8 @@ function prepareProjectRuntimeGuard(project) {
 }
 
 function registerProject(project, nameValue = null) {
-  if (resolve(project.projectRoot).toLowerCase() === controlRoot.toLowerCase()) {
-    fail("控制仓不能登记或融合为业务项目；请传入与其平级的真实业务项目目录", 2);
+  if (samePath(project.projectRoot, controlRoot)) {
+    fail("控制仓不能把自身登记或融合为业务项目；请传入承载该控制仓的项目根，或另一个真实业务项目目录", 2);
   }
   ensureControl();
   const localBackup = backupLocal("before-project-register");
@@ -919,6 +970,9 @@ function installProjectEntry(project) {
   }
   const runtimeGuard = prepareProjectRuntimeGuard(project);
   registerProject(project, arg("--name"));
+  const projectIsolation = isInside(project.projectRoot, controlRoot)
+    ? ensureProjectControlIsolation(project)
+    : { changed: false, rules: [], backup: null };
   const adoption = arg("--adopt-legacy-workbench") === "yes" ? adoptLegacyWorkbench(project) : null;
   const target = join(project.projectRoot, "AGENTS.md");
   const existing = existsSync(target) ? readUtf8(target) : "";
@@ -949,6 +1003,7 @@ function installProjectEntry(project) {
     runtimeHooks: runtimeGuard.targetHooksPath,
     backupDirectory: existing || hadRuntimeHooks || hadRuntimeGuard ? backupDirectory : null,
     controlRelative: rendered.controlRelative,
+    projectIsolation,
     adoption,
   };
 }
@@ -1226,7 +1281,7 @@ function runtimeIdentity() {
 
 function printHelp() {
   console.log(`BEYOND控制仓固定动作\n\n` +
-    `  init-control\n` +
+    `  init-control [--project-root <当前项目根>]  # 默认项目内模式传入项目根；外置模式省略\n` +
     `  inspect-project --project-root <目录> [--host-id <主机>] [--codex-project-id <项目>]\n` +
     `  register-project --project-root <目录> [--name <名称>] [--host-id <主机>] [--codex-project-id <项目>]\n` +
     `  install-project-entry --project-root <目录> --confirm-fusion yes [--adopt-legacy-workbench yes] [--canonical-repositories <每组重复remote选择一个正式路径>] [--confirm-legacy-skip yes] [--host-id <主机>] [--codex-project-id <项目>]\n` +
@@ -1249,8 +1304,20 @@ const command = process.argv[2] ?? "help";
 if (command === "help" || has("--help")) printHelp();
 else if (command === "init-control") {
   ensureControl();
+  const projectRootValue = arg("--project-root");
+  const projectIsolation = projectRootValue
+    ? ensureProjectControlIsolation(inspectProject(projectRootValue))
+    : null;
   const snapshot = backupLocal("control-init");
-  console.log(JSON.stringify({ controlRoot: display(controlRoot), localBackup: display(snapshot) }, null, 2));
+  console.log(JSON.stringify({
+    controlRoot: display(controlRoot),
+    localBackup: display(snapshot),
+    projectIsolation: projectIsolation ? {
+      changed: projectIsolation.changed,
+      rules: projectIsolation.rules,
+      backup: projectIsolation.backup ? display(projectIsolation.backup) : null,
+    } : null,
+  }, null, 2));
 } else if (command === "inspect-project") {
   console.log(JSON.stringify(inspectProject(arg("--project-root")), null, 2));
 } else if (command === "register-project") {
@@ -1267,6 +1334,11 @@ else if (command === "init-control") {
     runtimeHooks: display(result.runtimeHooks),
     backupDirectory: result.backupDirectory ? display(result.backupDirectory) : null,
     controlRelative: result.controlRelative,
+    projectIsolation: {
+      changed: result.projectIsolation.changed,
+      rules: result.projectIsolation.rules,
+      backup: result.projectIsolation.backup ? display(result.projectIsolation.backup) : null,
+    },
     adoption: result.adoption ? {
       imported: result.adoption.imported,
       historyPath: display(result.adoption.historyPath),

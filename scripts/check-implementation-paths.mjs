@@ -302,11 +302,11 @@ requireText("文档治理入口只在真实命中时读取", agents, "工作台�
 requireText("00入口承接异常文档治理", documentEntry, "只有项目初始化、项目接手发现工作台缺失/冲突或需要处理事实归位、文档创建更新与历史回收");
 requireText("初始化不进入普通任务热路径", agents, "不得把初始化问卷带入普通任务");
 requireText("升级先核对当前直接事实", agents, "已有项目或升级先只读检查现有`AGENTS.md`、代码、Git和Markdown");
-requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.1.1");
+requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.1.2");
 requireText("项目覆盖有专用边界", agents, "BEGIN BEYOND PROJECT OVERRIDES");
 requireText("安装逐文件对账六个Skill", installVerifier, "安装Skill内容不一致");
 requireText("安装核对项目完整运行内核", installVerifier, "项目入口的BEYOND运行内核与控制仓候选不一致");
-requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.1.1"');
+requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.1.2"');
 requireText("个人路径不读取团队共享区", agents, "普通项目接手、正式 Worker任务、Action Skill切换和个人任务不读取共享区");
 requireText("团队协同不替代正式Worker", agents, "不替代 3.0.9 的正式 Worker");
 requireText("PM协同Git权限严格限域", pm, "两条例外都不扩张到后续项目事实正文、其他项目文档、业务代码、仓库配置、成员权限或发布资料");
@@ -315,7 +315,9 @@ requireText("跨任务规则变化真实读取两层入口", pm, "当前还要�
 requireText("项目登记推送使用专用范围", pmDispatch, "`project-registration`范围精确提交这三份固定基础文件");
 requireText("remote登记剥离HTTP凭据", controlScript, "url.username = \"\"");
 requireText("归档编号拒绝路径分隔符", controlScript, "归档编号无效");
-requireText("控制仓拒绝自我融合", controlScript, "控制仓不能登记或融合为业务项目");
+requireText("控制仓拒绝自我融合", controlScript, "控制仓不能把自身登记或融合为业务项目");
+requireText("项目内控制仓是默认路径", agents, "当前项目根下的`beyond-control/`");
+requireText("项目内控制仓与业务Git隔离", controlScript, "ensureProjectControlIsolation");
 requireText("工作台支持只读汇总", controlScript, 'workbench --action list');
 requireText("工作台只收拢已完成任务", controlScript, "只有已完成任务可以移出高频区");
 requireText("工作台收拢先备份本机状态", controlScript, 'backupLocal("workbench-archive")');

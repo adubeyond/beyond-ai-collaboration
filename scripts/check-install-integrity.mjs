@@ -58,7 +58,7 @@ function writeRuntimeProof(controlRoot, projectRoot, projectId) {
   mkdirSync(dirname(proofPath), { recursive: true });
   writeFileSync(proofPath, `${JSON.stringify({
     schemaVersion: 1,
-    releaseVersion: "3.1.1",
+    releaseVersion: "3.1.2",
     projectId,
     projectRoot: projectRoot.replace(/\\/g, "/"),
     hooksSha256: sha256(join(projectRoot, ".codex", "hooks.json")),
@@ -87,8 +87,8 @@ try {
   copyRuntime(fusedRoot);
   const fused = readFileSync(join(packageRoot, "AGENTS.md"), "utf8")
     .replace(
-      "<!-- BEYOND-RUNTIME-VERSION: 3.1.1 -->",
-      "<!-- BEYOND-RUNTIME-VERSION: 3.1.1 -->\n<!-- BEYOND-CONTROL-ROOT: ../beyond-control -->\n<!-- BEYOND-PROJECT-ID: project-demo -->",
+      "<!-- BEYOND-RUNTIME-VERSION: 3.1.2 -->",
+      "<!-- BEYOND-RUNTIME-VERSION: 3.1.2 -->\n<!-- BEYOND-CONTROL-ROOT: ../beyond-control -->\n<!-- BEYOND-PROJECT-ID: project-demo -->",
     )
     .replace(/\]\(docs\//g, "](../beyond-control/docs/")
     .replace(/\]\(local\//g, "](../beyond-control/local/")
@@ -118,7 +118,7 @@ try {
   cpSync(join(packageRoot, "skills"), join(oldEntryRoot, "skills"), { recursive: true });
   copyRuntime(oldEntryRoot);
   const oldEntry = readFileSync(join(packageRoot, "AGENTS.md"), "utf8").replace(
-    "<!-- BEYOND-RUNTIME-VERSION: 3.1.1 -->\n",
+    "<!-- BEYOND-RUNTIME-VERSION: 3.1.2 -->\n",
     "",
   );
   writeFileSync(join(oldEntryRoot, "AGENTS.md"), oldEntry, "utf8");

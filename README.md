@@ -10,13 +10,13 @@ BEYOND is a document-driven AI engineering collaboration system for Codex. It tu
 
 Most AI coding tools focus on generating code faster. BEYOND focuses on a harder problem: helping AI understand a real project, stay within authorization, finish a complete business task, prove the result, and become more effective as project knowledge grows.
 
-[Quick Start](docs/en/quick-start.md) · [v3.1.1 Upgrade Guide](docs/en/releases/v3.1.1.md) · [Architecture](docs/en/architecture.md) · [Control Repository Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
+[Quick Start](docs/en/quick-start.md) · [v3.1.2 Upgrade Guide](docs/en/releases/v3.1.2.md) · [Architecture](docs/en/architecture.md) · [Control Repository Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
 
-> The current version is `v3.1.1`. It keeps the v3.1.0 team collaboration and external control repository, while fixing false-positive Hook verification, missed formal documents in existing projects, silent legacy-workbench loss, ambiguous multi-repository adoption, and newline-changing entry backups.
+> The current source candidate is `v3.1.2`. It keeps the v3.1.1 installation and existing-project adoption repairs while restoring a project-local control repository as the default. An external control repository is now an explicit user choice.
 
 ## What BEYOND changes
 
-- BEYOND documents and stable project facts live in a sibling control repository; each member's PM workbench remains local and Git-ignored.
+- BEYOND documents and stable project facts live in an independent `beyond-control/` repository under the project root by default; an external control repository is used only when the user explicitly chooses to share one across separate projects.
 - When real teammates collaborate, one internal control repository shares team tasks and collaboration records. Personal mode does not load that path.
 - Design, development, testing, and operations advance one business result continuously without stage approvals.
 - Ordinary implementation and test failures are repaired and retested in the same task; only a required business choice, high-risk action, real shared conflict, or unavailable external resource pauses work.
@@ -101,7 +101,7 @@ This structure keeps the safety core complete without forcing every task to read
 
 ## Quick start
 
-The repository includes a zero-dependency Node.js fixture. Use the template package as a sibling `beyond-control` repository, initialize it, and fuse the complete runtime kernel plus the project-level identity guard into the fixture. Existing project Hooks are backed up and preserved. Review and trust the BEYOND Hook once after its first installation or a content change; it is not a per-task approval.
+The repository includes a zero-dependency Node.js fixture. Copy the template package into the fixture root as an independent `beyond-control/` repository, initialize it, and fuse the complete runtime kernel plus the project-level identity guard into the fixture. Existing project Hooks are backed up and preserved. Review and trust the BEYOND Hook once after its first installation or a content change; it is not a per-task approval.
 
 Requirements:
 
