@@ -90,33 +90,13 @@ function parseJson(text, label) {
   }
 }
 
-function compareRuntimeHooks(candidateText, installedText, installedAgentsText) {
-  const candidate = parseJson(candidateText, "候选Hook配置");
-  const installed = parseJson(installedText, "项目Hook配置");
-  if (!candidate?.hooks || !installed?.hooks) {
-    errors.push("候选或项目Hook配置缺少hooks对象");
-    return;
-  }
-  const controlMatch = installedAgentsText?.match(/<!-- BEYOND-CONTROL-ROOT: ([^\n]+) -->/);
-  const projectMatch = installedAgentsText?.match(/<!-- BEYOND-PROJECT-ID: ([^\n]+) -->/);
-  const suffix = controlMatch && projectMatch
-    ? ` --control-root ${JSON.stringify(controlMatch[1].trim())} --project-id ${JSON.stringify(projectMatch[1].trim())}`
-    : "";
-  for (const [event, sourceGroups] of Object.entries(candidate.hooks)) {
-    const expectedGroups = sourceGroups.map((group) => ({
-      ...group,
-      hooks: group.hooks.map((handler) => ({
-        ...handler,
-        command: handler.command?.includes("beyond-runtime-guard.mjs") ? `${handler.command}${suffix}` : handler.command,
-      })),
-    }));
-    const actualGroups = Array.isArray(installed.hooks[event]) ? installed.hooks[event] : [];
-    for (const expected of expectedGroups) {
-      const expectedText = JSON.stringify(expected);
-      const matches = actualGroups.filter((actual) => JSON.stringify(actual) === expectedText).length;
-      if (matches !== 1) errors.push(`项目Hook配置中的${event}身份护栏不是唯一当前版本`);
-    }
-  }
+function containsBeyondHook(text, label) {
+  const parsed = parseJson(text, label);
+  if (!parsed?.hooks || typeof parsed.hooks !== "object" || Array.isArray(parsed.hooks)) return false;
+  return Object.values(parsed.hooks).some((groups) => Array.isArray(groups) && groups.some((group) =>
+    Array.isArray(group?.hooks) && group.hooks.some((handler) =>
+      [handler?.command, handler?.commandWindows, handler?.command_windows]
+        .some((value) => typeof value === "string" && value.includes("beyond-runtime-guard.mjs")))));
 }
 
 function sha256(path) {
@@ -260,10 +240,10 @@ if (manifest) {
     manifest.controlEntry !== "AGENTS.md" ||
     manifest.projectEntry !== "AGENTS.md" ||
     manifest.controlScript !== "scripts/beyond-control.mjs" ||
-    manifest.runtimeHooks !== ".codex/hooks.json" ||
-    manifest.runtimeGuard !== ".codex/beyond-runtime-guard.mjs"
+    "runtimeHooks" in manifest ||
+    "runtimeGuard" in manifest
   ) {
-    errors.push("候选版本清单缺少控制仓入口、项目入口、固定动作脚本或身份护栏");
+    errors.push("候选版本清单必须声明控制仓入口、项目入口和固定动作脚本，且不得继续登记BEYOND Hook");
   }
   if (!Array.isArray(manifest.skills) || JSON.stringify(manifest.skills) !== JSON.stringify(expectedSkills)) {
     errors.push("候选版本清单必须按正式名称声明六个Skill");
@@ -282,7 +262,6 @@ if (manifest) {
   }
 
   const controlMatch = installedAgents?.match(/<!-- BEYOND-CONTROL-ROOT: ([^\n]+) -->/);
-  const projectMatch = installedAgents?.match(/<!-- BEYOND-PROJECT-ID: ([^\n]+) -->/);
   if (controlMatch) {
     const mappedControlRoot = resolve(projectRoot, controlMatch[1].trim());
     const mappedManifest = readUtf8(join(mappedControlRoot, "beyond-release.json"), "项目映射的控制仓版本清单");
@@ -294,39 +273,36 @@ if (manifest) {
     if (mappedControlScript && candidateControlScript && mappedControlScript !== candidateControlScript) {
       errors.push("项目映射的控制仓固定脚本与当前候选不一致");
     }
-    if (!contentOnly && projectMatch) {
-      const projectId = projectMatch[1].trim();
-      const proofText = readUtf8(join(mappedControlRoot, "local", "runtime", "hook-probes", `${projectId}.json`), "Hook运行探针证据");
-      const installedHooksPath = join(projectRoot, manifest.runtimeHooks);
-      const installedGuardPath = join(projectRoot, manifest.runtimeGuard);
-      if (proofText && existsSync(installedHooksPath) && existsSync(installedGuardPath)) {
-        const proof = parseJson(proofText, "Hook运行探针证据");
-        if (!proof
-          || proof.releaseVersion !== manifest.releaseVersion
-          || proof.projectId !== projectId
-          || resolve(proof.projectRoot ?? "").toLowerCase() !== projectRoot.toLowerCase()
-          || proof.hooksSha256 !== sha256(installedHooksPath)
-          || proof.guardSha256 !== sha256(installedGuardPath)) {
-          errors.push("Hook运行探针与当前项目、版本、Hook配置或身份护栏不一致");
-        }
-      }
-    }
   } else if (!contentOnly) {
-    errors.push("完整安装验真需要项目控制仓映射和真实Hook运行探针；仅核对文件请显式使用 --content-only");
+    errors.push("完整安装验真需要项目控制仓映射；仅核对候选内容请显式使用 --content-only");
   }
 
   const controlScript = readUtf8(join(candidateRoot, manifest.controlScript), "控制仓固定动作脚本");
-  const candidateHooks = readUtf8(join(candidateRoot, manifest.runtimeHooks), "候选Hook配置");
-  const installedHooks = readUtf8(join(projectRoot, manifest.runtimeHooks), "项目Hook配置");
-  const candidateGuard = readUtf8(join(candidateRoot, manifest.runtimeGuard), "候选身份护栏脚本");
-  const installedGuard = readUtf8(join(projectRoot, manifest.runtimeGuard), "项目身份护栏脚本");
+  const candidateHooksPath = join(candidateRoot, ".codex", "hooks.json");
+  const candidateGuardPath = join(candidateRoot, ".codex", "beyond-runtime-guard.mjs");
+  const installedHooksPath = join(projectRoot, ".codex", "hooks.json");
+  const installedGuardPath = join(projectRoot, ".codex", "beyond-runtime-guard.mjs");
   const gitignore = readUtf8(join(candidateRoot, ".gitignore"), "控制仓.gitignore");
   if (controlScript && !controlScript.includes("install-project-entry")) {
     errors.push("控制仓固定动作脚本缺少项目入口融合动作");
   }
-  if (candidateHooks && installedHooks) compareRuntimeHooks(candidateHooks, installedHooks, installedAgents);
-  if (candidateGuard && installedGuard && candidateGuard !== installedGuard) {
-    errors.push("项目身份护栏脚本与控制仓候选不一致");
+  if (existsSync(candidateGuardPath)) {
+    errors.push("候选交付包仍包含BEYOND身份护栏脚本");
+  }
+  if (existsSync(candidateHooksPath)) {
+    const candidateHooks = readUtf8(candidateHooksPath, "候选现有Hook配置");
+    if (candidateHooks && containsBeyondHook(candidateHooks, "候选现有Hook配置")) {
+      errors.push("候选交付包仍引用BEYOND身份护栏");
+    }
+  }
+  if (existsSync(installedGuardPath)) {
+    errors.push("项目仍残留BEYOND身份护栏脚本");
+  }
+  if (existsSync(installedHooksPath)) {
+    const installedHooks = readUtf8(installedHooksPath, "项目现有Hook配置");
+    if (installedHooks && containsBeyondHook(installedHooks, "项目现有Hook配置")) {
+      errors.push("项目现有Hook配置仍引用BEYOND身份护栏");
+    }
   }
   if (gitignore && !gitignore.split("\n").some((line) => line.trim() === "/local/")) {
     errors.push("控制仓.gitignore没有排除local/");
@@ -340,5 +316,5 @@ if (errors.length > 0) {
 }
 
 console.log(contentOnly
-  ? `BEYOND ${manifest.releaseVersion}内容验真通过：文件一致，但未证明Hook已被平台信任和真实执行`
-  : `BEYOND ${manifest.releaseVersion}安装验真通过：六个Skill、控制仓结构、项目运行内核与真实Hook运行探针一致`);
+  ? `BEYOND ${manifest.releaseVersion}内容验真通过：六个Skill、控制仓入口和固定脚本一致`
+  : `BEYOND ${manifest.releaseVersion}安装验真通过：六个Skill、控制仓结构、项目运行内核一致，标准路径不依赖BEYOND Hook`);

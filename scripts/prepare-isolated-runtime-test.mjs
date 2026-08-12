@@ -67,7 +67,6 @@ function manifest(root) {
 function copyProjectFixture(target) {
   cpSync(join(repositoryRoot, "examples", "minimal-project"), target, { recursive: true });
   cpSync(join(candidateRoot, "AGENTS.md"), join(target, "AGENTS.md"));
-  cpSync(join(candidateRoot, ".codex"), join(target, ".codex"), { recursive: true });
   cpSync(join(candidateRoot, "beyond-release.json"), join(target, "beyond-release.json"));
   cpSync(join(candidateRoot, ".gitignore"), join(target, ".gitignore"));
   mkdirSync(join(target, "scripts"), { recursive: true });
@@ -1052,7 +1051,7 @@ initializeGit(p19Business, "fixture: business project before BEYOND fusion");
 cpSync(candidateRoot, p19Control, { recursive: true, force: true });
 execFileSync(process.execPath, [join(p19Control, "scripts", "beyond-control.mjs"), "init-control", "--project-root", p19Business], { cwd: p19Control, encoding: "utf8" });
 execFileSync(process.execPath, [join(p19Control, "scripts", "beyond-control.mjs"), "install-project-entry", "--project-root", p19Business, "--confirm-fusion", "yes"], { cwd: p19Control, encoding: "utf8" });
-git(p19Business, "add", "AGENTS.md", ".gitignore", ".codex/hooks.json", ".codex/beyond-runtime-guard.mjs");
+git(p19Business, "add", "AGENTS.md", ".gitignore");
 git(p19Business, "commit", "-m", "fixture: fuse BEYOND project entry");
 writeFixture(p19Control, "shared/tasks/active/task-business.md", `---
 id: task-business

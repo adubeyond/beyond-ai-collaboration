@@ -10,7 +10,7 @@ These documents explain the public product, its operating model, and the first r
 | --- | --- | --- |
 | First visit | [Product home](../../README.md) → [Architecture](architecture.md) | Understand the problem and decide whether BEYOND fits |
 | Existing v3.0.1 user | [v3.0.3 Upgrade Guide](releases/v3.0.3.md) → [Quick Start](quick-start.md) | Understand the rebuilt runtime and migrate without overwriting project facts |
-| First use or upgrade | [Installation, Upgrade, and Project Initialization](../../模板交付包/docs/en/installation-upgrade-and-project-initialization.md) | Install v3.1.2, trust the Hook, initialize a new or existing project, and start the PM |
+| First use or upgrade | [Installation, Upgrade, and Project Initialization](../../模板交付包/docs/en/installation-upgrade-and-project-initialization.md) | Install the target release, initialize a new or existing project, and start the PM |
 | Minimal fixture | [Quick Start](quick-start.md) → [minimal fixture](../../examples/minimal-project/README.md) | Verify the baseline and complete the first task |
 | Version history | [v3.0.3 Upgrade Guide](releases/v3.0.3.md) | Understand why v3.0.2 was abandoned and what changed after v3.0.1 |
 | Previous release | [v3.0.4 Upgrade Guide](releases/v3.0.4.md) | Review the three-state runtime simplification and migration boundaries |
@@ -21,7 +21,8 @@ These documents explain the public product, its operating model, and the first r
 | Stable baseline | [v3.0.9 Upgrade Guide](releases/v3.0.9.md) | Stabilize formal Worker creation, PM exit, terminal return, and model routing |
 | Previous release | [v3.1.0 Upgrade Guide](releases/v3.1.0.md) | Add a sibling control repository, guided adoption, team tasks, collaboration, and a PM identity-continuity guard without changing the v3.0.9 ordinary task path |
 | Previous release | [v3.1.1 Upgrade Guide](releases/v3.1.1.md) | Repair false-positive Hook verification and preserve formal documents, tasks, repository identity, and exact backups during existing-project adoption |
-| Current source candidate | [v3.1.2 Upgrade Guide](releases/v3.1.2.md) | Restore project-local control as the default while retaining explicitly selected external sharing |
+| Previous release | [v3.1.2 Upgrade Guide](releases/v3.1.2.md) | Restore project-local control as the default while retaining explicitly selected external sharing |
+| Current source candidate | [v3.1.3 Upgrade Guide](releases/v3.1.3.md) | Remove Hook trust, runtime probes, and mandatory restarts from the standard runtime while precisely cleaning legacy BEYOND Hook state |
 | Real-project adoption | [Template package](../../模板交付包/README.md) → [template entry](../../模板交付包/AGENTS.md) | Understand the formal package, Skills, and initialization boundary |
 | Security and governance review | [Architecture](architecture.md) → [Security Policy](../../SECURITY.en.md) | Understand control rights, authorization, evidence, and risk boundaries |
 

@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.1.3] - 2026-08-12
+
+### Changed
+
+- Remove the BEYOND identity Hook from the default installation, initialization, PM takeover, and verification path. PM and Worker identity now follows the explicit Skill entry, the current user-visible task, and its source relationship.
+- Keep existing-project migration precise: back up the affected files, remove only legacy BEYOND guard handlers and runtime state, and preserve unrelated project Hooks and `.codex` content.
+
+### Fixed
+
+- Prevent Hook trust, runtime probes, desktop tool-name normalization, and mandatory restarts from blocking installation or PM-to-Worker dispatch.
+
 ## [3.1.2] - 2026-08-12
 
 ### Fixed

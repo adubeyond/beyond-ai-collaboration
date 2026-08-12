@@ -24,8 +24,8 @@ const overrideBegin = "<!-- BEGIN BEYOND PROJECT OVERRIDES -->";
 const overrideEnd = "<!-- END BEYOND PROJECT OVERRIDES -->";
 const nativeBegin = "<!-- BEGIN PROJECT NATIVE RULES -->";
 const nativeEnd = "<!-- END PROJECT NATIVE RULES -->";
-const runtimeGuardRelative = ".codex/beyond-runtime-guard.mjs";
-const runtimeHooksRelative = ".codex/hooks.json";
+const legacyRuntimeGuardRelative = ".codex/beyond-runtime-guard.mjs";
+const codexHooksRelative = ".codex/hooks.json";
 
 function fail(message, code = 1) {
   console.error(message);
@@ -761,54 +761,89 @@ function beyondHook(handler) {
     .some((value) => typeof value === "string" && value.includes("beyond-runtime-guard.mjs"));
 }
 
-function prepareProjectRuntimeGuard(project) {
-  const sourceGuardPath = join(controlRoot, runtimeGuardRelative);
-  const sourceHooksPath = join(controlRoot, runtimeHooksRelative);
-  const targetGuardPath = join(project.projectRoot, runtimeGuardRelative);
-  const targetHooksPath = join(project.projectRoot, runtimeHooksRelative);
-  const sourceGuard = readUtf8(sourceGuardPath, "BEYOND身份护栏脚本");
-  const sourceHooksText = readUtf8(sourceHooksPath, "BEYOND Hook配置");
-  const sourceHooks = parseJson(sourceHooksText, "BEYOND Hook配置");
-  if (!sourceHooks.hooks || typeof sourceHooks.hooks !== "object") fail("BEYOND Hook配置缺少hooks对象");
-  const controlRelativeRaw = relative(project.projectRoot, controlRoot) || ".";
-  const controlRelative = isAbsolute(controlRelativeRaw)
-    ? display(controlRoot)
-    : display(controlRelativeRaw).replace(/^(?!\.)/, "./");
-  const commandSuffix = ` --control-root ${JSON.stringify(controlRelative)} --project-id ${JSON.stringify(project.projectId)}`;
-  const installedGroups = Object.fromEntries(Object.entries(sourceHooks.hooks).map(([event, groups]) => [
-    event,
-    groups.map((group) => ({
-      ...group,
-      hooks: group.hooks.map((handler) => ({
-        ...handler,
-        command: beyondHook(handler) ? `${handler.command}${commandSuffix}` : handler.command,
-      })),
-    })),
-  ]));
+function prepareLegacyRuntimeCleanup(root, label) {
+  const guardPath = join(root, legacyRuntimeGuardRelative);
+  const hooksPath = join(root, codexHooksRelative);
+  const hadGuard = existsSync(guardPath);
+  const hadHooks = existsSync(hooksPath);
+  let hooksText = null;
+  let removeHooksFile = false;
+  let removedHandlers = 0;
 
-  const existingHooksText = existsSync(targetHooksPath) ? readUtf8(targetHooksPath, "项目现有Hook配置") : null;
-  const merged = existingHooksText ? parseJson(existingHooksText, "项目现有Hook配置") : { hooks: {} };
-  if (!merged.hooks || typeof merged.hooks !== "object" || Array.isArray(merged.hooks)) {
-    fail("项目现有Hook配置缺少可合并的hooks对象；未覆盖原文件");
+  if (hadHooks) {
+    const existingText = readUtf8(hooksPath, `${label}现有Hook配置`);
+    const existing = parseJson(existingText, `${label}现有Hook配置`);
+    if (!existing.hooks || typeof existing.hooks !== "object" || Array.isArray(existing.hooks)) {
+      fail(`${label}现有Hook配置缺少可迁移的hooks对象；未覆盖原文件`);
+    }
+    for (const [event, groups] of Object.entries(existing.hooks)) {
+      if (!Array.isArray(groups)) continue;
+      const keptGroups = groups
+        .map((group) => {
+          if (!group || typeof group !== "object" || !Array.isArray(group.hooks)) return group;
+          const keptHandlers = group.hooks.filter((handler) => {
+            const owned = beyondHook(handler);
+            if (owned) removedHandlers += 1;
+            return !owned;
+          });
+          return { ...group, hooks: keptHandlers };
+        })
+        .filter((group) => !group || typeof group !== "object" || !Array.isArray(group.hooks) || group.hooks.length > 0);
+      if (keptGroups.length) existing.hooks[event] = keptGroups;
+      else delete existing.hooks[event];
+    }
+    if (removedHandlers > 0) {
+      removeHooksFile = Object.keys(existing).length === 1 && Object.keys(existing.hooks).length === 0;
+      if (!removeHooksFile) hooksText = `${JSON.stringify(existing, null, 2)}\n`;
+    }
   }
 
-  for (const [event, candidateGroups] of Object.entries(installedGroups)) {
-    const currentGroups = Array.isArray(merged.hooks[event]) ? merged.hooks[event] : [];
-    merged.hooks[event] = currentGroups
-      .map((group) => {
-        if (!group || typeof group !== "object" || !Array.isArray(group.hooks)) return group;
-        return { ...group, hooks: group.hooks.filter((handler) => !beyondHook(handler)) };
-      })
-      .filter((group) => !group || typeof group !== "object" || !Array.isArray(group.hooks) || group.hooks.length > 0)
-      .concat(candidateGroups);
+  let removeGuard = false;
+  let preserveUnknownGuard = false;
+  if (hadGuard) {
+    const guardText = readUtf8(guardPath, `${label}BEYOND旧身份护栏`);
+    removeGuard = /BEYOND_RUNTIME_IDENTITY|BEYOND身份护栏|installedControlRoot/.test(guardText);
+    preserveUnknownGuard = !removeGuard;
   }
 
   return {
-    sourceGuard,
-    hooksText: `${JSON.stringify(merged, null, 2)}\n`,
-    targetGuardPath,
-    targetHooksPath,
+    root,
+    hooksPath,
+    guardPath,
+    hadHooks,
+    hadGuard,
+    hooksText,
+    removeHooksFile,
+    removedHandlers,
+    removeGuard,
+    preserveUnknownGuard,
   };
+}
+
+function applyLegacyRuntimeCleanup(plan) {
+  if (plan.removedHandlers > 0) {
+    if (plan.removeHooksFile) rmSync(plan.hooksPath, { force: true });
+    else writeUtf8(plan.hooksPath, plan.hooksText);
+  }
+  if (plan.removeGuard) rmSync(plan.guardPath, { force: true });
+  return {
+    root: display(plan.root),
+    removedHandlers: plan.removedHandlers,
+    hooks: plan.removedHandlers === 0 ? "unchanged" : plan.removeHooksFile ? "removed" : "preserved-without-beyond",
+    guard: plan.removeGuard ? "removed" : plan.preserveUnknownGuard ? "preserved-unrecognized" : "absent",
+  };
+}
+
+function removeLegacyRuntimeState() {
+  const runtimeRoot = join(controlRoot, "local", "runtime");
+  const removed = [];
+  for (const relativePath of ["identity-sessions", "hook-probes", "hook-observed.json"]) {
+    const target = join(runtimeRoot, relativePath);
+    if (!existsSync(target)) continue;
+    rmSync(target, { recursive: true, force: true });
+    removed.push(display(relative(runtimeRoot, target)));
+  }
+  return removed;
 }
 
 function registerProject(project, nameValue = null) {
@@ -968,7 +1003,8 @@ function installProjectEntry(project) {
     && arg("--adopt-legacy-workbench") !== "yes") {
     fail(`旧工作台仍有${project.legacyWorkbench.active.length}个活动任务；请确认后传入 --adopt-legacy-workbench yes，将活动任务迁入本机工作台、已完成任务进入历史。`, 2);
   }
-  const runtimeGuard = prepareProjectRuntimeGuard(project);
+  const projectRuntimeCleanup = prepareLegacyRuntimeCleanup(project.projectRoot, "项目");
+  const controlRuntimeCleanup = prepareLegacyRuntimeCleanup(controlRoot, "控制仓");
   registerProject(project, arg("--name"));
   const projectIsolation = isInside(project.projectRoot, controlRoot)
     ? ensureProjectControlIsolation(project)
@@ -976,35 +1012,45 @@ function installProjectEntry(project) {
   const adoption = arg("--adopt-legacy-workbench") === "yes" ? adoptLegacyWorkbench(project) : null;
   const target = join(project.projectRoot, "AGENTS.md");
   const existing = existsSync(target) ? readUtf8(target) : "";
-  const hadRuntimeHooks = existsSync(runtimeGuard.targetHooksPath);
-  const hadRuntimeGuard = existsSync(runtimeGuard.targetGuardPath);
   const backupDirectory = join(controlRoot, "local", "backups", "project-entry", project.projectId);
   const backupStamp = timestamp();
   if (existing) {
     mkdirSync(backupDirectory, { recursive: true });
     copyFileSync(target, join(backupDirectory, `${backupStamp}-AGENTS.md`));
   }
-  if (hadRuntimeHooks) {
+  if (projectRuntimeCleanup.hadHooks) {
     mkdirSync(backupDirectory, { recursive: true });
-    copyFileSync(runtimeGuard.targetHooksPath, join(backupDirectory, `${backupStamp}-hooks.json`));
+    copyFileSync(projectRuntimeCleanup.hooksPath, join(backupDirectory, `${backupStamp}-project-hooks.json`));
   }
-  if (hadRuntimeGuard) {
+  if (projectRuntimeCleanup.hadGuard) {
     mkdirSync(backupDirectory, { recursive: true });
-    copyFileSync(runtimeGuard.targetGuardPath, join(backupDirectory, `${backupStamp}-beyond-runtime-guard.mjs`));
+    copyFileSync(projectRuntimeCleanup.guardPath, join(backupDirectory, `${backupStamp}-project-beyond-runtime-guard.mjs`));
+  }
+  if (controlRuntimeCleanup.hadHooks) {
+    mkdirSync(backupDirectory, { recursive: true });
+    copyFileSync(controlRuntimeCleanup.hooksPath, join(backupDirectory, `${backupStamp}-control-hooks.json`));
+  }
+  if (controlRuntimeCleanup.hadGuard) {
+    mkdirSync(backupDirectory, { recursive: true });
+    copyFileSync(controlRuntimeCleanup.guardPath, join(backupDirectory, `${backupStamp}-control-beyond-runtime-guard.mjs`));
   }
   const rendered = renderProjectEntry(project, existing);
   writeUtf8(target, rendered.text);
-  writeUtf8(runtimeGuard.targetGuardPath, runtimeGuard.sourceGuard);
-  writeUtf8(runtimeGuard.targetHooksPath, runtimeGuard.hooksText);
+  const legacyRuntimeCleanup = [
+    applyLegacyRuntimeCleanup(projectRuntimeCleanup),
+    applyLegacyRuntimeCleanup(controlRuntimeCleanup),
+  ];
+  const removedRuntimeState = removeLegacyRuntimeState();
   backupLocal("project-entry");
   return {
     target,
-    runtimeGuard: runtimeGuard.targetGuardPath,
-    runtimeHooks: runtimeGuard.targetHooksPath,
-    backupDirectory: existing || hadRuntimeHooks || hadRuntimeGuard ? backupDirectory : null,
+    backupDirectory: existing || projectRuntimeCleanup.hadHooks || projectRuntimeCleanup.hadGuard
+      || controlRuntimeCleanup.hadHooks || controlRuntimeCleanup.hadGuard ? backupDirectory : null,
     controlRelative: rendered.controlRelative,
     projectIsolation,
     adoption,
+    legacyRuntimeCleanup,
+    removedRuntimeState,
   };
 }
 
@@ -1171,114 +1217,6 @@ function restoreLocal() {
   console.log(`本机工作台已恢复；恢复前快照：${display(currentBackup)}`);
 }
 
-function sha256File(path) {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
-}
-
-function runtimeProjectIdentity(projectRootValue) {
-  if (!projectRootValue) fail("缺少 --project-root <业务项目目录>", 2);
-  const projectRoot = resolve(projectRootValue);
-  const agentsPath = join(projectRoot, "AGENTS.md");
-  const agents = readUtf8(agentsPath, "项目AGENTS.md");
-  const projectId = agents.match(/<!-- BEYOND-PROJECT-ID: ([^\n]+) -->/)?.[1].trim();
-  const mappedControl = agents.match(/<!-- BEYOND-CONTROL-ROOT: ([^\n]+) -->/)?.[1].trim();
-  if (!projectId || !mappedControl) fail("项目AGENTS.md缺少完整的BEYOND项目编号或控制仓映射", 2);
-  if (resolve(projectRoot, mappedControl).toLowerCase() !== controlRoot.toLowerCase()) {
-    fail("项目AGENTS.md映射的控制仓不是当前控制仓", 2);
-  }
-  return { projectRoot, projectId, agentsPath };
-}
-
-function currentRuntimeBinding(projectRoot) {
-  const hooksPath = join(projectRoot, runtimeHooksRelative);
-  const guardPath = join(projectRoot, runtimeGuardRelative);
-  if (!existsSync(hooksPath) || !existsSync(guardPath)) return null;
-  return {
-    hooksPath,
-    guardPath,
-    hooksSha256: sha256File(hooksPath),
-    guardSha256: sha256File(guardPath),
-  };
-}
-
-function hookProbe() {
-  const hookSession = arg("--hook-session");
-  if (!hookSession || !/^[a-f0-9]{64}$/i.test(hookSession)) {
-    fail("Hook运行探针没有经过PreToolUse签注；不能把文件存在当成Hook已运行", 2);
-  }
-  const identity = runtimeProjectIdentity(arg("--project-root"));
-  const binding = currentRuntimeBinding(identity.projectRoot);
-  if (!binding) fail("项目缺少Hook配置或身份护栏脚本", 2);
-  const observedPath = join(controlRoot, "local", "runtime", "hook-observed.json");
-  const observed = existsSync(observedPath) ? parseJson(readUtf8(observedPath), "Hook观察记录") : null;
-  const matching = observed?.events?.filter((event) => event.event === "PreToolUse"
-    && event.tool === "Bash"
-    && event.session === hookSession.slice(0, 16)) ?? [];
-  const latest = matching.at(-1);
-  if (!latest || Number.isNaN(Date.parse(latest.observedAt)) || Date.now() - Date.parse(latest.observedAt) > 5 * 60 * 1000) {
-    fail("没有找到同一会话五分钟内的真实PreToolUse观察记录；运行探针失败", 2);
-  }
-  const manifest = parseJson(readUtf8(join(controlRoot, "beyond-release.json"), "BEYOND版本清单"), "BEYOND版本清单");
-  const proof = {
-    schemaVersion: 1,
-    releaseVersion: manifest.releaseVersion,
-    projectId: identity.projectId,
-    projectRoot: display(identity.projectRoot),
-    hooksSha256: binding.hooksSha256,
-    guardSha256: binding.guardSha256,
-    hookSession: hookSession.slice(0, 16),
-    observedAt: latest.observedAt,
-    verifiedAt: new Date().toISOString(),
-  };
-  const proofPath = join(controlRoot, "local", "runtime", "hook-probes", `${identity.projectId}.json`);
-  writeUtf8(proofPath, `${JSON.stringify(proof, null, 2)}\n`);
-  console.log(JSON.stringify({ runtimeProbePassed: true, proofPath: display(proofPath), ...proof }, null, 2));
-}
-
-function hookDoctor() {
-  const identity = runtimeProjectIdentity(arg("--project-root"));
-  const binding = currentRuntimeBinding(identity.projectRoot);
-  const version = run("codex", ["--version"], { cwd: identity.projectRoot });
-  const features = run("codex", ["features", "list"], { cwd: identity.projectRoot });
-  const proofPath = join(controlRoot, "local", "runtime", "hook-probes", `${identity.projectId}.json`);
-  let proof = null;
-  if (existsSync(proofPath)) {
-    try {
-      proof = JSON.parse(readFileSync(proofPath, "utf8"));
-    } catch {
-      proof = null;
-    }
-  }
-  const manifest = parseJson(readUtf8(join(controlRoot, "beyond-release.json"), "BEYOND版本清单"), "BEYOND版本清单");
-  const runtimeProbePassed = Boolean(binding && proof
-    && proof.releaseVersion === manifest.releaseVersion
-    && proof.projectId === identity.projectId
-    && proof.projectRoot.toLowerCase() === display(identity.projectRoot).toLowerCase()
-    && proof.hooksSha256 === binding.hooksSha256
-    && proof.guardSha256 === binding.guardSha256);
-  console.log(JSON.stringify({
-    projectId: identity.projectId,
-    projectRoot: display(identity.projectRoot),
-    codexVersion: version.status === 0 ? version.stdout : null,
-    codexFeaturesAvailable: features.status === 0,
-    runtimeFilesPresent: Boolean(binding),
-    runtimeProbePassed,
-    proofPath: existsSync(proofPath) ? display(proofPath) : null,
-    nextAction: runtimeProbePassed
-      ? "Hook已经由真实PreToolUse探针验证。"
-      : "在项目根目录启动Codex CLI，输入 /hooks，审核并信任当前项目Hook；随后在Codex任务中运行hook-probe。项目可信不等于Hook定义已信任。",
-  }, null, 2));
-}
-
-function runtimeIdentity() {
-  if (arg("--role") !== "pm") fail("runtime-identity只接受 --role pm", 2);
-  const hookSession = arg("--hook-session");
-  if (!hookSession || !/^[a-f0-9]{64}$/i.test(hookSession)) {
-    fail("BEYOND身份护栏未生效：PM身份登记命令没有经过PreToolUse Hook", 2);
-  }
-  console.log("BEYOND PM身份已由运行时护栏登记；后续压缩、恢复和继续沿用该身份。");
-}
-
 function printHelp() {
   console.log(`BEYOND控制仓固定动作\n\n` +
     `  init-control [--project-root <当前项目根>]  # 默认项目内模式传入项目根；外置模式省略\n` +
@@ -1294,10 +1232,7 @@ function printHelp() {
     `  sync --action push --paths <逗号分隔路径> --message <提交说明> [--scope team|project-registration]\n` +
     `  archive --type task|collaboration --id <编号> --result <最终结果>\n` +
     `  backup-local [--reason <原因>]\n` +
-    `  restore-local --snapshot <备份目录> --confirm-restore yes\n` +
-    `  hook-doctor --project-root <目录>  # 只读诊断Hook文件、CLI能力与运行探针\n` +
-    `  hook-probe --project-root <目录>  # 必须由真实PreToolUse Hook签注\n` +
-    `  runtime-identity --role pm  # 只由identity-pm在显式入口未登记时调用`);
+    `  restore-local --snapshot <备份目录> --confirm-restore yes`);
 }
 
 const command = process.argv[2] ?? "help";
@@ -1330,10 +1265,10 @@ else if (command === "init-control") {
   console.log(JSON.stringify({
     projectId: project.projectId,
     target: display(result.target),
-    runtimeGuard: display(result.runtimeGuard),
-    runtimeHooks: display(result.runtimeHooks),
     backupDirectory: result.backupDirectory ? display(result.backupDirectory) : null,
     controlRelative: result.controlRelative,
+    legacyRuntimeCleanup: result.legacyRuntimeCleanup,
+    removedRuntimeState: result.removedRuntimeState,
     projectIsolation: {
       changed: result.projectIsolation.changed,
       rules: result.projectIsolation.rules,
@@ -1345,12 +1280,6 @@ else if (command === "init-control") {
       backup: display(result.adoption.backup),
     } : null,
   }, null, 2));
-} else if (command === "runtime-identity") {
-  runtimeIdentity();
-} else if (command === "hook-doctor") {
-  hookDoctor();
-} else if (command === "hook-probe") {
-  hookProbe();
 } else if (command === "list") {
   ensureControl();
   const account = has("--all") ? null : detectGitAccount();

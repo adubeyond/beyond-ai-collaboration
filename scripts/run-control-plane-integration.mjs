@@ -56,13 +56,10 @@ function run(stage, args, prompt) {
 
 function initialArgs(ephemeral = true) {
   const args = [
-    "--enable",
-    "hooks",
     "exec",
     "--disable",
     "plugins",
     "--dangerously-bypass-approvals-and-sandbox",
-    "--dangerously-bypass-hook-trust",
     "--json",
     "--color",
     "never",
@@ -98,7 +95,7 @@ if (closeoutOnly) {
   workerThreadId = resumeWorkerThreadId;
   const resumedWorker = run(
     "02b-worker-resume",
-    ["--enable", "hooks", "exec", "--disable", "plugins", "resume", "--dangerously-bypass-approvals-and-sandbox", "--dangerously-bypass-hook-trust", "--json", workerThreadId],
+    ["exec", "--disable", "plugins", "resume", "--dangerously-bypass-approvals-and-sandbox", "--json", workerThreadId],
     `上轮隔离平台在相关测试已经通过后发生响应流中断。请沿用当前同一Worker、Git现场和已有结果继续：复核当前事实，完成 evidence/worker-result.md、精确本地提交和面向老板的最终交付。不要从头重做，不回PM申请普通步骤。${boundary}`,
   );
   timings.push({ stage: resumedWorker.stage, durationMs: resumedWorker.durationMs });
@@ -131,7 +128,7 @@ if (closeoutOnly) {
 } else {
   callback = run(
     "03-worker-callback",
-    ["--enable", "hooks", "exec", "--disable", "plugins", "resume", "--dangerously-bypass-approvals-and-sandbox", "--dangerously-bypass-hook-trust", "--json", workerThreadId],
+    ["exec", "--disable", "plugins", "resume", "--dangerously-bypass-approvals-and-sandbox", "--json", workerThreadId],
     `现在只生成应投递给来源PM的一次完成回传正文，不做新业务工作、不修改文件，也不要声称已经实际发送。完整工程证据仍在当前Worker任务和 evidence/worker-result.md；回传只传控制面增量。${boundary}`,
   );
   timings.push({ stage: callback.stage, durationMs: callback.durationMs });
