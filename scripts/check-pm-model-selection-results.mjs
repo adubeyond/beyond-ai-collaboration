@@ -37,7 +37,7 @@ check('M-03 complex high-risk task receives Sol with strong reasoning', /Sol/i.t
 check('M-04 high-volume clear audit uses Luna high reasoning', /Luna/i.test(taskD) && /高|high/i.test(taskD));
 check(
   'M-05 runtime settings stay outside the business packet',
-  /模型(?:能力)?(?:与|和)推理(?:强度|档位).{0,40}(?:不属于|不写进)(?:业务)?任务包|(?:业务)?任务包(?:里)?.{0,40}不.{0,20}(?:模型|推理)|(?:不应|不该|不得|不要|不).{0,12}写(?:入|进)(?:业务)?任务包[\s\S]{0,120}(?:Luna|Terra|Sol|模型|推理)/s.test(output),
+  /模型(?:能力)?(?:与|和|及)推理(?:强度|档位).{0,40}(?:不属于|不写入|不写进)(?:业务)?任务包|(?:业务)?任务包(?:里)?.{0,40}不.{0,20}(?:模型|推理)|(?:不应|不该|不得|不要|不).{0,12}写(?:入|进)(?:业务)?任务包[\s\S]{0,120}(?:Luna|Terra|Sol|模型|推理)/s.test(output),
 );
 check(
   'M-06 model choice is limited to new Worker creation',

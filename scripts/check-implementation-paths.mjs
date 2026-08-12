@@ -31,6 +31,15 @@ function forbidText(name, text, forbidden) {
   passed += 1;
 }
 
+function requireMissingFile(name, relativePath) {
+  const path = join(repositoryRoot, ...relativePath.split("/"));
+  if (existsSync(path)) {
+    errors.push(`${name}：文件仍存在 ${relativePath}`);
+    return;
+  }
+  passed += 1;
+}
+
 const agents = read("模板交付包/AGENTS.md");
 const pm = read("模板交付包/skills/identity-pm/SKILL.md");
 const worker = read("模板交付包/skills/identity-worker/SKILL.md");
@@ -50,10 +59,6 @@ const workerCollaboration = read("模板交付包/skills/identity-worker/referen
 const workerCapability = read("模板交付包/skills/identity-worker/references/capability-correction-and-cost.md");
 const installVerifier = read("模板交付包/scripts/verify-install-integrity.mjs");
 const controlScript = read("模板交付包/scripts/beyond-control.mjs");
-const runtimeHooks = read("模板交付包/.codex/hooks.json");
-const runtimeGuard = read("模板交付包/.codex/beyond-runtime-guard.mjs");
-const realCompaction = read("scripts/run-real-pm-compaction-cli.mjs");
-const realInstalledGuard = read("scripts/run-real-installed-guard.mjs");
 const teamCollaboration = read("模板交付包/docs/AI编程协同机制/团队任务与协同.md");
 const releaseManifest = read("模板交付包/beyond-release.json");
 const pmCoordination = read("模板交付包/skills/identity-pm/references/cross-task-coordination.md");
@@ -62,34 +67,22 @@ const pmLifecycle = read("模板交付包/skills/identity-pm/references/lifecycl
 const workbench = read("模板交付包/docs/AI编程协同机制/当前工作台.md");
 const gitCloseout = read("模板交付包/skills/task-ops/references/git-and-resource-closeout.md");
 
-// 运行时身份连续性：文档声明之外必须存在可安装、可验真的机械护栏。
-for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse", "SessionEnd"]) {
-  requireText(`身份Hook包含${event}`, runtimeHooks, `"${event}"`);
-}
-requireText("身份Hook调用固定护栏", runtimeHooks, "node .codex/beyond-runtime-guard.mjs");
-requireText("PM显式入口登记身份", runtimeGuard, "$identity-pm");
-requireText("压缩恢复身份上下文", runtimeHooks, "startup|resume|compact");
-requireText("PM写入使用机械拒绝", runtimeGuard, "permissionDecision: \"deny\"");
-requireText("固定控制脚本必须是单一Node命令", runtimeGuard, "singleFixedNodeCommand");
-requireText("会话结束回收身份", runtimeGuard, "event.hook_event_name === \"SessionEnd\"");
-requireText("根入口替换后仍使用安装绑定", runtimeGuard, "installedControlRoot");
-requireText("PM自然语言入口有Hook兜底", pm, "runtime-identity --role pm");
-requireText("PM首次接入不被Hook循环阻断", pm, "项目尚无BEYOND Hook是初始化前的客观状态");
-requireText("PM给出唯一Hook信任入口", pm, "Codex CLI并输入`/hooks`");
-requireText("PM要求真实Hook探针", pm, "运行固定`hook-probe`");
-requireText("完整验真绑定运行探针", installVerifier, "Hook运行探针证据");
-requireText("项目安装合并既有Hook", controlScript, "hooks: group.hooks.filter((handler) => !beyondHook(handler))");
-requireText("项目Hook绑定控制仓", controlScript, "--control-root");
-requireText("项目Hook绑定项目身份", controlScript, "--project-id");
-requireText("安装验真核对身份护栏", installVerifier, "项目身份护栏脚本与控制仓候选不一致");
-requireText("版本清单登记运行Hook", releaseManifest, "\"runtimeHooks\": \".codex/hooks.json\"");
-requireText("版本清单登记身份脚本", releaseManifest, "\"runtimeGuard\": \".codex/beyond-runtime-guard.mjs\"");
-requireText("真实压缩使用平台接口", realCompaction, "thread/compact/start");
-requireText("真实压缩恢复同一会话", realCompaction, "exec\",\n  \"--disable\",\n  \"plugins\",\n  \"resume\"");
-requireText("真实压缩核对恢复Hook", realCompaction, "identityRestoreHookSeen");
-requireText("真实安装护栏从固定脚本建立", realInstalledGuard, "install-project-entry");
-requireText("真实安装护栏替换根入口", realInstalledGuard, "根入口已被外部替换");
-requireText("真实安装护栏核对恢复", realInstalledGuard, "restoredAfterReplacement");
+// 默认运行路径不依赖Hook；升级只精确清理BEYOND旧护栏，不接管第三方Hook。
+requireMissingFile("候选不交付Hook配置", "模板交付包/.codex/hooks.json");
+requireMissingFile("候选不交付身份护栏", "模板交付包/.codex/beyond-runtime-guard.mjs");
+requireText("PM身份来自显式入口", pm, "用户显式调用`$identity-pm`");
+requireText("压缩恢复不改变PM身份", pm, "上下文压缩、恢复和“继续”不改变该身份");
+forbidText("PM不再调用运行身份命令", pm, "runtime-identity");
+forbidText("PM不再要求Hook探针", pm, "hook-probe");
+requireText("安装脚本识别BEYOND旧处理器", controlScript, "value.includes(\"beyond-runtime-guard.mjs\")");
+requireText("安装脚本只过滤BEYOND旧处理器", controlScript, "const keptHandlers = group.hooks.filter");
+requireText("安装脚本保留无法识别的同名文件", controlScript, "preserved-unrecognized");
+requireText("安装脚本清理旧运行身份状态", controlScript, "identity-sessions");
+requireText("验真拒绝旧护栏脚本", installVerifier, "项目仍残留BEYOND身份护栏脚本");
+requireText("验真拒绝旧Hook引用", installVerifier, "项目现有Hook配置仍引用BEYOND身份护栏");
+forbidText("版本清单不登记运行Hook", releaseManifest, "runtimeHooks");
+forbidText("版本清单不登记身份脚本", releaseManifest, "runtimeGuard");
+requireText("架构明确Hook不是安装前提", architecture, "BEYOND不把平台Hook作为身份或安装前提");
 
 // S1：普通局部 BUG。
 requireText("S1清晰请求不制造任务", agents, "清晰请求不先输出接手确认，不把初始化仪式当成答案，也不凭空制造正式任务");
@@ -302,11 +295,11 @@ requireText("文档治理入口只在真实命中时读取", agents, "工作台�
 requireText("00入口承接异常文档治理", documentEntry, "只有项目初始化、项目接手发现工作台缺失/冲突或需要处理事实归位、文档创建更新与历史回收");
 requireText("初始化不进入普通任务热路径", agents, "不得把初始化问卷带入普通任务");
 requireText("升级先核对当前直接事实", agents, "已有项目或升级先只读检查现有`AGENTS.md`、代码、Git和Markdown");
-requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.1.2");
+requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.1.3");
 requireText("项目覆盖有专用边界", agents, "BEGIN BEYOND PROJECT OVERRIDES");
 requireText("安装逐文件对账六个Skill", installVerifier, "安装Skill内容不一致");
 requireText("安装核对项目完整运行内核", installVerifier, "项目入口的BEYOND运行内核与控制仓候选不一致");
-requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.1.2"');
+requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.1.3"');
 requireText("个人路径不读取团队共享区", agents, "普通项目接手、正式 Worker任务、Action Skill切换和个人任务不读取共享区");
 requireText("团队协同不替代正式Worker", agents, "不替代 3.0.9 的正式 Worker");
 requireText("PM协同Git权限严格限域", pm, "两条例外都不扩张到后续项目事实正文、其他项目文档、业务代码、仓库配置、成员权限或发布资料");

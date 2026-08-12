@@ -1,4 +1,4 @@
-<!-- BEYOND-RUNTIME-VERSION: 3.1.2 -->
+<!-- BEYOND-RUNTIME-VERSION: 3.1.3 -->
 # Codex 控制仓与项目入口
 
 本文件是 `beyond-control` 的 Codex 第一入口。项目初始化会把完整运行内核融合进业务项目根`AGENTS.md`，并保留项目原生规则；两种入口都只负责判断原则、请求分流、最小读入和全局边界，不复制项目事实、身份细则或专业方法。

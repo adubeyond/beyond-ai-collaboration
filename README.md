@@ -10,9 +10,9 @@ BEYOND is a document-driven AI engineering collaboration system for Codex. It tu
 
 Most AI coding tools focus on generating code faster. BEYOND focuses on a harder problem: helping AI understand a real project, stay within authorization, finish a complete business task, prove the result, and become more effective as project knowledge grows.
 
-[Installation and Project Initialization](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [v3.1.2 Upgrade Guide](docs/en/releases/v3.1.2.md) · [Architecture](docs/en/architecture.md) · [Control Repository Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
+[Installation and Project Initialization](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [v3.1.3 Upgrade Guide](docs/en/releases/v3.1.3.md) · [Architecture](docs/en/architecture.md) · [Control Repository Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
 
-> The current source candidate is `v3.1.2`. It keeps the v3.1.1 installation and existing-project adoption repairs while restoring a project-local control repository as the default. An external control repository is now an explicit user choice.
+> The current source candidate is `v3.1.3`. It keeps the v3.1.2 project-local control default while removing Hook trust, runtime probes, and mandatory restarts from the standard path. PM and Worker identity continues to follow explicit Skills, user-visible tasks, and source relationships.
 
 ## What BEYOND changes
 
@@ -101,7 +101,7 @@ This structure keeps the safety core complete without forcing every task to read
 
 ## Quick start
 
-The repository includes a zero-dependency Node.js fixture. Copy the template package into the fixture root as an independent `beyond-control/` repository, initialize it, and fuse the complete runtime kernel plus the project-level identity guard into the fixture. Existing project Hooks are backed up and preserved. Review and trust the BEYOND Hook once after its first installation or a content change; it is not a per-task approval.
+The repository includes a zero-dependency Node.js fixture. Copy the template package into the fixture root as an independent `beyond-control/` repository, initialize it, and fuse the complete runtime kernel into the fixture. The standard path does not install a BEYOND identity Hook. Existing-project upgrades remove only legacy BEYOND guard handlers and preserve every unrelated Hook.
 
 Requirements:
 

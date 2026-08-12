@@ -57,7 +57,7 @@ A production task establishes one current context for its target, running versio
 
 Project facts do not use an `uninitialized / refresh-needed / available` runtime state machine.
 
-A project-level Codex Hook binds PM or Worker identity to the current session, restores that identity after resume or compaction, and mechanically blocks PM business writes while preserving user-visible task controls. Existing project Hooks are merged, not replaced. The user reviews and trusts the BEYOND Hook once after first installation or a content change. This is a Codex pre-tool guardrail, not an operating-system security boundary; a removed or untrusted Hook, or a platform-specific tool path that bypasses Hooks, must fail installation claims rather than be described as mechanically blocked.
+PM or Worker identity comes from the explicit user entry, the current user-visible task, and its source relationship; resume or compaction does not change that identity. BEYOND does not require a platform Hook for identity or installation and does not present documentation as an operating-system security boundary. Codex permissions, Git protection, server and database ACLs, project rules, and explicit user authorization remain the hard controls for high-risk actions. Existing-project upgrades remove only legacy BEYOND guard handlers and preserve unrelated Hooks.
 
 ## Three business states
 

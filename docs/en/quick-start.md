@@ -1,6 +1,6 @@
 # BEYOND 3.1 Quick Start
 
-This page is for the minimal fixture. For real-project installation, upgrades, Hook review, new/existing-project initialization, and copy-ready prompts, use the [Installation, Upgrade, and Project Initialization Guide](../../模板交付包/docs/en/installation-upgrade-and-project-initialization.md) instead of assembling an adoption sequence from this example.
+This page is for the minimal fixture. For real-project installation, upgrades, new/existing-project initialization, and copy-ready prompts, use the [Installation, Upgrade, and Project Initialization Guide](../../模板交付包/docs/en/installation-upgrade-and-project-initialization.md) instead of assembling an adoption sequence from this example.
 
 **English** | [简体中文](../快速开始.md)
 
@@ -70,19 +70,13 @@ task-test
 task-ops
 ```
 
-From the business-project root, start Codex CLI and enter `/hooks` to review and trust the project Hook. Project trust and Hook-definition trust are separate. Then run this fixed command from a Codex project task:
-
-```text
-node beyond-control/scripts/beyond-control.mjs hook-probe --project-root "<business project root>"
-```
-
-Before restarting Codex, verify the actual installed copy from the immutable release checkout:
+Verify the actual installed copy from the immutable release checkout:
 
 ```text
 node beyond-control/scripts/verify-install-integrity.mjs --installed-skills-root "<Codex Skills directory>" --project-agents "<business project root>/AGENTS.md"
 ```
 
-Installation or upgrade is complete only when this command exits with code `0` and confirms that all six Skills, the control-repository structure, the full project runtime kernel, and the real Hook probe match. `--content-only` checks files but does not prove that Codex executed the Hook. If `/hooks` is unavailable or the probe still fails after trust, record `codex --version` and `codex features list` and report a compatibility gap instead of searching for an undocumented Desktop menu. Restart Codex only after verification, then create a new task from the demo root.
+Installation or upgrade is complete only when this command exits with code `0` and confirms that all six Skills, the control-repository structure, and the full project runtime kernel match with no legacy BEYOND Hook content. `--content-only` checks candidate content but does not prove project fusion. Restart Codex only if the current client demonstrably retains stale Skill content, then create a new task from the demo root.
 
 ## Run the initial baseline
 

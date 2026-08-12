@@ -1,11 +1,9 @@
 {
   "schemaVersion": 3,
-  "releaseVersion": "3.1.2",
+  "releaseVersion": "3.1.3",
   "controlEntry": "AGENTS.md",
   "projectEntry": "AGENTS.md",
   "controlScript": "scripts/beyond-control.mjs",
-  "runtimeHooks": ".codex/hooks.json",
-  "runtimeGuard": ".codex/beyond-runtime-guard.mjs",
   "projectOverrideBegin": "<!-- BEGIN BEYOND PROJECT OVERRIDES -->",
   "projectOverrideEnd": "<!-- END BEYOND PROJECT OVERRIDES -->",
   "skills": [
