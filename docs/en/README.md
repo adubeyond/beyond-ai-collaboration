@@ -10,7 +10,8 @@ These documents explain the public product, its operating model, and the first r
 | --- | --- | --- |
 | First visit | [Product home](../../README.md) → [Architecture](architecture.md) | Understand the problem and decide whether BEYOND fits |
 | Existing v3.0.1 user | [v3.0.3 Upgrade Guide](releases/v3.0.3.md) → [Quick Start](quick-start.md) | Understand the rebuilt runtime and migrate without overwriting project facts |
-| First use | [Quick Start](quick-start.md) → [minimal fixture](../../examples/minimal-project/README.md) | Import the template and complete the first task |
+| First use or upgrade | [Installation, Upgrade, and Project Initialization](../../模板交付包/docs/en/installation-upgrade-and-project-initialization.md) | Install v3.1.2, trust the Hook, initialize a new or existing project, and start the PM |
+| Minimal fixture | [Quick Start](quick-start.md) → [minimal fixture](../../examples/minimal-project/README.md) | Verify the baseline and complete the first task |
 | Version history | [v3.0.3 Upgrade Guide](releases/v3.0.3.md) | Understand why v3.0.2 was abandoned and what changed after v3.0.1 |
 | Previous release | [v3.0.4 Upgrade Guide](releases/v3.0.4.md) | Review the three-state runtime simplification and migration boundaries |
 | Previous release | [v3.0.5 Upgrade Guide](releases/v3.0.5.md) | Review the result-first method and production-path changes |

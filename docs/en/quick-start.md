@@ -1,5 +1,7 @@
 # BEYOND 3.1 Quick Start
 
+This page is for the minimal fixture. For real-project installation, upgrades, Hook review, new/existing-project initialization, and copy-ready prompts, use the [Installation, Upgrade, and Project Initialization Guide](../../模板交付包/docs/en/installation-upgrade-and-project-initialization.md) instead of assembling an adoption sequence from this example.
+
 **English** | [简体中文](../快速开始.md)
 
 This guide uses the repository's zero-dependency Node.js fixture to verify three things:
