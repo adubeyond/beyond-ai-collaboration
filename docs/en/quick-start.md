@@ -29,25 +29,27 @@ npm --version
 
 Copy [`examples/minimal-project`](../../examples/minimal-project) to a new writable directory such as `beyond-demo`.
 
-Copy the complete [control-repository package](../../模板交付包) next to the demo and name it `beyond-control`. Do not copy the whole BEYOND document and Skill tree into the business project:
+Copy the complete [control-repository package](../../模板交付包) into the demo root and name it `beyond-control`. Keep it as one independent directory instead of scattering BEYOND files across the business project:
 
 ```text
 workspace/
+beyond-demo/
 ├─ beyond-control/
-└─ beyond-demo/
+└─ <existing code and documents>
 ```
 
 Initialize the control repository, inspect the business project, and install the fused project entry only after explicitly confirming BEYOND-led fusion:
 
 ```text
-node beyond-control/scripts/beyond-control.mjs init-control
-node beyond-control/scripts/beyond-control.mjs inspect-project --project-root "beyond-demo"
-node beyond-control/scripts/beyond-control.mjs install-project-entry --project-root "beyond-demo" --confirm-fusion yes
+cd beyond-demo
+node beyond-control/scripts/beyond-control.mjs init-control --project-root "."
+node beyond-control/scripts/beyond-control.mjs inspect-project --project-root "."
+node beyond-control/scripts/beyond-control.mjs install-project-entry --project-root "." --confirm-fusion yes
 ```
 
 Existing-project inspection prioritizes formal documents, legacy workbenches, nested repositories, and duplicate remotes. If active legacy tasks exist, add `--adopt-legacy-workbench yes`; if the same remote has multiple local directories, select exactly one path per duplicate-remote group with `--canonical-repositories "<path1>,<path2>"`. The script will not silently replace those facts with an empty workbench.
 
-The business project receives only the fused root `AGENTS.md`. BEYOND documents and project registration remain in the control repository; the personal workbench is under its Git-ignored `local/`. Empty project facts are expected and must not be filled with guesses.
+The business project receives the fused root `AGENTS.md` and project-level `.codex` guard. BEYOND documents and project registration remain in the project-local control repository; the personal workbench is under its Git-ignored `local/`. When the project root is a Git repository, initialization also ignores `/beyond-control/` and `/.beyond-local-backups/` there so neither the independent control repository nor local backups are accidentally staged as business code. Empty project facts are expected and must not be filled with guesses.
 
 Local fusion does not push automatically. The fixed script creates a shared project record, a minimal project overview, and a minimal facts index so the fused entry is immediately reachable. If teammates need them, authorize remote Git separately, then use the `project-registration` scope to push only these three foundation files for the same project.
 

@@ -15,8 +15,8 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repositoryRoot, "模板交付包");
 const scratch = mkdtempSync(join(tmpdir(), "beyond-team-control-"));
-const control = join(scratch, "beyond control");
 const project = join(scratch, "demo-project");
+const control = join(project, "beyond-control");
 const remote = join(scratch, "control-remote.git");
 const localFirstProject = join(scratch, "local-first-project");
 const secondClone = join(scratch, "second-clone");
@@ -45,18 +45,20 @@ function controlCommand(args, expectedStatus = 0) {
 }
 
 try {
-  cpSync(packageRoot, control, { recursive: true });
   cpSync(join(repositoryRoot, "examples", "minimal-project"), project, { recursive: true });
+  cpSync(packageRoot, control, { recursive: true });
   writeFileSync(join(project, "AGENTS.md"), "# 原项目规则\n\n- 使用 npm test 验证。\n", "utf8");
   run("git", ["init"], project);
   run("git", ["remote", "add", "origin", "https://example.com/team/demo-project.git"], project);
 
-  controlCommand(["init-control"]);
+  const nestedInit = JSON.parse(controlCommand(["init-control", "--project-root", project]).stdout);
   check("控制仓建立共享目录", existsSync(join(control, "shared", "tasks", "active")));
   check("控制仓建立本机工作台", existsSync(join(control, "local", "当前工作台.md")));
+  check("项目内初始化立即隔离控制仓与本机备份", nestedInit.projectIsolation?.rules?.includes("/beyond-control/")
+    && nestedInit.projectIsolation.rules.includes("/.beyond-local-backups/") && existsSync(join(project, ".gitignore")), JSON.stringify(nestedInit));
   const controlEntryBeforeSelfRegistration = readFileSync(join(control, "AGENTS.md"), "utf8");
   const rejectedSelfRegistration = controlCommand(["register-project", "--project-root", control], 2);
-  check("控制仓拒绝把自身登记为业务项目", rejectedSelfRegistration.output.includes("不能登记或融合为业务项目") && readFileSync(join(control, "AGENTS.md"), "utf8") === controlEntryBeforeSelfRegistration, rejectedSelfRegistration.output);
+  check("控制仓拒绝把自身登记为业务项目", rejectedSelfRegistration.output.includes("不能把自身登记或融合为业务项目") && readFileSync(join(control, "AGENTS.md"), "utf8") === controlEntryBeforeSelfRegistration, rejectedSelfRegistration.output);
   const ignored = run("git", ["check-ignore", "local/probe"], control);
   check("local由Git忽略", ignored.status === 0 && ignored.output.includes("local/probe"), ignored.output);
 
@@ -64,6 +66,7 @@ try {
   const inspected = JSON.parse(inspect.stdout);
   check("项目使用remote生成稳定编号", /^project-[a-f0-9]{12}$/.test(inspected.projectId), inspected.projectId);
   check("项目识别已有AGENTS", inspected.agentsPath?.endsWith("/AGENTS.md"), inspected.agentsPath);
+  check("项目内控制仓不改变业务项目Git根", inspected.gitRoot?.toLowerCase().endsWith("/demo-project"), inspected.gitRoot);
 
   cpSync(join(repositoryRoot, "examples", "minimal-project"), localFirstProject, { recursive: true });
   run("git", ["init"], localFirstProject);
@@ -93,14 +96,20 @@ try {
   const secureRecords = `${readFileSync(join(control, "shared", "projects", `${secureInspect.projectId}.md`), "utf8")}\n${readFileSync(join(control, "local", "projects", `${secureInspect.projectId}.md`), "utf8")}`;
   check("本机与共享项目登记不泄露remote凭据", !/secret-token|access_token|hidden/.test(secureRecords));
 
-  controlCommand(["install-project-entry", "--project-root", project, "--confirm-fusion", "yes"]);
+  const nestedInstall = JSON.parse(controlCommand(["install-project-entry", "--project-root", project, "--confirm-fusion", "yes"]).stdout);
   const firstEntry = readFileSync(join(project, "AGENTS.md"), "utf8");
-  check("项目入口包含完整3.1内核", firstEntry.includes("BEYOND-RUNTIME-VERSION: 3.1.1"));
-  check("项目入口登记控制仓", firstEntry.includes("BEYOND-CONTROL-ROOT: ../beyond control"));
-  check("带空格控制仓文档链接使用有效Markdown目标", firstEntry.includes("](<../beyond control/docs/AI编程协同机制/00-模板入口.md>)"));
-  check("项目入口把控制脚本映射到控制仓", firstEntry.includes("`../beyond control/scripts/beyond-control.mjs"));
+  check("项目入口包含完整3.1内核", firstEntry.includes("BEYOND-RUNTIME-VERSION: 3.1.2"));
+  check("项目入口登记项目内控制仓", firstEntry.includes("BEYOND-CONTROL-ROOT: ./beyond-control"));
+  check("项目内控制仓文档链接可达", firstEntry.includes("](./beyond-control/docs/AI编程协同机制/00-模板入口.md)"));
+  check("项目入口把控制脚本映射到项目内控制仓", firstEntry.includes("`./beyond-control/scripts/beyond-control.mjs"));
   check("原项目规则得到保留", firstEntry.includes("使用 npm test 验证"));
   check("业务项目没有复制BEYOND文档树", !existsSync(join(project, "docs", "AI编程协同机制")));
+  check("入口融合沿用既有Git隔离规则", nestedInstall.projectIsolation?.rules?.includes("/beyond-control/")
+    && nestedInstall.projectIsolation.rules.includes("/.beyond-local-backups/"), JSON.stringify(nestedInstall));
+  check("项目根忽略独立控制仓", existsSync(join(project, ".gitignore")) && readFileSync(join(project, ".gitignore"), "utf8").split(/\r?\n/).includes("/beyond-control/"));
+  check("项目根忽略BEYOND本机备份", readFileSync(join(project, ".gitignore"), "utf8").split(/\r?\n/).includes("/.beyond-local-backups/"));
+  const nestedIgnore = run("git", ["check-ignore", "beyond-control/AGENTS.md"], project);
+  check("项目Git不会把控制仓误收为业务代码", nestedIgnore.status === 0, nestedIgnore.output);
   const projectId = inspected.projectId;
   const projectOverview = join(control, "projects", projectId, "项目总览.md");
   const projectFacts = join(control, "projects", projectId, "项目事实", "README.md");

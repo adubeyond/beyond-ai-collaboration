@@ -1,4 +1,4 @@
-<!-- BEYOND-RUNTIME-VERSION: 3.1.1 -->
+<!-- BEYOND-RUNTIME-VERSION: 3.1.2 -->
 # Codex 控制仓与项目入口
 
 本文件是 `beyond-control` 的 Codex 第一入口。项目初始化会把完整运行内核融合进业务项目根`AGENTS.md`，并保留项目原生规则；两种入口都只负责判断原则、请求分流、最小读入和全局边界，不复制项目事实、身份细则或专业方法。
@@ -116,7 +116,7 @@ $identity-pm
 使用 BEYOND 接入或升级这个已有项目。
 ```
 
-两条路径都先定位或建立平级`beyond-control`，运行`scripts/beyond-control.mjs inspect-project`取得可从磁盘确认的事实，再只建立当前项目真正需要的最小基础：
+两条路径都默认定位或建立当前项目根下的`beyond-control/`；只有用户明确选择跨多个独立项目共用控制仓时，才使用外置路径。随后运行`scripts/beyond-control.mjs inspect-project`取得可从磁盘确认的事实，再只建立当前项目真正需要的最小基础：
 
 - 项目目标、业务边界和正式工作目录；
 - `local/`中的个人工作台和本机项目映射；

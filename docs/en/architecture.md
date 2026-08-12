@@ -17,7 +17,7 @@ BEYOND turns Codex into a PM-led agent team. Its purpose is to complete real bus
 
 PM and Worker are agent identities. Design, development, testing, and operations are methods, not additional agents.
 
-Version 3.1 preserves the v3.0.9 ordinary task path. It adds one optional sibling `beyond-control` repository containing BEYOND documents, project-level documents, team tasks, and collaboration records. Business code remains in each business repository. Personal tasks do not load the shared team path.
+Version 3.1 preserves the v3.0.9 ordinary task path. It adds an independent `beyond-control/` repository under the current project root by default, containing BEYOND documents, project-level documents, team tasks, and collaboration records. The user may explicitly place it outside the project only when several separate projects need one shared control repository. Business code remains in its existing repositories. Personal tasks do not load the shared team path.
 
 ## Default task flow
 

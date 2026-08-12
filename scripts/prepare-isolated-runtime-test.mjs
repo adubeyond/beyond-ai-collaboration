@@ -1044,15 +1044,15 @@ project: demo
 initializeGit(p18, "fixture: initialized team control repository");
 
 const p19Workspace = join(casesRoot, "P19-team-from-business");
-const p19Control = join(p19Workspace, "beyond-control");
 const p19Business = join(p19Workspace, "business");
-cpSync(candidateRoot, p19Control, { recursive: true, force: true });
+const p19Control = join(p19Business, "beyond-control");
 cpSync(join(repositoryRoot, "examples", "minimal-project"), p19Business, { recursive: true, force: true });
 writeFixture(p19Business, "AGENTS.md", "# 业务项目原生规则\n\n- 使用 npm test 验证。\n");
 initializeGit(p19Business, "fixture: business project before BEYOND fusion");
-execFileSync(process.execPath, [join(p19Control, "scripts", "beyond-control.mjs"), "init-control"], { cwd: p19Control, encoding: "utf8" });
+cpSync(candidateRoot, p19Control, { recursive: true, force: true });
+execFileSync(process.execPath, [join(p19Control, "scripts", "beyond-control.mjs"), "init-control", "--project-root", p19Business], { cwd: p19Control, encoding: "utf8" });
 execFileSync(process.execPath, [join(p19Control, "scripts", "beyond-control.mjs"), "install-project-entry", "--project-root", p19Business, "--confirm-fusion", "yes"], { cwd: p19Control, encoding: "utf8" });
-git(p19Business, "add", "AGENTS.md", ".codex/hooks.json", ".codex/beyond-runtime-guard.mjs");
+git(p19Business, "add", "AGENTS.md", ".gitignore", ".codex/hooks.json", ".codex/beyond-runtime-guard.mjs");
 git(p19Business, "commit", "-m", "fixture: fuse BEYOND project entry");
 writeFixture(p19Control, "shared/tasks/active/task-business.md", `---
 id: task-business
@@ -1062,25 +1062,31 @@ project: business
 ---
 # 从业务项目读取团队任务
 `);
-initializeGit(p19Control, "fixture: sibling control repository for business route");
+initializeGit(p19Control, "fixture: project-local control repository for business route");
 
 const p20Workspace = join(casesRoot, "P20-new-init-cold");
-const p20Control = join(p20Workspace, "beyond-control");
 const p20Project = join(p20Workspace, "new-project");
-cpSync(candidateRoot, p20Control, { recursive: true, force: true });
+const p20Control = join(p20Project, "beyond-control");
 writeFixture(p20Project, "package.json", `${JSON.stringify({ name: "new-cold-project", private: true }, null, 2)}\n`);
 writeFixture(p20Project, "README.md", "# 新项目\n");
 initializeGit(p20Project, "fixture: new project without BEYOND entry");
+cpSync(candidateRoot, p20Control, { recursive: true, force: true });
+execFileSync(process.execPath, [join(p20Control, "scripts", "beyond-control.mjs"), "init-control", "--project-root", p20Project], { cwd: p20Control, encoding: "utf8" });
+git(p20Project, "add", ".gitignore");
+git(p20Project, "commit", "-m", "fixture: ignore project-local BEYOND control repository");
 initializeGit(p20Control, "fixture: control repository for new-project cold start");
 
 const p21Workspace = join(casesRoot, "P21-existing-init-cold");
-const p21Control = join(p21Workspace, "beyond-control");
 const p21Project = join(p21Workspace, "existing-project");
-cpSync(candidateRoot, p21Control, { recursive: true, force: true });
+const p21Control = join(p21Project, "beyond-control");
 cpSync(join(repositoryRoot, "examples", "minimal-project"), p21Project, { recursive: true, force: true });
 writeFixture(p21Project, "AGENTS.md", "# 原生项目规则\n\n- 提交前运行 npm test。\n");
 writeFixture(p21Project, "docs/deployment.md", "# 当前部署资料\n\n- 发布方式仍待项目负责人确认。\n");
 initializeGit(p21Project, "fixture: existing project before BEYOND adoption");
+cpSync(candidateRoot, p21Control, { recursive: true, force: true });
+execFileSync(process.execPath, [join(p21Control, "scripts", "beyond-control.mjs"), "init-control", "--project-root", p21Project], { cwd: p21Control, encoding: "utf8" });
+git(p21Project, "add", ".gitignore");
+git(p21Project, "commit", "-m", "fixture: ignore project-local BEYOND control repository");
 initializeGit(p21Control, "fixture: control repository for existing-project cold start");
 
 const p14 = join(casesRoot, "P14-takeover-paused");

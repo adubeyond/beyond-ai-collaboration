@@ -193,8 +193,8 @@ try {
   const businessRoot = join(scratch, "business-project");
   cpSync(join(controlRoot, ".codex"), join(businessRoot, ".codex"), { recursive: true });
   const businessAgents = readFileSync(join(controlRoot, "AGENTS.md"), "utf8").replace(
-    "<!-- BEYOND-RUNTIME-VERSION: 3.1.1 -->",
-    "<!-- BEYOND-RUNTIME-VERSION: 3.1.1 -->\n<!-- BEYOND-CONTROL-ROOT: ../beyond-control -->\n<!-- BEYOND-PROJECT-ID: project-probe -->",
+    "<!-- BEYOND-RUNTIME-VERSION: 3.1.2 -->",
+    "<!-- BEYOND-RUNTIME-VERSION: 3.1.2 -->\n<!-- BEYOND-CONTROL-ROOT: ../beyond-control -->\n<!-- BEYOND-PROJECT-ID: project-probe -->",
   );
   writeFileSync(join(businessRoot, "AGENTS.md"), businessAgents, "utf8");
   const businessGuard = join(businessRoot, ".codex", "beyond-runtime-guard.mjs");

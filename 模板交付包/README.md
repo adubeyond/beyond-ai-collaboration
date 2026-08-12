@@ -1,6 +1,6 @@
 # BEYOND 3.1 控制仓交付包
 
-本目录用于建立一个与业务项目平级的`beyond-control`控制仓。它同时保存 BEYOND正式文档、六个 Skills源码、项目级 BEYOND文档、团队任务和协同内容；业务代码继续留在各自项目仓。每个成员自己的工作台位于`local/`并由 Git忽略。
+本目录用于在当前项目根下建立独立的`beyond-control/`控制仓。它同时保存 BEYOND正式文档、六个 Skills源码、项目级 BEYOND文档、团队任务和协同内容；业务代码继续留在原目录或各自项目仓。每个成员自己的工作台位于`local/`并由 Git忽略。只有用户明确要让多个完全独立项目共用同一控制仓时，才把它放到项目之外。
 
 ## 1. 使用入口
 
@@ -68,10 +68,18 @@ Skill 无法识别时优先检查 UTF-8 无 BOM、文件头、frontmatter、安�
 
 ## 4. 初始化入口
 
-先把本目录作为独立`beyond-control`放在业务项目同级，然后运行：
+默认把本目录复制到项目根下并命名为`beyond-control`，不要把交付包内容散着覆盖项目文件：
+
+```text
+业务项目/
+├─ beyond-control/
+└─ <原有代码与文档>
+```
+
+然后从项目根运行：
 
 ```powershell
-node scripts/beyond-control.mjs init-control
+node beyond-control/scripts/beyond-control.mjs init-control --project-root "."
 ```
 
 安装成功后必须直接向用户展示两个可在未接入项目中生效的入口：
@@ -89,8 +97,8 @@ $identity-pm
 新项目按需询问尚不存在的事实；已有项目先调查代码、Git、`AGENTS.md`和Markdown，只询问缺失与冲突。用户确认以 BEYOND为主融合后，再运行项目入口安装动作；固定脚本会备份原入口、保留项目原生规则并建立本机/共享项目登记。
 
 ```powershell
-node scripts/beyond-control.mjs inspect-project --project-root "<业务项目目录>"
-node scripts/beyond-control.mjs install-project-entry --project-root "<业务项目目录>" --confirm-fusion yes
+node beyond-control/scripts/beyond-control.mjs inspect-project --project-root "<业务项目目录>"
+node beyond-control/scripts/beyond-control.mjs install-project-entry --project-root "<业务项目目录>" --confirm-fusion yes
 ```
 
 本地融合不自动推送。固定脚本会建立共享项目登记、最小项目总览和最小事实索引，保证融合入口立即可达；需要让其他成员取得这些基础时，用户另行授权远端Git后，再用`project-registration`范围精确推送同一项目的这三份文件。该范围不能提交后续事实正文、其他项目文档或业务代码。

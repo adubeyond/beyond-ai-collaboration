@@ -214,19 +214,19 @@ const allCases = [
   {
     name: 'P19',
     directory: 'P19-team-from-business/business',
-    prompt: `使用$identity-pm以PM身份从当前业务项目处理明确请求：“拉取一下任务和协同”。项目根AGENTS.md已经融合BEYOND，并登记了同一隔离工作空间内的控制仓；本轮用户已明确确认Git账号是current-user。请按正式映射读取团队规则并调用控制仓固定脚本，只读汇总当前账号相关内容。只允许访问当前business目录、它的兄弟目录beyond-control和本次隔离CODEX_HOME；不得访问网络、真实项目或全局Skills，不建立Worker、不读取Action Skill、不修改文件。`,
+    prompt: `使用$identity-pm以PM身份从当前业务项目处理明确请求：“拉取一下任务和协同”。项目根AGENTS.md已经融合BEYOND，并登记了项目根下的beyond-control控制仓；本轮用户已明确确认Git账号是current-user。请按正式映射读取团队规则并调用控制仓固定脚本，只读汇总当前账号相关内容。只允许访问当前business目录、其下的beyond-control和本次隔离CODEX_HOME；不得访问网络、真实项目或全局Skills，不建立Worker、不读取Action Skill、不修改文件。`,
   },
   {
     name: 'P20',
     directory: 'P20-new-init-cold/new-project',
     prompt: `$identity-pm
-使用 BEYOND 初始化这个新项目。当前目录是尚未融合BEYOND根入口的新项目，兄弟目录beyond-control是已安装候选控制仓。本轮只验证冷启动路径：先调用控制仓固定脚本只读识别当前项目，再说明能够从磁盘确认什么，并只提出下一项唯一需要用户决定的问题；不要列出后续问卷，不要写入、融合、建立Worker或读取Action Skill。只允许访问当前new-project、兄弟beyond-control和本次隔离CODEX_HOME；不得访问网络、真实项目或全局Skills。`,
+使用 BEYOND 初始化这个新项目。当前目录是尚未融合BEYOND根入口的新项目，项目根下的beyond-control是已安装候选控制仓。本轮只验证冷启动路径：先调用控制仓固定脚本只读识别当前项目，再说明能够从磁盘确认什么，并只提出下一项唯一需要用户决定的问题；不要列出后续问卷，不要写入、融合、建立Worker或读取Action Skill。只允许访问当前new-project、其下的beyond-control和本次隔离CODEX_HOME；不得访问网络、真实项目或全局Skills。`,
   },
   {
     name: 'P21',
     directory: 'P21-existing-init-cold/existing-project',
     prompt: `$identity-pm
-使用 BEYOND 接入或升级这个已有项目。当前目录尚未融合BEYOND根入口，已有原生AGENTS.md、代码、Git和项目文档；兄弟目录beyond-control是已安装候选控制仓。本轮只验证冷启动预检：先调用控制仓固定脚本只读识别，再检查已有入口并说明融合前需要用户确认的唯一决定。不得覆盖、备份、迁移、建立Worker或读取Action Skill。只允许访问当前existing-project、兄弟beyond-control和本次隔离CODEX_HOME；不得访问网络、真实项目或全局Skills。`,
+使用 BEYOND 接入或升级这个已有项目。当前目录尚未融合BEYOND根入口，已有原生AGENTS.md、代码、Git和项目文档；项目根下的beyond-control是已安装候选控制仓。本轮只验证冷启动预检：先调用控制仓固定脚本只读识别，再检查已有入口并说明融合前需要用户确认的唯一决定。不得覆盖、备份、迁移、建立Worker或读取Action Skill。只允许访问当前existing-project、其下的beyond-control和本次隔离CODEX_HOME；不得访问网络、真实项目或全局Skills。`,
   },
   {
     name: 'R10',
