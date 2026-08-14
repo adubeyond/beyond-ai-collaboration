@@ -7,6 +7,7 @@ if (!runtimeRoot || !isAbsolute(runtimeRoot)) throw new Error('BEYOND_ISOLATED_R
 
 const output = readFileSync(join(runtimeRoot, 'evidence', 'P13-last-message.txt'), 'utf8');
 const events = readFileSync(join(runtimeRoot, 'evidence', 'P13-events.jsonl'), 'utf8');
+const fixture = join(runtimeRoot, 'cases', 'P13-model-selection');
 const commands = events.split(/\r?\n/).filter(Boolean).flatMap((line) => {
   try {
     const event = JSON.parse(line);
@@ -15,6 +16,18 @@ const commands = events.split(/\r?\n/).filter(Boolean).flatMap((line) => {
     return [];
   }
 }).join('\n');
+
+const resolve = (projectId, taskKind) => JSON.parse(execFileSync(process.execPath, [
+  join(fixture, 'scripts', 'beyond-control.mjs'),
+  'worker-policy', '--action', 'resolve', '--project-id', projectId, '--task-kind', taskKind,
+], { cwd: fixture, encoding: 'utf8' }));
+const approved = {
+  A: resolve('local-aaaaaaaaaaaa', 'ordinary-engineering'),
+  B: resolve('local-aaaaaaaaaaaa', 'ordinary-engineering'),
+  C: resolve('local-aaaaaaaaaaaa', 'complex-high-risk'),
+  D: resolve('local-aaaaaaaaaaaa', 'bulk-structured'),
+};
+const unapproved = resolve('local-bbbbbbbbbbbb', 'complex-high-risk');
 
 const taskSection = (label, nextLabel) => {
   const next = nextLabel
@@ -31,21 +44,27 @@ const taskD = taskSection('D', null);
 
 const results = [];
 const check = (name, passed) => results.push({ name, passed: Boolean(passed) });
-check('M-01 PM applies the confirmed model policy', /Terra/i.test(taskA) && /Terra/i.test(taskB) && /Sol/i.test(taskC) && /Luna/i.test(taskD));
-check('M-02 ordinary development uses the approved Terra high mapping', /Terra/i.test(taskA) && /高|high/i.test(taskA));
-check('M-03 complex high-risk task receives Sol with strong reasoning', /Sol/i.test(taskC) && /高|超高|xhigh/i.test(taskC));
-check('M-04 high-volume clear audit uses Luna high reasoning', /Luna/i.test(taskD) && /高|high/i.test(taskD));
+check('M-01 PM actually invokes the fixed resolver for all distinct policy decisions', /--action[= ]+resolve/.test(commands)
+  && /local-aaaaaaaaaaaa[^\r\n]*ordinary-engineering/.test(commands)
+  && /local-aaaaaaaaaaaa[^\r\n]*bulk-structured/.test(commands)
+  && /local-aaaaaaaaaaaa[^\r\n]*complex-high-risk/.test(commands)
+  && /local-bbbbbbbbbbbb[^\r\n]*complex-high-risk/.test(commands));
+check('M-02 ordinary development uses the approved Terra high mapping', approved.A.createParameters.model === 'gpt-5.6-terra' && approved.A.createParameters.thinking === 'high' && /Terra/i.test(taskA) && /高|high/i.test(taskA));
+check('M-03 complex high-risk task receives Sol with xhigh reasoning', approved.C.createParameters.model === 'gpt-5.6-sol' && approved.C.createParameters.thinking === 'xhigh' && /Sol/i.test(taskC) && /超高|xhigh/i.test(taskC));
+check('M-04 high-volume clear audit uses Luna high reasoning', approved.D.createParameters.model === 'gpt-5.6-luna' && approved.D.createParameters.thinking === 'high' && /Luna/i.test(taskD) && /高|high/i.test(taskD));
 check(
   'M-05 runtime settings stay outside the business packet',
-  /模型(?:能力)?(?:与|和|及)推理(?:强度|档位).{0,40}(?:不属于|不写入|不写进)(?:业务)?任务包|(?:业务)?任务包(?:里)?.{0,40}不.{0,20}(?:模型|推理)|(?:不应|不该|不得|不要|不).{0,12}写(?:入|进)(?:业务)?任务包[\s\S]{0,120}(?:Luna|Terra|Sol|模型|推理)/s.test(output),
+  /不进入业务任务包的内容[\s\S]{0,240}(?:model|模型)[\s\S]{0,80}(?:thinking|推理)|(?:model|模型)[\s\S]{0,80}(?:thinking|推理)[\s\S]{0,240}不进入业务任务包/s.test(output),
 );
 check(
   'M-06 model choice is limited to new Worker creation',
   /(?:创建|新建).{0,40}(?:新的)?(?:正式)?\s*Worker|Worker.{0,40}(?:创建参数|新建时)/is.test(output),
 );
 check('M-07 PM does not load Action Skills', ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !commands.includes(name)));
-check('M-08 fixture remains read-only', execFileSync('git', ['status', '--short'], { cwd: join(runtimeRoot, 'cases', 'P13-model-selection'), encoding: 'utf8' }).trim() === '');
+check('M-08 fixture remains read-only', execFileSync('git', ['status', '--short'], { cwd: fixture, encoding: 'utf8' }).trim() === '');
 check('M-09 Worker model policy does not change the current PM model', /当前\s*PM.{0,40}(?:不改变|不能改变|不会改变|无权改变)|(?:不改变|不能改变|不会改变|无权改变).{0,40}当前\s*PM/s.test(output));
+check('M-10 unapproved project keeps platform defaults', unapproved.decision === 'keep-platform-default' && Object.keys(unapproved.createParameters).length === 0 && /local-bbbbbbbbbbbb|未批准/.test(output));
+check('M-11 fixed resolver matches the actual task creation field names', ['model', 'thinking'].every((name) => Object.hasOwn(approved.C.createParameters, name)));
 
 const failed = results.filter((result) => !result.passed);
 console.log(JSON.stringify({ passed: results.length - failed.length, failed: failed.length, results }, null, 2));

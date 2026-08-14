@@ -98,7 +98,7 @@ try {
 
   const nestedInstall = JSON.parse(controlCommand(["install-project-entry", "--project-root", project, "--confirm-fusion", "yes"]).stdout);
   const firstEntry = readFileSync(join(project, "AGENTS.md"), "utf8");
-  check("项目入口包含完整3.1内核", firstEntry.includes("BEYOND-RUNTIME-VERSION: 3.1.4"));
+  check("项目入口包含完整3.1内核", firstEntry.includes("BEYOND-RUNTIME-VERSION: 3.1.5"));
   check("项目入口登记项目内控制仓", firstEntry.includes("BEYOND-CONTROL-ROOT: ./beyond-control"));
   check("项目内控制仓文档链接可达", firstEntry.includes("](./beyond-control/docs/AI编程协同机制/00-模板入口.md)"));
   check("项目入口把控制脚本映射到项目内控制仓", firstEntry.includes("`./beyond-control/scripts/beyond-control.mjs"));
@@ -159,9 +159,8 @@ try {
     join(control, "skills"),
     "--project-agents",
     join(project, "AGENTS.md"),
-    "--content-only",
   ], control);
-  check("融合入口通过内容验真", verify.output.includes("内容验真通过"), verify.output);
+  check("融合入口与项目策略通过完整安装验真", verify.output.includes("安装验真通过"), verify.output);
 
   const localMarker = join(control, "local", "backup-probe.md");
   writeFileSync(localMarker, "before\n", "utf8");

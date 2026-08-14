@@ -99,12 +99,27 @@ try {
   upserted = readFileSync(workbenchPath, 'utf8');
   check('upsert updates the same task row without duplication', updatedResult?.mode === 'updated' && (upserted.match(/worker-register/g) ?? []).length === 1 && upserted.includes('evidence/register-fix.md'));
 
-  const beforeDuplicate = upserted;
+  const beforeProgress = readFileSync(workbenchPath, 'utf8');
+  const progressed = run(['workbench', '--action', 'progress', '--thread', 'worker-active', '--progress', '定点回归已通过', '--updated', '2026-08-11']);
+  const progressedResult = parseJson(progressed.stdout);
+  const afterProgress = readFileSync(workbenchPath, 'utf8');
+  const beforeActiveLine = beforeProgress.split(/\r?\n/).find((line) => line.includes('| worker-active |'));
+  const afterActiveLine = afterProgress.split(/\r?\n/).find((line) => line.includes('| worker-active |'));
+  check('progress updates only the active task milestone', progressedResult?.thread === 'worker-active'
+    && afterProgress.includes('| worker-active | 进行中 | 定点回归已通过 |')
+    && beforeActiveLine && afterActiveLine
+    && afterProgress.replace(afterActiveLine, beforeActiveLine) === beforeProgress);
+  const beforeInvalidProgress = afterProgress;
+  run(['workbench', '--action', 'progress', '--thread', 'worker-paused', '--progress', '错误更新'], 1);
+  check('progress rejects non-active tasks without changing the workbench', readFileSync(workbenchPath, 'utf8') === beforeInvalidProgress);
+
+  const beforeDuplicate = readFileSync(workbenchPath, 'utf8');
   run(['workbench', '--action', 'upsert', '--task', '修复注册异常', '--thread', 'worker-register-duplicate', '--status', '进行中', '--progress', '重复派发', '--pause', '无', '--result', '无', '--updated', '2026-08-11'], 1);
   check('upsert rejects a second thread for the same business result', readFileSync(workbenchPath, 'utf8') === beforeDuplicate);
 
   const backupsAfterUpsert = existsSync(backupBase) ? readdirSync(backupBase) : [];
-  check('workbench upsert creates local recovery snapshots', backupsAfterUpsert.some((name) => name.includes('workbench-upsert')));
+  check('workbench writes create local recovery snapshots', backupsAfterUpsert.some((name) => name.includes('workbench-upsert'))
+    && backupsAfterUpsert.some((name) => name.includes('workbench-progress')));
 
   const snapshot = run(['workbench', '--action', 'snapshot', '--mainline', '完成注册稳定性', '--status', '进行中', '--problem', '等待真实回归', '--evidence', 'evidence/register-fix.md', '--next', '执行隔离回归', '--decision', '无', '--updated', '2026-08-11']);
   const snapshotResult = parseJson(snapshot.stdout);

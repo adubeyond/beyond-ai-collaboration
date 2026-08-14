@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.1.5] - 2026-08-14
+
+### Added
+
+- Add a project-scoped local result inbox with fixed `enqueue`, `list`, and `ack` actions so Worker completion or pause results can be consumed by the PM at a safe user turn without interrupting an answer already being generated.
+- Add a fixed Worker-policy owner with explicit `show`, `set`, and `resolve` actions. Projects can retain platform defaults or opt into the BEYOND Worker matrix: Terra/high for ordinary engineering, Luna/high for bulk structured work, and Sol/xhigh for complex or high-risk work.
+- Add a real isolated control-plane integration that runs PM dispatch, Worker implementation/testing/local commit/result registration, PM verification/workbench closeout, and inbox archival as one 29-assertion chain.
+
+### Changed
+
+- Move persistent new-Worker policy out of root project overrides and into a managed project-overview block; initialization shows concrete choices and keeps platform defaults when the user does not choose.
+- Replace direct Worker-to-PM terminal injection with one idempotent local inbox record. The PM reads it once at a user-initiated safe boundary, verifies the formal Worker and main evidence, updates the workbench, then archives the record.
+- Add a fixed short workbench progress writer with validation and recoverable local backups; compact terminal summaries preserve the actual-versus-expected direction for field mappings and object ownership.
+
+### Removed
+
+- Remove the obsolete direct-callback integration harness so the public test suite no longer treats the retired PM-interruption path as current evidence.
+
 ## [3.1.4] - 2026-08-12
 
 ### Fixed

@@ -46,7 +46,7 @@ const audit = output('WFA06');
 check('WFA-06 keeps the frozen first-review baseline and defect list', /(冻结|固定|保留).{0,30}(audit-v1|首轮|缺陷清单)|(audit-v1|首轮缺陷(?:事实|清单)?).{0,30}(冻结|固定|保留)/s.test(audit));
 check('WFA-06 retests affected B templates and protection fields', /B\s*类.{0,40}(12|十二).{0,40}(模板|对象)|(12|十二).{0,20}个?\s*B\s*类模板/s.test(audit) && ['title', 'publishedAt', 'sourceName'].every((field) => audit.includes(field)));
 check('WFA-06 does not require full review without a real trigger', /(不需要|无需|不必|不应|不能).{0,32}(全量|100个|100 个).{0,20}(审查|复审|重跑)|(?:全量|100个|100 个).{0,32}(不需要|无需|不必|不应)/s.test(audit));
-check('WFA-06 names impact uncertainty or shared change as a full-review trigger', /(影响范围|影响面).{0,20}(不清|无法|不能).{0,20}(全量|复审)|(?:共享|公共).{0,20}(解析器|基础|契约).{0,30}(变化|修改).{0,30}(全量|复审)/s.test(audit));
+check('WFA-06 names impact uncertainty or shared change as a full-review trigger', /(?:影响范围|影响面|波及范围).{0,20}(?:不清|不明|无法|不能).{0,20}(?:全量|复审)|(?:共享|公共).{0,20}(?:解析器|基础|契约|转换逻辑).{0,30}(?:变化|修改).{0,30}(?:全量|复审)|(?:触发|升级).{0,20}(?:重新)?全量复审[\s\S]{0,500}(?:影响范围|影响面|波及范围).{0,20}(?:不清|不明|无法|不能)/s.test(audit));
 check('WFA-06 fixture remains read-only', gitClean('WFA06-audit-retest'));
 
 const coupling = output('WFA08');

@@ -28,8 +28,8 @@ function copySkills(root) {
 function fusedEntry(controlRelative, projectId) {
   return cpEntry()
     .replace(
-      "<!-- BEYOND-RUNTIME-VERSION: 3.1.4 -->",
-      `<!-- BEYOND-RUNTIME-VERSION: 3.1.4 -->\n<!-- BEYOND-CONTROL-ROOT: ${controlRelative} -->\n<!-- BEYOND-PROJECT-ID: ${projectId} -->`,
+      "<!-- BEYOND-RUNTIME-VERSION: 3.1.5 -->",
+      `<!-- BEYOND-RUNTIME-VERSION: 3.1.5 -->\n<!-- BEYOND-CONTROL-ROOT: ${controlRelative} -->\n<!-- BEYOND-PROJECT-ID: ${projectId} -->`,
     )
     .replace(/\]\(docs\//g, `](${controlRelative}/docs/`)
     .replace(/\]\(local\//g, `](${controlRelative}/local/`)
@@ -41,6 +41,21 @@ function cpEntry() {
   return readFileSync(join(packageRoot, "AGENTS.md"), "utf8");
 }
 
+function writeProjectOverview(controlRoot, projectId) {
+  const path = join(controlRoot, "projects", projectId, "项目总览.md");
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `# 安装验真项目总览
+
+## Worker运行策略
+
+<!-- BEGIN BEYOND WORKER POLICY -->
+\`\`\`json
+{"schemaVersion":1,"mode":"platform-default","scope":"new-formal-worker","confirmed":false,"approvedBy":null,"approvedAt":null}
+\`\`\`
+<!-- END BEYOND WORKER POLICY -->
+`, "utf8");
+}
+
 try {
   const exactRoot = join(scratch, "exact");
   copySkills(exactRoot);
@@ -49,6 +64,8 @@ try {
 
   const controlRoot = join(scratch, "beyond-control");
   cpSync(packageRoot, controlRoot, { recursive: true });
+  writeProjectOverview(controlRoot, "project-demo");
+  writeProjectOverview(controlRoot, "project-third-party");
   const fusedRoot = join(scratch, "fused");
   copySkills(fusedRoot);
   writeFileSync(join(fusedRoot, "AGENTS.md"), fusedEntry("../beyond-control", "project-demo"), "utf8");
@@ -74,7 +91,7 @@ try {
 
   const oldEntryRoot = join(scratch, "old-entry");
   copySkills(oldEntryRoot);
-  writeFileSync(join(oldEntryRoot, "AGENTS.md"), cpEntry().replace("<!-- BEYOND-RUNTIME-VERSION: 3.1.4 -->\n", ""), "utf8");
+  writeFileSync(join(oldEntryRoot, "AGENTS.md"), cpEntry().replace("<!-- BEYOND-RUNTIME-VERSION: 3.1.5 -->\n", ""), "utf8");
   run("旧项目入口混入", 1, join(oldEntryRoot, "skills"), join(oldEntryRoot, "AGENTS.md"), "缺少目标版本标记");
 
   const staleGuardRoot = join(scratch, "stale-guard");

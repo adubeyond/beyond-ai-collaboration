@@ -60,6 +60,8 @@ Use BEYOND to initialize this new project.
 
 The PM investigates first and asks one currently necessary question at a time. Confirm entry fusion with:
 
+Before initialization closes, run `worker-policy --action show --project-id <current-project>` and show the user the concrete model and reasoning parameters for both platform defaults and the BEYOND Worker matrix. Save only the user's explicit choice in the managed project-overview block. If the user does not choose, keep platform defaults without blocking other initialization or ordinary work.
+
 ```text
 Confirm BEYOND-led AGENTS.md fusion while preserving the project's native rules.
 Establish only the project entry and document foundation; do not start business tasks or push remote Git.
@@ -79,12 +81,13 @@ First inspect the existing AGENTS.md, code and Git boundaries, Markdown document
 Do not reinstall, start, or resume business tasks. Ask me to confirm one migration or fusion decision at a time.
 ```
 
-Confirm repository boundaries, active tasks, legacy-workbench migration, durable product and engineering fact locations, entry fusion, and local/team identity. When ready:
+Confirm repository boundaries, active tasks, legacy-workbench migration, durable product and engineering fact locations, entry fusion, local/team identity, and the new-Worker policy. Run the fixed `worker-policy --action show` command before asking. A legacy model-policy line in the root override is only a migration candidate: it must not be silently inherited. After explicit user confirmation, move it into the managed project-overview block and remove the old root line in the same fusion action. When ready:
 
 ```text
 Confirm BEYOND-led AGENTS.md fusion while preserving all native project rules and formal documents.
 Back up the legacy workbench, move only truly active tasks into the current workbench, and archive completed or obsolete items without deleting conversations or evidence.
 Remove only legacy BEYOND identity Hook content and preserve all other Hooks.
+If a legacy Worker model policy is found, show the concrete fixed-script choices first, migrate my explicit selection into the project overview, and remove the old root override instead of retaining both.
 Complete existing-project initialization only; do not start or resume business tasks or push remote Git.
 ```
 
