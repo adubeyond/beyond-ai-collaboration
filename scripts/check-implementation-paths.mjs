@@ -310,11 +310,11 @@ requireText("文档治理入口只在真实命中时读取", agents, "工作台�
 requireText("00入口承接异常文档治理", documentEntry, "只有项目初始化、项目接手发现工作台缺失/冲突或需要处理事实归位、文档创建更新与历史回收");
 requireText("初始化不进入普通任务热路径", agents, "不得把初始化问卷带入普通任务");
 requireText("升级先核对当前直接事实", agents, "已有项目或升级先只读检查现有`AGENTS.md`、代码、Git和Markdown");
-requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.1.4");
+requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.1.5");
 requireText("项目覆盖有专用边界", agents, "BEGIN BEYOND PROJECT OVERRIDES");
 requireText("安装逐文件对账六个Skill", installVerifier, "安装Skill内容不一致");
 requireText("安装核对项目完整运行内核", installVerifier, "项目入口的BEYOND运行内核与控制仓候选不一致");
-requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.1.4"');
+requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.1.5"');
 requireText("个人路径不读取团队共享区", agents, "普通项目接手、正式 Worker任务、Action Skill切换和个人任务不读取共享区");
 requireText("团队协同不替代正式Worker", agents, "不替代 3.0.9 的正式 Worker");
 requireText("PM协同Git权限严格限域", pm, "两条例外都不扩张到后续项目事实正文、其他项目文档、业务代码、仓库配置、成员权限或发布资料");
