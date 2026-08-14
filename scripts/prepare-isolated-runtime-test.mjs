@@ -1259,6 +1259,7 @@ for (const caseName of ["WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker"])
 }
 
 const controlPlane = join(casesRoot, "WST-CONTROL-PLANE-integration");
+const controlPlaneProjectId = "local-c0ffee123456";
 setWorkbench(
   controlPlane,
   "| 2026-08-04 | 修复公司详情重复负责人 | 进行中 | 已有明确故障和验收，尚未建立任务 | docs/business/company-manager-fix.md | PM建立一个正式Worker任务 | 无 |",
@@ -1314,6 +1315,29 @@ test('shows the same manager once in detail and export', () => {
 });
 `);
 writeFixture(controlPlane, "notes/unrelated.txt", "user-owned unrelated note\n");
+const controlPlaneAgentsPath = join(controlPlane, "AGENTS.md");
+writeFileSync(
+  controlPlaneAgentsPath,
+  readFileSync(controlPlaneAgentsPath, "utf8").replace(
+    /^(<!-- BEYOND-RUNTIME-VERSION: [^\r\n]+ -->)/,
+    `$1\n<!-- BEYOND-CONTROL-ROOT: . -->\n<!-- BEYOND-PROJECT-ID: ${controlPlaneProjectId} -->`,
+  ),
+);
+writeFixture(controlPlane, `projects/${controlPlaneProjectId}/项目总览.md`, `# 隔离控制面项目总览
+
+> 项目编号：\`${controlPlaneProjectId}\`。
+
+- 正式项目：当前隔离Git项目。
+- 当前目标：验证公司负责人去重任务的完整控制面闭环。
+`);
+writeFixture(controlPlane, `local/projects/${controlPlaneProjectId}.md`, `---
+id: ${controlPlaneProjectId}
+name: 隔离控制面项目
+path: ${controlPlane}
+---
+
+# 隔离控制面项目本机登记
+`);
 initializeGit(controlPlane, "fixture: company manager duplication");
 writeFixture(controlPlane, "notes/unrelated.txt", "user-owned unrelated note\nkeep this dirty change\n");
 
