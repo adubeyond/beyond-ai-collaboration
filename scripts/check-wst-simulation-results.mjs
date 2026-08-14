@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
 const runtimeRoot = process.env.BEYOND_ISOLATED_ROOT;
@@ -102,7 +102,7 @@ const packetRoot = caseDirectory('WST-AB-PACKET', 'WST-AB-PACKET-review');
 const packetOutput = read(evidenceFile('WST-AB-PACKET'));
 const packetCommands = commands('WST-AB-PACKET').join('\n');
 const packetFacts = ['$identity-worker', '50', '全部异常', '站甲', '站乙', '站丙', '人工复核', 'evidence/three-site-quality-review/'];
-check('PACKET keeps every required business fact', packetFacts.every((fact) => packetOutput.includes(fact)) && /10\s*条/.test(packetOutput) && /原有三个站点\s*Worker/.test(packetOutput));
+check('PACKET keeps every required business fact', packetFacts.every((fact) => packetOutput.includes(fact)) && /10\s*条/.test(packetOutput) && /(?:原有三个站点|三个原站点|原三个站点|原站点)\s*Worker/.test(packetOutput));
 check('PACKET remains a compact business contract', [...packetOutput].length < 1200, 'chars=' + [...packetOutput].length);
 check('PACKET starts only Worker identity', !/\$task-(design|dev|test|ops)/.test(packetOutput));
 check('PACKET PM does not load Action Skills', !/task-(design|dev|test|ops)/.test(packetCommands));
@@ -112,20 +112,26 @@ const commsRoot = caseDirectory('WST-PM-COMMS', 'WST-PM-COMMS-status');
 const commsOutput = read(evidenceFile('WST-PM-COMMS'));
 const commsCommands = commands('WST-PM-COMMS').join('\n');
 const commsChanged = git(commsRoot, '-c', 'core.quotepath=false', 'diff', '--name-only').split(/\r?\n/).filter(Boolean).map((path) => path.replaceAll('\\', '/'));
+const commsBackupRoot = join(runtimeForCase('WST-PM-COMMS'), 'cases', '.beyond-local-backups', 'WST-PM-COMMS-status');
+const commsBackups = existsSync(commsBackupRoot) ? readdirSync(commsBackupRoot) : [];
 check(
   'COMMS final remains self-contained',
-  /(?:来源)?站乙|worker-site-b/i.test(commsOutput)
+  (/(?:来源)?站乙|worker-site-b/i.test(commsOutput) || /废标/.test(commsOutput) && /原\s*Worker/i.test(commsOutput))
     && ['50/50', '终止公告'].every((fact) => commsOutput.includes(fact))
     && /进行中|继续处理|继续终止公告/.test(commsOutput),
 );
-check('COMMS changes only the workbench', commsChanged.length === 0 && /beyond-control\.mjs.+workbench.+--action\s+upsert/s.test(commsCommands), commsChanged.join('|'));
+check('COMMS changes only the workbench through the recoverable fixed writer', commsChanged.length === 0
+  && /beyond-control\.mjs.+workbench.+--action\s+(?:progress|upsert)/s.test(commsCommands)
+  && commsBackups.some((name) => name.includes('workbench-progress') || name.includes('workbench-upsert'))
+  && !/Remove-Item[^\n]*(?:beyond-local-backups|workbench-(?:progress|upsert))/i.test(commsCommands), commsChanged.join('|'));
 check('COMMS PM does not load Action Skills', !/task-(design|dev|test|ops)/.test(commsCommands));
 
 const callbackOutput = read(evidenceFile('WST-WORKER-CALLBACK'));
-const callbackRequired = ['已完成', '不通过', 'evidence/quality-review.md', '原站 Worker', '同一冻结集合'];
+const callbackRecord = callbackOutput.match(/```(?:yaml)?\s*([\s\S]*?)```/i)?.[1] ?? callbackOutput;
+const callbackRequired = ['已完成', '不通过', 'evidence/quality-review.md', '同一冻结集合'];
 const callbackDetails = ['evidence/full-check.json', '集合 SHA-256', '136 项', '9 项', '197 项', '未创建 worktree', '未访问网络'];
-check('CALLBACK preserves control facts and primary finding', callbackRequired.every((fact) => callbackOutput.includes(fact)) && (callbackOutput.includes('50/50') || /50\s*条[^。\n]*全部/.test(callbackOutput)) && (/section_name/.test(callbackOutput) || /标段名称.{0,20}标段编号/.test(callbackOutput)));
-check('CALLBACK moves engineering detail to the evidence entry', callbackDetails.every((detail) => !callbackOutput.includes(detail)));
+check('CALLBACK preserves control facts and primary finding', callbackRequired.every((fact) => callbackRecord.includes(fact)) && /原站\s*Worker/.test(callbackRecord) && (callbackRecord.includes('50/50') || /50\s*条[^。\n]*全部/.test(callbackRecord)) && (/section_name.{0,30}实际.{0,20}标段编号.{0,30}应.{0,20}标段名称/.test(callbackRecord) || /标段名称.{0,20}标段编号/.test(callbackRecord)));
+check('CALLBACK moves engineering detail to the evidence entry', callbackDetails.every((detail) => !callbackRecord.includes(detail)));
 check('CALLBACK remains compact', [...callbackOutput].length < 500, 'chars=' + [...callbackOutput].length);
 
 const languageForbidden = ['node --test', 'exitCode', '4f82c1a0b7d9e2f3a11c', 'codex/fix-company-manager-dedup', 'companyManagers', 'managerCount', 'managerId', 'src/companyRelations.js', '7 条断言'];

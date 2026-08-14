@@ -159,9 +159,8 @@ try {
     join(control, "skills"),
     "--project-agents",
     join(project, "AGENTS.md"),
-    "--content-only",
   ], control);
-  check("融合入口通过内容验真", verify.output.includes("内容验真通过"), verify.output);
+  check("融合入口与项目策略通过完整安装验真", verify.output.includes("安装验真通过"), verify.output);
 
   const localMarker = join(control, "local", "backup-probe.md");
   writeFileSync(localMarker, "before\n", "utf8");

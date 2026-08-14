@@ -741,7 +741,7 @@ if (!existsSync(sourceAuth)) {
 }
 cpSync(sourceAuth, join(isolatedCodexHome, "auth.json"));
 
-for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return", "P18-team-list", "P19-team-from-business", "P20-new-init-cold", "P21-existing-init-cold", "WFA02-workbench-convergence", "WFA03-semantic-layers", "WFA06-audit-retest", "WFA08-shared-test-coupling", "WFA09-evidence-granularity", "WFA10-status-summary", "WFA12-fact-over-summary", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration", "K6-N03-approval", "K6-N05-discussion", "K6-N06-answer-only", "K6-N08-outage", "K6-N09-two-results", "K6-N10-temporary-model", "K6-W02-stage-progress", "K6-W04-background-job", "K6-W07-completion-question", "K6-G01-git-parallel", "K6-G03-tool-priority", "K6-B01-user-path"]) {
+for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return", "P18-team-list", "P19-team-from-business", "P20-new-init-cold", "P21-existing-init-cold", "P22-pm-inbox-priority", "WFA02-workbench-convergence", "WFA03-semantic-layers", "WFA06-audit-retest", "WFA08-shared-test-coupling", "WFA09-evidence-granularity", "WFA10-status-summary", "WFA12-fact-over-summary", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration", "K6-N03-approval", "K6-N05-discussion", "K6-N06-answer-only", "K6-N08-outage", "K6-N09-two-results", "K6-N10-temporary-model", "K6-W02-stage-progress", "K6-W04-background-job", "K6-W07-completion-question", "K6-G01-git-parallel", "K6-G03-tool-priority", "K6-B01-user-path"]) {
   copyProjectFixture(join(casesRoot, caseName));
 }
 
@@ -900,11 +900,61 @@ const p09 = join(casesRoot, "P09-runtime-stop-scope");
 setActiveProductWorkbench(p09);
 initializeGit(p09, "fixture: runtime stop does not stop development");
 
-for (const caseName of ["P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return"]) {
+for (const caseName of ["P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return"]) {
   const root = join(casesRoot, caseName);
   setHealthyWorkbench(root);
   initializeGit(root, `fixture: ${caseName}`);
 }
+
+const p22 = join(casesRoot, "P22-pm-inbox-priority");
+setWorkbench(
+  p22,
+  "| 2026-08-14 | 继续回答老板当前问题 | 进行中 | 后台任务结果等待安全消费 | evidence/account-page.md | 先回答当前问题，再知会结果 | 无 |",
+  "| 完成账号页面修复 | worker-account-page | 进行中 | Worker正在交付结果 | 无 | evidence/account-page.md | 2026-08-14 |",
+);
+writeFixture(p22, "projects/local-aaaaaaaaaaaa/项目总览.md", "# 收件箱隔离项目\n\n> 项目编号：`local-aaaaaaaaaaaa`。\n");
+writeFixture(p22, "local/inbox/pending/local-aaaaaaaaaaaa/11111111-2222-4333-8444-555555555555.json", `${JSON.stringify({
+  schemaVersion: 1,
+  recordId: "11111111-2222-4333-8444-555555555555",
+  projectId: "local-aaaaaaaaaaaa",
+  sourceThreadId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+  task: "完成账号页面修复",
+  status: "已完成",
+  summary: "账号页面重复负责人已经消除",
+  evidence: "evidence/account-page.md",
+  next: "PM核验正式任务线程后更新工作台",
+  createdAt: "2026-08-14T02:00:00.000Z",
+}, null, 2)}\n`);
+writeFixture(p22, "evidence/account-page.md", "# 账号页面修复结果\n\n这是任务的主证据入口；当前用例不提供正式Worker线程读取能力。\n");
+initializeGit(p22, "fixture: PM inbox must not override current user question");
+
+const p13 = join(casesRoot, "P13-model-selection");
+setHealthyWorkbench(p13);
+writeFixture(p13, "projects/local-aaaaaaaaaaaa/项目总览.md", `# 已批准策略项目
+
+## Worker运行策略
+
+<!-- BEGIN BEYOND WORKER POLICY -->
+
+\`\`\`json
+{"schemaVersion":1,"mode":"beyond-worker-matrix-v1","scope":"new-formal-worker","confirmed":true,"approvedBy":"隔离用例中的用户明确批准","approvedAt":"2026-08-12T08:00:00.000Z"}
+\`\`\`
+
+<!-- END BEYOND WORKER POLICY -->
+`);
+writeFixture(p13, "projects/local-bbbbbbbbbbbb/项目总览.md", `# 未批准策略项目
+
+## Worker运行策略
+
+<!-- BEGIN BEYOND WORKER POLICY -->
+
+\`\`\`json
+{"schemaVersion":1,"mode":"platform-default","scope":"new-formal-worker","confirmed":false,"approvedBy":null,"approvedAt":null}
+\`\`\`
+
+<!-- END BEYOND WORKER POLICY -->
+`);
+initializeGit(p13, "fixture: model policy resolution through fixed control script");
 
 const wfa10 = join(casesRoot, "WFA10-status-summary");
 setHealthyWorkbench(wfa10);

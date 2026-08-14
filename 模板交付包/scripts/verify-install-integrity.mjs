@@ -99,6 +99,32 @@ function containsBeyondHook(text, label) {
         .some((value) => typeof value === "string" && value.includes("beyond-runtime-guard.mjs")))));
 }
 
+function validateWorkerPolicy(text, label) {
+  const begin = "<!-- BEGIN BEYOND WORKER POLICY -->";
+  const end = "<!-- END BEYOND WORKER POLICY -->";
+  const start = text.indexOf(begin);
+  const finish = text.indexOf(end, start + begin.length);
+  if (start < 0 || finish < start || text.indexOf(begin, start + begin.length) >= 0 || text.indexOf(end, finish + end.length) >= 0) {
+    errors.push(`${label}缺少唯一Worker运行策略受管块`);
+    return;
+  }
+  const block = text.slice(start + begin.length, finish);
+  const encoded = block.match(/```json\s*([\s\S]*?)\s*```/i)?.[1];
+  if (!encoded) {
+    errors.push(`${label}的Worker运行策略不是受管JSON`);
+    return;
+  }
+  const policy = parseJson(encoded, `${label}的Worker运行策略`);
+  if (!policy) return;
+  if (policy.schemaVersion !== 1 || !["platform-default", "beyond-worker-matrix-v1"].includes(policy.mode)
+    || policy.scope !== "new-formal-worker" || typeof policy.confirmed !== "boolean") {
+    errors.push(`${label}的Worker运行策略字段无效`);
+  }
+  if (policy.confirmed && (!policy.approvedBy || !policy.approvedAt || Number.isNaN(Date.parse(policy.approvedAt)))) {
+    errors.push(`${label}的已确认Worker运行策略缺少有效批准依据或时间`);
+  }
+}
+
 function sha256(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
@@ -176,8 +202,8 @@ function normalizeProjectEntry(text, label) {
     errors.push(`${label}项目覆盖必须是不超过五条的单行列表`);
   }
   for (const line of activeLines) {
-    if (/(?:Luna|Terra|Sol|模型|推理)/i.test(line) && !/(?:\bPM\b|\bWorker\b|执行者|项目经理)/i.test(line)) {
-      errors.push(`${label}模型覆盖没有明确适用角色：${line}`);
+    if (/(?:Luna|Terra|Sol|gpt-5\.[0-9]+-(?:luna|terra|sol)|模型矩阵|Worker.{0,20}(?:模型|推理))/i.test(line)) {
+      errors.push(`${label}仍在根覆盖区保存模型策略；必须迁入项目总览受管策略块：${line}`);
     }
   }
   let normalized = `${text.slice(0, beginIndex + begin.length)}\n<!-- PROJECT OVERRIDES OMITTED -->\n${text.slice(endIndex)}`;
@@ -262,6 +288,7 @@ if (manifest) {
   }
 
   const controlMatch = installedAgents?.match(/<!-- BEYOND-CONTROL-ROOT: ([^\n]+) -->/);
+  const projectMatch = installedAgents?.match(/<!-- BEYOND-PROJECT-ID: ([^\n]+) -->/);
   if (controlMatch) {
     const mappedControlRoot = resolve(projectRoot, controlMatch[1].trim());
     const mappedManifest = readUtf8(join(mappedControlRoot, "beyond-release.json"), "项目映射的控制仓版本清单");
@@ -272,6 +299,13 @@ if (manifest) {
     }
     if (mappedControlScript && candidateControlScript && mappedControlScript !== candidateControlScript) {
       errors.push("项目映射的控制仓固定脚本与当前候选不一致");
+    }
+    if (!projectMatch) {
+      errors.push("项目入口缺少BEYOND项目编号映射");
+    } else {
+      const projectId = projectMatch[1].trim();
+      const overview = readUtf8(join(mappedControlRoot, "projects", projectId, "项目总览.md"), "项目映射的项目总览");
+      if (overview) validateWorkerPolicy(overview, "项目映射的项目总览");
     }
   } else if (!contentOnly) {
     errors.push("完整安装验真需要项目控制仓映射；仅核对候选内容请显式使用 --content-only");

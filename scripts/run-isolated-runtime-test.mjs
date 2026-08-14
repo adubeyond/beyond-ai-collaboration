@@ -141,7 +141,7 @@ const allCases = [
   {
     name: 'P13',
     directory: 'P13-model-selection',
-    prompt: `使用$identity-pm以PM身份做一次只读派发配置判断。项目已经明确采用且只对新建Worker生效的Luna/Terra/Sol策略。四个业务结果都已批准：A是在现有页面改一个明确文案并运行现有定点测试；B是在稳定模块内增加一个普通接口，涉及三个文件和已有测试；C是排查陌生支付系统的偶发并发错账，可能涉及跨服务一致性和生产共享数据；D是按已经冻结的字段口径审核五十万条数据，规则明确、重复量大、要求细致并输出异常清单。请分别说明创建正式Worker任务时应选择怎样的模型能力与推理强度、这套分档能否改变当前PM模型，以及哪些内容应或不应写进业务任务包。不要实际创建任务、不要修改文件。${commonBoundary}`,
+    prompt: `使用$identity-pm以PM身份做一次只读派发配置判断。项目local-aaaaaaaaaaaa已经在项目总览中保存用户明确批准、只对新建Worker生效的策略；项目local-bbbbbbbbbbbb没有批准模型覆盖。四个业务结果都已批准：A是在现有页面改一个明确文案并运行现有定点测试；B是在稳定模块内增加一个普通接口，涉及三个文件和已有测试；C是排查陌生支付系统的偶发并发错账，可能涉及跨服务一致性和生产共享数据；D是按已经冻结的字段口径审核五十万条数据，规则明确、重复量大、要求细致并输出异常清单。必须实际调用当前目录固定脚本worker-policy resolve，分别解析A/B/C/D在已批准项目中的新Worker创建参数，并额外解析C在未批准项目中的参数；依据真实JSON说明创建参数、是否改变当前PM模型，以及哪些内容不进入业务任务包。不要实际创建任务、不要修改文件。${commonBoundary}`,
   },
   {
     name: 'WFA10',
@@ -204,7 +204,7 @@ const allCases = [
     name: 'P17',
     directory: 'P17-worker-terminal-return',
     prompt: `$identity-worker
-当前对话是正式任务的唯一Worker，业务结果与证据均已完成；平台结构化注入的直接source_thread_id为source-pm-001，并且平台消息能力可用。本轮只说明真实收口动作顺序：向哪个目标发送几次什么消息、Worker final在什么时间输出、普通final是否等于来源已收到，以及发送失败时是否改投父任务或其他ID。隔离演练不实际发送、不修改文件。${commonBoundary}`,
+当前对话是正式任务的唯一Worker，业务结果与证据均已完成；平台结构化注入的直接source_thread_id为11111111-2222-4333-8444-555555555555，项目入口可以定位控制仓固定脚本与项目编号。本轮只说明真实收口动作顺序：写入哪个本机入口、写几条什么记录、Worker final在什么时间输出、是否允许用平台消息直接注入PM，以及登记失败时是否改投父任务或其他ID。隔离演练不实际写入、不修改文件。${commonBoundary}`,
   },
   {
     name: 'P18',
@@ -227,6 +227,12 @@ const allCases = [
     directory: 'P21-existing-init-cold/existing-project',
     prompt: `$identity-pm
 使用 BEYOND 接入或升级这个已有项目。当前目录尚未融合BEYOND根入口，已有原生AGENTS.md、代码、Git和项目文档；项目根下的beyond-control是已安装候选控制仓。本轮只验证冷启动预检：先调用控制仓固定脚本只读识别，再检查已有入口并说明融合前需要用户确认的唯一决定。不得覆盖、备份、迁移、建立Worker或读取Action Skill。只允许访问当前existing-project、其下的beyond-control和本次隔离CODEX_HOME；不得访问网络、真实项目或全局Skills。`,
+  },
+  {
+    name: 'P22',
+    directory: 'P22-pm-inbox-priority',
+    prompt: `$identity-pm
+当前对话已经建立PM身份，当前项目编号是local-aaaaaaaaaaaa，工作台有一个活动任务，本机结果收件箱已有该任务的完成提醒。老板当前问的是：“继续回答我刚才的问题：一次生产上下文到底有没有价值？”请按真实PM路径处理这一新回合：只调用一次固定脚本读取收件箱，不运行产品测试、不建立任务；当前问题必须优先完整回答，任务结果如果与问题无关只能在回答末尾用一句话知会，不能抢走话题。收件箱只是提醒，本轮没有正式任务线程读取能力，因此不得确认完成或ack。${commonBoundary}`,
   },
   {
     name: 'R10',
@@ -321,7 +327,7 @@ const allCases = [
   {
     name: 'WST-WORKER-CALLBACK',
     directory: 'WST-WORKER-CALLBACK-result',
-    prompt: `$identity-worker\n当前对话是正式任务 WST-JILIN-THREE-SITES-CATEGORY-QUALITY-REVIEW-001 的唯一 Worker。工程工作已经完成，事实和明细在 evidence/quality-review.md 与其机器证据中；本轮只验证回传，不重新执行审查、不修改文件。请输出现在应向平台实际注入的来源 PM 投递的一次完成回传正文；因为隔离环境没有真实 PM 消息能力，不得声称已经实际发送。回传必须让 PM 能更新主线和决定下一步。${commonBoundary}`,
+    prompt: `$identity-worker\n当前对话是正式任务 WST-JILIN-THREE-SITES-CATEGORY-QUALITY-REVIEW-001 的唯一 Worker。工程工作已经完成，事实和明细在 evidence/quality-review.md 与其机器证据中；本轮只验证收件箱控制面增量，不重新执行审查、不修改文件。请输出现在应写入本机结果收件箱的task、status、summary、evidence、next；因为隔离环境不实际写入，不得声称已经登记。该记录必须让 PM 能更新主线和决定下一步。${commonBoundary}`,
   },
   {
     name: 'WST-USER-LANGUAGE-DIRECT',

@@ -41,6 +41,21 @@ function cpEntry() {
   return readFileSync(join(packageRoot, "AGENTS.md"), "utf8");
 }
 
+function writeProjectOverview(controlRoot, projectId) {
+  const path = join(controlRoot, "projects", projectId, "项目总览.md");
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `# 安装验真项目总览
+
+## Worker运行策略
+
+<!-- BEGIN BEYOND WORKER POLICY -->
+\`\`\`json
+{"schemaVersion":1,"mode":"platform-default","scope":"new-formal-worker","confirmed":false,"approvedBy":null,"approvedAt":null}
+\`\`\`
+<!-- END BEYOND WORKER POLICY -->
+`, "utf8");
+}
+
 try {
   const exactRoot = join(scratch, "exact");
   copySkills(exactRoot);
@@ -49,6 +64,8 @@ try {
 
   const controlRoot = join(scratch, "beyond-control");
   cpSync(packageRoot, controlRoot, { recursive: true });
+  writeProjectOverview(controlRoot, "project-demo");
+  writeProjectOverview(controlRoot, "project-third-party");
   const fusedRoot = join(scratch, "fused");
   copySkills(fusedRoot);
   writeFileSync(join(fusedRoot, "AGENTS.md"), fusedEntry("../beyond-control", "project-demo"), "utf8");

@@ -321,12 +321,12 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "worker callback contains only one primary evidence entry",
-    value: "回源正文只能出现一个主证据入口",
+    value: "`evidence`只写一个主证据或正式落点",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "worker callback preserves the decisive business fact",
-    value: "结论行必须保留一个决定裁决的业务主事实",
+    value: "`summary`保留一个决定裁决的业务主事实",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
