@@ -26,10 +26,24 @@ const nativeBegin = "<!-- BEGIN PROJECT NATIVE RULES -->";
 const nativeEnd = "<!-- END PROJECT NATIVE RULES -->";
 const workerPolicyBegin = "<!-- BEGIN BEYOND WORKER POLICY -->";
 const workerPolicyEnd = "<!-- END BEYOND WORKER POLICY -->";
+const initializationBegin = "<!-- BEGIN BEYOND PROJECT INITIALIZATION -->";
+const initializationEnd = "<!-- END BEYOND PROJECT INITIALIZATION -->";
 const legacyRuntimeGuardRelative = ".codex/beyond-runtime-guard.mjs";
 const codexHooksRelative = ".codex/hooks.json";
 const workerPolicyModes = new Set(["platform-default", "beyond-worker-matrix-v1"]);
 const workerTaskKinds = new Set(["ordinary-engineering", "bulk-structured", "complex-high-risk"]);
+const initializationModes = new Set(["full", "on-demand"]);
+const initializationDecisions = new Set(["migrate", "register", "defer"]);
+const initializationGroups = ["overview", "architecture", "development", "testing", "operations", "security", "other"];
+const initializationGroupLabels = {
+  overview: "项目总览",
+  architecture: "架构",
+  development: "开发",
+  testing: "测试",
+  operations: "运维",
+  security: "安全",
+  other: "其他专属资料",
+};
 const workerMatrixV1 = {
   "ordinary-engineering": { model: "gpt-5.6-terra", thinking: "high" },
   "bulk-structured": { model: "gpt-5.6-luna", thinking: "high" },
@@ -338,6 +352,9 @@ function inspectProject(projectRootValue) {
   const policyState = existsSync(overviewPath)
     ? parseWorkerPolicy(readUtf8(overviewPath, "项目总览"))
     : { configured: false, policy: defaultWorkerPolicy() };
+  const initializationState = existsSync(overviewPath)
+    ? parseInitialization(readUtf8(overviewPath, "项目总览"))
+    : { configured: false, state: defaultInitialization() };
   const existingAgents = existsSync(join(projectRoot, "AGENTS.md")) ? readUtf8(join(projectRoot, "AGENTS.md"), "项目AGENTS.md") : "";
   const existingOverrides = extractBetween(existingAgents, overrideBegin, overrideEnd);
   const legacyWorkerPolicyCandidate = existingOverrides.split("\n").some((line) => legacyWorkerPolicyPattern.test(line));
@@ -355,6 +372,7 @@ function inspectProject(projectRootValue) {
     remoteConflicts: repositoryDiscovery.remoteConflicts,
     legacyWorkbench,
     workerPolicy: policyState,
+    initialization: initializationPublicState(initializationState.state),
     legacyWorkerPolicyCandidate,
     adoptionRequired: Boolean(
       repositoryDiscovery.remoteConflicts.length
@@ -895,6 +913,275 @@ function defaultWorkerPolicy() {
   };
 }
 
+function defaultInitialization() {
+  return {
+    schemaVersion: 1,
+    status: "awaiting-choice",
+    mode: null,
+    approvedBy: null,
+    approvedAt: null,
+    groups: Object.fromEntries(initializationGroups.map((group) => [group, null])),
+    rootEntryReviewedAt: null,
+    completedAt: null,
+  };
+}
+
+function validateInitializationState(state) {
+  if (!state || typeof state !== "object" || Array.isArray(state) || state.schemaVersion !== 1) {
+    fail("项目初始化状态版本无效，停止读取", 2);
+  }
+  if (!["awaiting-choice", "full-in-progress", "on-demand", "complete"].includes(state.status)) {
+    fail("项目初始化状态值无效，停止读取", 2);
+  }
+  if (state.mode !== null && !initializationModes.has(state.mode)) {
+    fail("项目初始化选择无效，停止读取", 2);
+  }
+  if ((state.status === "awaiting-choice") !== (state.mode === null)) {
+    fail("项目初始化状态与用户选择不一致，停止读取", 2);
+  }
+  if (!("rootEntryReviewedAt" in state)) state.rootEntryReviewedAt = null;
+  if (state.rootEntryReviewedAt !== null
+    && (typeof state.rootEntryReviewedAt !== "string" || Number.isNaN(Date.parse(state.rootEntryReviewedAt)))) {
+    fail("项目初始化根入口核对时间无效，停止读取", 2);
+  }
+  if (!state.groups || typeof state.groups !== "object" || Array.isArray(state.groups)
+    || Object.keys(state.groups).sort().join("|") !== [...initializationGroups].sort().join("|")) {
+    fail("项目初始化分组集合无效，停止读取", 2);
+  }
+  for (const group of initializationGroups) {
+    const record = state.groups[group];
+    if (record === null) continue;
+    if (!record || typeof record !== "object" || !initializationDecisions.has(record.decision)
+      || typeof record.entry !== "string" || typeof record.recordedAt !== "string"
+      || Number.isNaN(Date.parse(record.recordedAt))) {
+      fail(`项目初始化分组记录无效：${group}`, 2);
+    }
+    if (record.decision !== "defer" && !record.entry.trim()) {
+      fail(`项目初始化分组缺少正式入口：${group}`, 2);
+    }
+  }
+  if (state.mode && (!state.approvedBy || !state.approvedAt || Number.isNaN(Date.parse(state.approvedAt)))) {
+    fail("项目初始化选择缺少批准依据或时间，停止读取", 2);
+  }
+  const pending = initializationGroups.filter((group) => state.groups[group] === null);
+  if (state.status === "complete" && (pending.length || !state.rootEntryReviewedAt
+    || !state.completedAt || Number.isNaN(Date.parse(state.completedAt)))) {
+    fail("项目初始化完成状态缺少分组结果或完成时间，停止读取", 2);
+  }
+  return state;
+}
+
+function renderInitialization(state) {
+  return `${initializationBegin}\n\`\`\`json\n${JSON.stringify(state)}\n\`\`\`\n${initializationEnd}`;
+}
+
+function parseInitialization(text) {
+  const block = extractBetween(text, initializationBegin, initializationEnd);
+  if (!block) return { configured: false, state: defaultInitialization() };
+  const encoded = block.match(/```json\s*([\s\S]*?)\s*```/i)?.[1];
+  if (!encoded) fail("项目初始化状态不是受管JSON块，停止读取", 2);
+  let state;
+  try {
+    state = JSON.parse(encoded);
+  } catch {
+    fail("项目初始化状态JSON无效，停止读取", 2);
+  }
+  return { configured: true, state: validateInitializationState(state) };
+}
+
+function initializationSection(state) {
+  return `## 项目初始化\n\n本节只保存首次接入或升级的可恢复进度，不进入普通任务热路径。项目事实正文仍由项目事实索引指向的唯一正式文档承载。\n\n${renderInitialization(state)}\n`;
+}
+
+function initializationPublicState(state) {
+  const pendingGroups = initializationGroups.filter((group) => state.groups[group] === null);
+  let nextRequiredDecision;
+  if (state.status === "awaiting-choice") {
+    nextRequiredDecision = "最低接入已完成。请只选择一项：现在完整初始化，或先开始使用、后续按需补齐。";
+  } else if (state.status === "full-in-progress") {
+    nextRequiredDecision = pendingGroups.length
+      ? `继续处理下一组：${initializationGroupLabels[pendingGroups[0]]}；本组只选择迁入控制仓、保留原位置并登记、暂不处理。`
+      : "全部分组已有决定；核对根入口只保留稳定边界和事实入口后，执行完成收口。";
+  } else if (state.status === "on-demand") {
+    nextRequiredDecision = pendingGroups.length
+      ? `普通任务可以继续；需要恢复完整初始化时从${initializationGroupLabels[pendingGroups[0]]}继续。`
+      : "全部分组已有决定；可以执行完成收口。";
+  } else {
+    nextRequiredDecision = "项目完整初始化已经完成；普通任务不再读取本状态。";
+  }
+  return { ...state, pendingGroups, nextRequiredDecision };
+}
+
+function ensureInitializationSection(overviewPath) {
+  const overview = readUtf8(overviewPath, "项目总览");
+  const current = parseInitialization(overview);
+  if (current.configured) return { changed: false, backup: null, state: current.state };
+  const workerPolicy = overview.indexOf("## Worker运行策略");
+  const maintenance = overview.indexOf("## 维护边界");
+  const insertion = workerPolicy >= 0 ? workerPolicy : maintenance;
+  const rendered = initializationSection(defaultInitialization());
+  const updated = insertion >= 0
+    ? `${overview.slice(0, insertion)}${rendered}\n${overview.slice(insertion)}`
+    : `${overview.trimEnd()}\n\n${rendered}`;
+  const backup = backupControlFile(overviewPath, "project-initialization-migration");
+  writeUtf8(overviewPath, updated);
+  return { changed: true, backup, state: defaultInitialization() };
+}
+
+function saveInitialization(projectId, state, reason) {
+  validateInitializationState(state);
+  const overviewPath = join(controlRoot, "projects", projectId, "项目总览.md");
+  const overview = readUtf8(overviewPath, "项目总览");
+  const current = parseInitialization(overview);
+  let updated;
+  if (current.configured) {
+    const start = overview.indexOf(initializationBegin);
+    const finish = overview.indexOf(initializationEnd, start);
+    updated = `${overview.slice(0, start)}${renderInitialization(state)}${overview.slice(finish + initializationEnd.length)}`;
+  } else {
+    const workerPolicy = overview.indexOf("## Worker运行策略");
+    const maintenance = overview.indexOf("## 维护边界");
+    const insertion = workerPolicy >= 0 ? workerPolicy : maintenance;
+    const rendered = initializationSection(state);
+    updated = insertion >= 0
+      ? `${overview.slice(0, insertion)}${rendered}\n${overview.slice(insertion)}`
+      : `${overview.trimEnd()}\n\n${rendered}`;
+  }
+  const backup = backupControlFile(overviewPath, reason);
+  writeUtf8(overviewPath, updated);
+  return { state, backup };
+}
+
+function validateInitializationApproval(value) {
+  const approvedBy = String(value ?? "").trim();
+  if (!approvedBy || approvedBy.length > 120 || /[\r\n]/.test(approvedBy)) {
+    fail("项目初始化选择必须登记本次明确批准依据", 2);
+  }
+  return approvedBy;
+}
+
+function initializationContext(projectId) {
+  const localPath = join(controlRoot, "local", "projects", `${projectId}.md`);
+  const local = frontmatter(readUtf8(localPath, "项目本机映射"));
+  if (local.id !== projectId || !local.path) fail("项目本机映射缺少匹配的项目编号或业务目录", 2);
+  const projectRoot = resolve(local.path);
+  if (!existsSync(projectRoot) || !lstatSync(projectRoot).isDirectory()) {
+    fail(`项目本机映射指向的业务目录不存在：${display(projectRoot)}`, 2);
+  }
+  const factsPath = join(controlRoot, "projects", projectId, "项目事实", "README.md");
+  return { projectRoot, factsPath };
+}
+
+function resolveInitializationEntry(entry, context) {
+  const normalized = entry.replace(/[\\/]/g, sep);
+  const candidates = isAbsolute(normalized)
+    ? [resolve(normalized)]
+    : [resolve(context.projectRoot, normalized), resolve(controlRoot, normalized)];
+  const matches = [];
+  for (const candidate of candidates) {
+    if (!existsSync(candidate) || !lstatSync(candidate).isFile()) continue;
+    if (!matches.some((match) => samePath(match, candidate))) matches.push(candidate);
+  }
+  if (!matches.length) fail(`正式入口不是现存文件：${entry}`, 2);
+  // 相对入口优先解释为业务项目路径；控制仓入口需要写出其 projects/、shared/ 等明确前缀。
+  const resolvedEntry = matches[0];
+  if (!isInside(context.projectRoot, resolvedEntry) && !isInside(controlRoot, resolvedEntry)) {
+    fail(`正式入口必须位于当前业务项目或控制仓内：${entry}`, 2);
+  }
+  return resolvedEntry;
+}
+
+function factsIndexContainsEntry(entry, resolvedEntry, context) {
+  const facts = readUtf8(context.factsPath, "项目事实索引");
+  const references = new Set([
+    entry,
+    display(resolvedEntry),
+    display(relative(context.projectRoot, resolvedEntry)),
+    display(relative(controlRoot, resolvedEntry)),
+    display(relative(dirname(context.factsPath), resolvedEntry)),
+  ].filter((value) => value && value !== "."));
+  return [...references].some((reference) => {
+    const escaped = reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(^|[^\\p{L}\\p{N}._/\\\\-])${escaped}(?=$|[^\\p{L}\\p{N}._/\\\\-])`, "mu").test(facts);
+  });
+}
+
+function validateInitializationEntry(group, record, context) {
+  if (record.decision === "defer") return;
+  const resolvedEntry = resolveInitializationEntry(record.entry, context);
+  if (group !== "overview" && !factsIndexContainsEntry(record.entry, resolvedEntry, context)) {
+    fail(`项目事实索引尚未登记${initializationGroupLabels[group]}正式入口：${record.entry}`, 2);
+  }
+}
+
+function initialization() {
+  ensureControl();
+  const action = arg("--action") ?? "show";
+  const projectId = arg("--project-id");
+  if (!projectId || !/^(?:project|local)-[a-f0-9]{12}$/.test(projectId)) {
+    fail("项目初始化需要有效 --project-id", 2);
+  }
+  const overviewPath = join(controlRoot, "projects", projectId, "项目总览.md");
+  const overview = readUtf8(overviewPath, "项目总览");
+  const current = parseInitialization(overview);
+  if (action === "show") {
+    console.log(JSON.stringify({ projectId, configured: current.configured, initialization: initializationPublicState(current.state) }, null, 2));
+    return;
+  }
+  const context = initializationContext(projectId);
+  let state = structuredClone(current.state);
+  if (action === "choose") {
+    if (state.status === "complete") fail("项目完整初始化已经完成，不能重新选择初始化模式", 2);
+    const mode = arg("--mode");
+    if (!initializationModes.has(mode)) fail("项目初始化选择必须是 full 或 on-demand", 2);
+    const approvedBy = validateInitializationApproval(arg("--approved-by"));
+    state = {
+      ...state,
+      status: mode === "full" ? "full-in-progress" : "on-demand",
+      mode,
+      approvedBy,
+      approvedAt: new Date().toISOString(),
+      rootEntryReviewedAt: null,
+      completedAt: null,
+    };
+  } else if (action === "record") {
+    if (state.status === "awaiting-choice") fail("必须先记录用户选择，再处理初始化分组", 2);
+    if (state.status === "complete") fail("项目完整初始化已经完成，不能继续追加分组结果", 2);
+    const group = arg("--group");
+    const decision = arg("--decision");
+    if (!initializationGroups.includes(group)) fail(`未知项目初始化分组：${group}`, 2);
+    if (!initializationDecisions.has(decision)) fail("分组决定必须是 migrate、register 或 defer", 2);
+    const entry = String(arg("--entry") ?? "").trim();
+    if ((decision !== "defer" && !entry) || entry.length > 1000 || /[\r\n]/.test(entry)) {
+      fail("迁入或登记必须提供单行正式入口，入口不得超过1000字", 2);
+    }
+    if (decision === "defer" && entry) fail("暂不处理的分组不能伪造正式入口", 2);
+    const record = { decision, entry, recordedAt: new Date().toISOString() };
+    validateInitializationEntry(group, record, context);
+    state.groups[group] = record;
+  } else if (action === "complete") {
+    if (state.status === "awaiting-choice") fail("尚未记录用户初始化选择，不能完成", 2);
+    const pending = initializationGroups.filter((group) => state.groups[group] === null);
+    if (pending.length) fail(`仍有未处理初始化分组：${pending.join(", ")}`, 2);
+    for (const group of initializationGroups) validateInitializationEntry(group, state.groups[group], context);
+    if (String(arg("--root-entry-reviewed") ?? "").toLowerCase() !== "yes") {
+      fail("完成初始化前必须确认根AGENTS.md只保留稳定边界和事实入口：--root-entry-reviewed yes", 2);
+    }
+    readUtf8(join(context.projectRoot, "AGENTS.md"), "项目根AGENTS.md");
+    state.status = "complete";
+    state.rootEntryReviewedAt = new Date().toISOString();
+    state.completedAt = new Date().toISOString();
+  } else {
+    fail(`未知项目初始化动作：${action}`, 2);
+  }
+  const saved = saveInitialization(projectId, state, `project-initialization-${action}`);
+  console.log(JSON.stringify({
+    projectId,
+    initialization: initializationPublicState(saved.state),
+    backup: display(saved.backup),
+  }, null, 2));
+}
+
 function renderWorkerPolicy(policy) {
   return `${workerPolicyBegin}\n\`\`\`json\n${JSON.stringify(policy)}\n\`\`\`\n${workerPolicyEnd}`;
 }
@@ -1172,6 +1459,8 @@ function registerProject(project, nameValue = null) {
 - [项目事实索引](项目事实/README.md)
 - 项目已有产品、架构、开发、测试和运维文档：待逐组登记；不自动复制或删除原文档。
 
+${initializationSection(defaultInitialization())}
+
 ${workerPolicySection(defaultWorkerPolicy())}
 
 ## 维护边界
@@ -1180,6 +1469,7 @@ ${workerPolicySection(defaultWorkerPolicy())}
 - 能从代码、配置、Git、测试或环境确认的内容先调查；无法确认的内容保持待确认。
 `);
   }
+  ensureInitializationSection(overviewPath);
   ensureWorkerPolicySection(overviewPath);
   if (!existsSync(factsPath)) {
     writeUtf8(factsPath, `# ${name} 项目事实索引
@@ -1396,6 +1686,7 @@ function installProjectEntry(project) {
     legacyRuntimeCleanup,
     removedRuntimeState,
     workerPolicy: workerPolicy ? { policy: workerPolicy.policy, backup: workerPolicy.backup } : null,
+    initialization: initializationPublicState(parseInitialization(readUtf8(join(controlRoot, "projects", project.projectId, "项目总览.md"), "项目总览")).state),
     removedLegacyWorkerPolicyOverrides: migratedEntry.removed,
   };
 }
@@ -1569,6 +1860,10 @@ function printHelp() {
     `  inspect-project --project-root <目录> [--host-id <主机>] [--codex-project-id <项目>]\n` +
     `  register-project --project-root <目录> [--name <名称>] [--host-id <主机>] [--codex-project-id <项目>]\n` +
     `  install-project-entry --project-root <目录> --confirm-fusion yes [--worker-policy-mode platform-default|beyond-worker-matrix-v1 --worker-policy-approved-by <用户明确批准依据>] [--adopt-legacy-workbench yes] [--canonical-repositories <每组重复remote选择一个正式路径>] [--confirm-legacy-skip yes] [--host-id <主机>] [--codex-project-id <项目>]\n` +
+    `  initialization --action show --project-id <项目编号>\n` +
+    `  initialization --action choose --project-id <项目编号> --mode full|on-demand --approved-by <用户明确批准依据>\n` +
+    `  initialization --action record --project-id <项目编号> --group overview|architecture|development|testing|operations|security|other --decision migrate|register|defer [--entry <正式入口>]\n` +
+    `  initialization --action complete --project-id <项目编号> --root-entry-reviewed yes\n` +
     `  worker-policy --action show --project-id <项目编号>\n` +
     `  worker-policy --action set --project-id <项目编号> --mode platform-default|beyond-worker-matrix-v1 --approved-by <用户明确批准依据> [--approved-at <ISO时间>]\n` +
     `  worker-policy --action resolve --project-id <项目编号> --task-kind ordinary-engineering|bulk-structured|complex-high-risk\n` +
@@ -1611,7 +1906,14 @@ else if (command === "init-control") {
 } else if (command === "register-project") {
   const project = inspectProject(arg("--project-root"));
   const result = registerProject(project, arg("--name"));
-  console.log(JSON.stringify({ project, ...Object.fromEntries(Object.entries(result).map(([key, value]) => [key, display(value)])) }, null, 2));
+  const state = parseInitialization(readUtf8(result.overviewPath, "项目总览")).state;
+  console.log(JSON.stringify({
+    project,
+    ...Object.fromEntries(Object.entries(result).map(([key, value]) => [key, display(value)])),
+    initialization: initializationPublicState(state),
+  }, null, 2));
+} else if (command === "initialization") {
+  initialization();
 } else if (command === "worker-policy") {
   workerPolicy();
 } else if (command === "install-project-entry") {
@@ -1634,6 +1936,7 @@ else if (command === "init-control") {
       historyPath: display(result.adoption.historyPath),
       backup: display(result.adoption.backup),
     } : null,
+    initialization: result.initialization,
     workerPolicy: result.workerPolicy ? {
       policy: result.workerPolicy.policy,
       backup: display(result.workerPolicy.backup),

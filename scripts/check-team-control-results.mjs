@@ -95,10 +95,19 @@ try {
   controlCommand(["register-project", "--project-root", secureRemoteProject]);
   const secureRecords = `${readFileSync(join(control, "shared", "projects", `${secureInspect.projectId}.md`), "utf8")}\n${readFileSync(join(control, "local", "projects", `${secureInspect.projectId}.md`), "utf8")}`;
   check("本机与共享项目登记不泄露remote凭据", !/secret-token|access_token|hidden/.test(secureRecords));
+  const legacyOverviewPath = join(control, "projects", secureInspect.projectId, "项目总览.md");
+  const legacyOverview = readFileSync(legacyOverviewPath, "utf8")
+    .replace(/## 项目初始化\n\n[\s\S]*?<!-- END BEYOND PROJECT INITIALIZATION -->\n\n/, "")
+    .replace(/\n*$/, "\n\n- 旧项目总览保留哨兵。\n");
+  writeFileSync(legacyOverviewPath, legacyOverview, "utf8");
+  controlCommand(["register-project", "--project-root", secureRemoteProject]);
+  const migratedOverview = readFileSync(legacyOverviewPath, "utf8");
+  check("旧项目总览无损补入初始化状态", migratedOverview.includes("旧项目总览保留哨兵")
+    && (migratedOverview.match(/BEGIN BEYOND PROJECT INITIALIZATION/g) ?? []).length === 1);
 
   const nestedInstall = JSON.parse(controlCommand(["install-project-entry", "--project-root", project, "--confirm-fusion", "yes"]).stdout);
   const firstEntry = readFileSync(join(project, "AGENTS.md"), "utf8");
-  check("项目入口包含完整3.1内核", firstEntry.includes("BEYOND-RUNTIME-VERSION: 3.1.5"));
+  check("项目入口包含完整3.1内核", firstEntry.includes("BEYOND-RUNTIME-VERSION: 3.1.6"));
   check("项目入口登记项目内控制仓", firstEntry.includes("BEYOND-CONTROL-ROOT: ./beyond-control"));
   check("项目内控制仓文档链接可达", firstEntry.includes("](./beyond-control/docs/AI编程协同机制/00-模板入口.md)"));
   check("项目入口把控制脚本映射到项目内控制仓", firstEntry.includes("`./beyond-control/scripts/beyond-control.mjs"));
@@ -115,6 +124,9 @@ try {
   const projectFacts = join(control, "projects", projectId, "项目事实", "README.md");
   check("最低接入建立可达的项目总览", existsSync(projectOverview) && readFileSync(projectOverview, "utf8").includes(projectId));
   check("最低接入建立可达的事实索引", existsSync(projectFacts) && readFileSync(projectFacts, "utf8").includes("当前任务需要某类事实时才定点调查"));
+  check("最低接入明确返回唯一初始化选择", nestedInstall.initialization?.status === "awaiting-choice"
+    && nestedInstall.initialization.nextRequiredDecision.includes("现在完整初始化")
+    && nestedInstall.initialization.nextRequiredDecision.includes("后续按需补齐"), JSON.stringify(nestedInstall.initialization));
 
   mkdirSync(legacyBeyondProject, { recursive: true });
   run("git", ["init"], legacyBeyondProject);
@@ -152,6 +164,59 @@ try {
   const secondEntry = readFileSync(join(project, "AGENTS.md"), "utf8");
   check("重复升级入口保持幂等", firstEntry === secondEntry);
   check("项目入口只有一个原生规则区", (secondEntry.match(/BEGIN PROJECT NATIVE RULES/g) ?? []).length === 1);
+
+  const initialState = JSON.parse(controlCommand(["initialization", "--action", "show", "--project-id", projectId]).stdout);
+  check("项目总览保存可恢复的最低接入状态", initialState.initialization.status === "awaiting-choice"
+    && initialState.initialization.pendingGroups.length === 7, JSON.stringify(initialState));
+  const rejectedEarlyGroup = controlCommand(["initialization", "--action", "record", "--project-id", projectId,
+    "--group", "overview", "--decision", "register", "--entry", "README.md"], 2);
+  check("未取得用户选择前拒绝伪造完整初始化进度", rejectedEarlyGroup.output.includes("必须先记录用户选择"), rejectedEarlyGroup.output);
+  const chosenInitialization = JSON.parse(controlCommand(["initialization", "--action", "choose", "--project-id", projectId,
+    "--mode", "full", "--approved-by", "测试用户明确选择完整初始化"]).stdout);
+  check("用户选择完整初始化后进入逐组处理", chosenInitialization.initialization.status === "full-in-progress"
+    && chosenInitialization.initialization.pendingGroups[0] === "overview", JSON.stringify(chosenInitialization));
+  const rejectedEarlyCompletion = controlCommand(["initialization", "--action", "complete", "--project-id", projectId], 2);
+  check("存在未处理分组时拒绝宣布完整初始化", rejectedEarlyCompletion.output.includes("仍有未处理初始化分组"), rejectedEarlyCompletion.output);
+  const rejectedMissingEntry = controlCommand(["initialization", "--action", "record", "--project-id", projectId,
+    "--group", "overview", "--decision", "register", "--entry", "missing-overview.md"], 2);
+  check("初始化分组拒绝不存在的正式入口", rejectedMissingEntry.output.includes("正式入口不是现存文件"), rejectedMissingEntry.output);
+  mkdirSync(join(project, "docs"), { recursive: true });
+  writeFileSync(join(project, "docs", "unindexed.md"), "# 尚未登记的入口\n", "utf8");
+  const rejectedUnindexedEntry = controlCommand(["initialization", "--action", "record", "--project-id", projectId,
+    "--group", "architecture", "--decision", "register", "--entry", "docs/unindexed.md"], 2);
+  check("项目总览以外的入口必须先被事实索引承接", rejectedUnindexedEntry.output.includes("项目事实索引尚未登记"), rejectedUnindexedEntry.output);
+  const documentedGroups = ["architecture", "development", "testing", "operations", "security"];
+  for (const group of documentedGroups) writeFileSync(join(project, "docs", `${group}.md`), `# ${group}\n`, "utf8");
+  writeFileSync(projectFacts, `${readFileSync(projectFacts, "utf8")}\n${documentedGroups.map((group) => `- docs/${group}.md`).join("\n")}\n`, "utf8");
+  controlCommand(["initialization", "--action", "record", "--project-id", projectId,
+    "--group", "overview", "--decision", "register", "--entry", "README.md"]);
+  for (const group of documentedGroups) {
+    controlCommand(["initialization", "--action", "record", "--project-id", projectId,
+      "--group", group, "--decision", "register", "--entry", `docs/${group}.md`]);
+  }
+  controlCommand(["initialization", "--action", "record", "--project-id", projectId,
+    "--group", "other", "--decision", "defer"]);
+  rmSync(join(project, "docs", "security.md"));
+  const rejectedDriftedEntry = controlCommand(["initialization", "--action", "complete", "--project-id", projectId,
+    "--root-entry-reviewed", "yes"], 2);
+  check("完成收口重新拒绝已经消失的正式入口", rejectedDriftedEntry.output.includes("正式入口不是现存文件"), rejectedDriftedEntry.output);
+  writeFileSync(join(project, "docs", "security.md"), "# security\n", "utf8");
+  const rejectedUnreviewedRoot = controlCommand(["initialization", "--action", "complete", "--project-id", projectId], 2);
+  check("未核对根入口时拒绝宣布完整初始化", rejectedUnreviewedRoot.output.includes("--root-entry-reviewed yes"), rejectedUnreviewedRoot.output);
+  const completedInitialization = JSON.parse(controlCommand(["initialization", "--action", "complete", "--project-id", projectId,
+    "--root-entry-reviewed", "yes"]).stdout);
+  check("全部分组处理后可收口完整初始化", completedInitialization.initialization.status === "complete"
+    && completedInitialization.initialization.pendingGroups.length === 0
+    && Boolean(completedInitialization.initialization.rootEntryReviewedAt)
+    && completedInitialization.initialization.nextRequiredDecision.includes("已经完成"), JSON.stringify(completedInitialization));
+  const initializationOverview = readFileSync(projectOverview, "utf8");
+  check("完整初始化状态只保存在项目总览受管块", (initializationOverview.match(/BEGIN BEYOND PROJECT INITIALIZATION/g) ?? []).length === 1
+    && initializationOverview.includes('"status":"complete"'));
+  const onDemandInitialization = JSON.parse(controlCommand(["initialization", "--action", "choose", "--project-id", secureInspect.projectId,
+    "--mode", "on-demand", "--approved-by", "测试用户明确选择先使用"]).stdout);
+  check("用户选择按需补齐后不冒充完整初始化", onDemandInitialization.initialization.status === "on-demand"
+    && onDemandInitialization.initialization.pendingGroups.length === 7
+    && onDemandInitialization.initialization.nextRequiredDecision.includes("普通任务可以继续"), JSON.stringify(onDemandInitialization));
 
   const verify = run(process.execPath, [
     join(control, "scripts", "verify-install-integrity.mjs"),

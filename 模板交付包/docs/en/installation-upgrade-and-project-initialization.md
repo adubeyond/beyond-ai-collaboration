@@ -16,7 +16,7 @@ The standard order is:
 prepare the target package and six Skills
 → initialize or upgrade the project entry
 → run installation verification
-→ confirm project initialization
+→ record the user's full-or-on-demand initialization choice
 → start a new PM for the main line
 ```
 
@@ -67,7 +67,7 @@ Confirm BEYOND-led AGENTS.md fusion while preserving the project's native rules.
 Establish only the project entry and document foundation; do not start business tasks or push remote Git.
 ```
 
-Then run section 5 verification.
+Fusion returns one explicit choice: complete initialization now, or start work and fill the remaining groups on demand. The PM records that choice in the project overview, then runs section 5 verification.
 
 ## 4. Adopt or upgrade an existing project
 
@@ -91,7 +91,15 @@ If a legacy Worker model policy is found, show the concrete fixed-script choices
 Complete existing-project initialization only; do not start or resume business tasks or push remote Git.
 ```
 
-Before initialization is complete, the PM shows the current main line, active tasks, backlog/history, fact locations, and remaining unknowns for user confirmation.
+After minimum adoption, run:
+
+```powershell
+node beyond-control/scripts/beyond-control.mjs initialization --action show --project-id "<project-id>"
+```
+
+Ask only the returned choice. For full initialization, process overview, architecture, development, testing, operations, security, and other project-specific material one group at a time. For on-demand completion, ordinary work may continue and the same command later resumes at the first pending group. A recorded entry must be an existing file inside the business project or control repository; except for the overview, the same entry must already appear in the project fact index. Mark initialization complete only after every group has a recorded decision and the root `AGENTS.md` retains only stable boundaries and fact entry points. Then show the current main line, active tasks, backlog/history, fact locations, and remaining unknowns.
+
+The fixed write actions are `initialization --action choose`, `record`, and `complete`; run `help` for their parameters. `record` validates the file and fact-index link, while `complete` revalidates every entry and requires `--root-entry-reviewed yes`. The PM executes only the one action the user has currently approved. Users do not need to enter commands or remember group state.
 
 ## 5. Verify installation
 
@@ -107,11 +115,11 @@ Third-party Hooks are preserved and are not BEYOND verification targets. If a le
 
 ## 6. Let a PM take over
 
-After installation verification and project-initialization confirmation, start a new PM at the project root. A restart is not mandatory unless the current client demonstrably retains stale Skill content.
+After installation verification, minimum adoption, and the user's initialization choice, start a new PM at the project root. Complete all groups first when the user selected full initialization; when the user selected on-demand completion, ordinary work may begin and initialization can resume later. A restart is not mandatory unless the current client demonstrably retains stale Skill content.
 
 ```text
 $identity-pm
-Take over the current project. BEYOND installation verification and project initialization are complete.
+Take over the current project. BEYOND installation verification and minimum adoption are complete; use the project overview to distinguish complete initialization from on-demand completion.
 Read the current workbench and report only the main line, active tasks, paused tasks, and next action. Do not recreate, start, or resume tasks yet.
 ```
 

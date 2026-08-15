@@ -6,6 +6,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.1.6] - 2026-08-15
+
+### Added
+
+- Add a recoverable project-initialization state in the project overview with fixed `show`, `choose`, `record`, and `complete` actions.
+- Add a deterministic two-path legacy-project regression that covers full initialization and on-demand completion without touching a real business project.
+
+### Changed
+
+- Make minimum adoption return one explicit user choice: complete initialization now or start ordinary work and fill remaining document groups on demand.
+- Let the PM migrate or register project Markdown only during user-approved initialization, while keeping business code, tests, configuration, environments, data, and release operations outside that exception.
+
+### Fixed
+
+- Reject initialization entries that do not exist or are not carried by the project fact index, and revalidate every entry plus the slim root `AGENTS.md` before recording completion.
+- Allow a PM to take over after verified minimum adoption when the user selected on-demand completion, instead of contradicting that path by requiring full initialization first.
+
 ## [3.1.5] - 2026-08-14
 
 ### Added

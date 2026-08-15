@@ -660,8 +660,8 @@ const requiredTeamFacts = [
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
-    label: "PM control-repository Git exception is narrowly scoped",
-    value: "两条例外都不扩张到后续项目事实正文、其他项目文档、业务代码、仓库配置、成员权限或发布资料",
+    label: "PM initialization and collaboration exceptions are narrowly scoped",
+    value: "两条例外都不扩张到业务代码、测试、仓库配置、成员权限、环境、数据或发布",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",

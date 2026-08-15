@@ -24,7 +24,7 @@ These documents explain the public product, its operating model, and the first r
 | Previous release | [v3.1.2 Upgrade Guide](releases/v3.1.2.md) | Restore project-local control as the default while retaining explicitly selected external sharing |
 | Previous release | [v3.1.3 Upgrade Guide](releases/v3.1.3.md) | Remove Hook trust, runtime probes, and mandatory restarts from the standard runtime while precisely cleaning legacy BEYOND Hook state |
 | Previous release | [v3.1.4 Upgrade Guide](releases/v3.1.4.md) | Correct stale mandatory-restart and identity-guard wording in the Quick Start |
-| Current release | [v3.1.5 Upgrade Guide](releases/v3.1.5.md) | Prevent terminal results from interrupting PM answers and make new-Worker model policy project-scoped and verifiable |
+| Current release | [v3.1.6 Upgrade Guide](releases/v3.1.6.md) | Continue from minimum adoption into verifiable full or on-demand project initialization |
 | Real-project adoption | [Template package](../../模板交付包/README.md) → [template entry](../../模板交付包/AGENTS.md) | Understand the formal package, Skills, and initialization boundary |
 | Security and governance review | [Architecture](architecture.md) → [Security Policy](../../SECURITY.en.md) | Understand control rights, authorization, evidence, and risk boundaries |
 
