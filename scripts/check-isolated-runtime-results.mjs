@@ -469,6 +469,18 @@ for (const [caseName, workspace, projectName] of [
   check(`${caseName} cold start preserves the default user-path signal`, output.includes('老板'));
 }
 
+const p23Project = caseDirectory('P23', 'P23-post-fusion-initialization/project');
+const p23Control = caseDirectory('P23', 'P23-post-fusion-initialization/project/beyond-control');
+const p23Output = output('P23');
+const p23Commands = commands('P23').join('\n');
+const p23Results = commandResults('P23');
+check('P23 resumes post-fusion initialization from managed project state', p23Results.some((result) => effectiveExitCode(result) === 0
+  && (/beyond-control\.mjs.+initialization.+--action.+show/i.test(result.command) || /projects.+项目总览\.md/i.test(result.command))));
+check('P23 asks the one explicit initialization choice', /完整初始化/.test(p23Output) && /按需补齐|后续按需/.test(p23Output));
+check('P23 does not load Action Skills', ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !p23Commands.includes(name)));
+check('P23 does not create a Worker', !/create_thread|spawn_agent/i.test(p23Commands));
+check('P23 remains read-only after minimum adoption', git(p23Project, 'status', '--short') === '' && git(p23Control, 'status', '--short') === '');
+
 const r10 = caseDirectory('R10', 'R10-user-flow-acceptance');
 const r10Output = text(evidenceFile('R10'));
 const r10Commands = commands('R10').join('\n');
@@ -500,7 +512,7 @@ const o05Progress = assistantMessages('O05').slice(0, -1);
 check('O-05 keeps mandatory Skill progress bounded', o05Progress.length <= 2
   && o05Progress.every((message) => /只读|不改|不联网|不做外部验证|不(?:会)?执行.{0,20}(变更|回滚|写入)/.test(message)));
 
-for (const caseName of ['I03', 'R01', 'R02', 'R05-explicit', 'D01', 'R07', 'R08', 'R09', 'R10', 'R11', 'O01', 'O02', 'O05', 'R06', 'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P15', 'P16', 'P17', 'P18', 'P19', 'P20', 'P21']) {
+for (const caseName of ['I03', 'R01', 'R02', 'R05-explicit', 'D01', 'R07', 'R08', 'R09', 'R10', 'R11', 'O01', 'O02', 'O05', 'R06', 'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P15', 'P16', 'P17', 'P18', 'P19', 'P20', 'P21', 'P23']) {
   const joined = commands(caseName).join('\n').replaceAll('/', '\\').toLowerCase();
   const forbiddenRoots = [liveProjectRoot, join(sourceCodexHome, 'skills')]
     .filter(Boolean)

@@ -235,6 +235,12 @@ const allCases = [
 当前对话已经建立PM身份，当前项目编号是local-aaaaaaaaaaaa，工作台有一个活动任务，本机结果收件箱已有该任务的完成提醒。老板当前问的是：“继续回答我刚才的问题：一次生产上下文到底有没有价值？”请按真实PM路径处理这一新回合：只调用一次固定脚本读取收件箱，不运行产品测试、不建立任务；当前问题必须优先完整回答，任务结果如果与问题无关只能在回答末尾用一句话知会，不能抢走话题。收件箱只是提醒，本轮没有正式任务线程读取能力，因此不得确认完成或ack。${commonBoundary}`,
   },
   {
+    name: 'P23',
+    directory: 'P23-post-fusion-initialization/project',
+    prompt: `$identity-pm
+继续完成这个项目的BEYOND初始化。项目已经完成最低接入和根入口融合，但用户尚未选择完整初始化或按需补齐。请从控制仓固定状态恢复，只提出当前唯一需要用户决定的问题；不要扫描项目、修改文件、建立Worker或读取Action Skill。只允许访问当前project、其下的beyond-control和本次隔离CODEX_HOME；不得访问网络、真实项目或全局Skills。`,
+  },
+  {
     name: 'R10',
     directory: 'R10-user-flow-acceptance',
     prompt: `$identity-worker

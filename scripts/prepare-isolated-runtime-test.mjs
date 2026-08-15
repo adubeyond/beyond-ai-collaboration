@@ -741,7 +741,7 @@ if (!existsSync(sourceAuth)) {
 }
 cpSync(sourceAuth, join(isolatedCodexHome, "auth.json"));
 
-for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return", "P18-team-list", "P19-team-from-business", "P20-new-init-cold", "P21-existing-init-cold", "P22-pm-inbox-priority", "WFA02-workbench-convergence", "WFA03-semantic-layers", "WFA06-audit-retest", "WFA08-shared-test-coupling", "WFA09-evidence-granularity", "WFA10-status-summary", "WFA12-fact-over-summary", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration", "K6-N03-approval", "K6-N05-discussion", "K6-N06-answer-only", "K6-N08-outage", "K6-N09-two-results", "K6-N10-temporary-model", "K6-W02-stage-progress", "K6-W04-background-job", "K6-W07-completion-question", "K6-G01-git-parallel", "K6-G03-tool-priority", "K6-B01-user-path"]) {
+for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return", "P18-team-list", "P19-team-from-business", "P20-new-init-cold", "P21-existing-init-cold", "P22-pm-inbox-priority", "P23-post-fusion-initialization", "WFA02-workbench-convergence", "WFA03-semantic-layers", "WFA06-audit-retest", "WFA08-shared-test-coupling", "WFA09-evidence-granularity", "WFA10-status-summary", "WFA12-fact-over-summary", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration", "K6-N03-approval", "K6-N05-discussion", "K6-N06-answer-only", "K6-N08-outage", "K6-N09-two-results", "K6-N10-temporary-model", "K6-W02-stage-progress", "K6-W04-background-job", "K6-W07-completion-question", "K6-G01-git-parallel", "K6-G03-tool-priority", "K6-B01-user-path"]) {
   copyProjectFixture(join(casesRoot, caseName));
 }
 
@@ -1137,6 +1137,19 @@ execFileSync(process.execPath, [join(p21Control, "scripts", "beyond-control.mjs"
 git(p21Project, "add", ".gitignore");
 git(p21Project, "commit", "-m", "fixture: ignore project-local BEYOND control repository");
 initializeGit(p21Control, "fixture: control repository for existing-project cold start");
+
+const p23Workspace = join(casesRoot, "P23-post-fusion-initialization");
+const p23Project = join(p23Workspace, "project");
+const p23Control = join(p23Project, "beyond-control");
+cpSync(join(repositoryRoot, "examples", "minimal-project"), p23Project, { recursive: true, force: true });
+writeFixture(p23Project, "AGENTS.md", "# 原生项目规则\n\n- 提交前运行 npm test。\n");
+initializeGit(p23Project, "fixture: existing project before minimum adoption");
+cpSync(candidateRoot, p23Control, { recursive: true, force: true });
+execFileSync(process.execPath, [join(p23Control, "scripts", "beyond-control.mjs"), "init-control", "--project-root", p23Project], { cwd: p23Control, encoding: "utf8" });
+execFileSync(process.execPath, [join(p23Control, "scripts", "beyond-control.mjs"), "install-project-entry", "--project-root", p23Project, "--confirm-fusion", "yes"], { cwd: p23Control, encoding: "utf8" });
+git(p23Project, "add", ".gitignore", "AGENTS.md");
+git(p23Project, "commit", "-m", "fixture: minimum project adoption");
+initializeGit(p23Control, "fixture: control repository awaiting initialization choice");
 
 const p14 = join(casesRoot, "P14-takeover-paused");
 setPausedTakeoverWorkbench(p14);

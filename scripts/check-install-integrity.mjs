@@ -28,8 +28,8 @@ function copySkills(root) {
 function fusedEntry(controlRelative, projectId) {
   return cpEntry()
     .replace(
-      "<!-- BEYOND-RUNTIME-VERSION: 3.1.5 -->",
-      `<!-- BEYOND-RUNTIME-VERSION: 3.1.5 -->\n<!-- BEYOND-CONTROL-ROOT: ${controlRelative} -->\n<!-- BEYOND-PROJECT-ID: ${projectId} -->`,
+      "<!-- BEYOND-RUNTIME-VERSION: 3.1.6 -->",
+      `<!-- BEYOND-RUNTIME-VERSION: 3.1.6 -->\n<!-- BEYOND-CONTROL-ROOT: ${controlRelative} -->\n<!-- BEYOND-PROJECT-ID: ${projectId} -->`,
     )
     .replace(/\]\(docs\//g, `](${controlRelative}/docs/`)
     .replace(/\]\(local\//g, `](${controlRelative}/local/`)
@@ -45,6 +45,14 @@ function writeProjectOverview(controlRoot, projectId) {
   const path = join(controlRoot, "projects", projectId, "项目总览.md");
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `# 安装验真项目总览
+
+## 项目初始化
+
+<!-- BEGIN BEYOND PROJECT INITIALIZATION -->
+\`\`\`json
+{"schemaVersion":1,"status":"awaiting-choice","mode":null,"approvedBy":null,"approvedAt":null,"groups":{"overview":null,"architecture":null,"development":null,"testing":null,"operations":null,"security":null,"other":null},"completedAt":null}
+\`\`\`
+<!-- END BEYOND PROJECT INITIALIZATION -->
 
 ## Worker运行策略
 
@@ -71,6 +79,15 @@ try {
   writeFileSync(join(fusedRoot, "AGENTS.md"), fusedEntry("../beyond-control", "project-demo"), "utf8");
   run("完整融合项目入口", 0, join(fusedRoot, "skills"), join(fusedRoot, "AGENTS.md"), "安装验真通过", false);
 
+  const missingInitializationId = "project-missing-init";
+  const missingInitializationOverview = join(controlRoot, "projects", missingInitializationId, "项目总览.md");
+  mkdirSync(dirname(missingInitializationOverview), { recursive: true });
+  writeFileSync(missingInitializationOverview, `# 旧项目总览\n\n## Worker运行策略\n\n<!-- BEGIN BEYOND WORKER POLICY -->\n\`\`\`json\n{"schemaVersion":1,"mode":"platform-default","scope":"new-formal-worker","confirmed":false,"approvedBy":null,"approvedAt":null}\n\`\`\`\n<!-- END BEYOND WORKER POLICY -->\n`, "utf8");
+  const missingInitializationRoot = join(scratch, "missing-initialization");
+  copySkills(missingInitializationRoot);
+  writeFileSync(join(missingInitializationRoot, "AGENTS.md"), fusedEntry("../beyond-control", missingInitializationId), "utf8");
+  run("旧项目缺少初始化状态", 1, join(missingInitializationRoot, "skills"), join(missingInitializationRoot, "AGENTS.md"), "缺少唯一项目初始化受管块", false);
+
   const thirdPartyRoot = join(scratch, "third-party-hook");
   copySkills(thirdPartyRoot);
   writeFileSync(join(thirdPartyRoot, "AGENTS.md"), fusedEntry("../beyond-control", "project-third-party"), "utf8");
@@ -91,7 +108,7 @@ try {
 
   const oldEntryRoot = join(scratch, "old-entry");
   copySkills(oldEntryRoot);
-  writeFileSync(join(oldEntryRoot, "AGENTS.md"), cpEntry().replace("<!-- BEYOND-RUNTIME-VERSION: 3.1.5 -->\n", ""), "utf8");
+  writeFileSync(join(oldEntryRoot, "AGENTS.md"), cpEntry().replace("<!-- BEYOND-RUNTIME-VERSION: 3.1.6 -->\n", ""), "utf8");
   run("旧项目入口混入", 1, join(oldEntryRoot, "skills"), join(oldEntryRoot, "AGENTS.md"), "缺少目标版本标记");
 
   const staleGuardRoot = join(scratch, "stale-guard");

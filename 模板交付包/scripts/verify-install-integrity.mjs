@@ -125,6 +125,38 @@ function validateWorkerPolicy(text, label) {
   }
 }
 
+function validateProjectInitialization(text, label) {
+  const begin = "<!-- BEGIN BEYOND PROJECT INITIALIZATION -->";
+  const end = "<!-- END BEYOND PROJECT INITIALIZATION -->";
+  const start = text.indexOf(begin);
+  const finish = text.indexOf(end, start + begin.length);
+  if (start < 0 || finish < start || text.indexOf(begin, start + begin.length) >= 0 || text.indexOf(end, finish + end.length) >= 0) {
+    errors.push(`${label}缺少唯一项目初始化受管块`);
+    return;
+  }
+  const encoded = text.slice(start + begin.length, finish).match(/```json\s*([\s\S]*?)\s*```/i)?.[1];
+  if (!encoded) {
+    errors.push(`${label}的项目初始化状态不是受管JSON`);
+    return;
+  }
+  const state = parseJson(encoded, `${label}的项目初始化状态`);
+  if (!state) return;
+  const groups = ["overview", "architecture", "development", "testing", "operations", "security", "other"];
+  const groupKeys = state.groups && typeof state.groups === "object" && !Array.isArray(state.groups)
+    ? Object.keys(state.groups).sort().join("|") : "";
+  if (state.schemaVersion !== 1 || !["awaiting-choice", "full-in-progress", "on-demand", "complete"].includes(state.status)
+    || ![null, "full", "on-demand"].includes(state.mode) || groupKeys !== groups.sort().join("|")) {
+    errors.push(`${label}的项目初始化状态字段无效`);
+    return;
+  }
+  const pending = groups.filter((group) => state.groups[group] === null);
+  if (state.status === "complete" && (pending.length || !state.rootEntryReviewedAt
+    || Number.isNaN(Date.parse(state.rootEntryReviewedAt))
+    || !state.completedAt || Number.isNaN(Date.parse(state.completedAt)))) {
+    errors.push(`${label}把未收口的项目初始化标成完成`);
+  }
+}
+
 function sha256(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
@@ -305,7 +337,10 @@ if (manifest) {
     } else {
       const projectId = projectMatch[1].trim();
       const overview = readUtf8(join(mappedControlRoot, "projects", projectId, "项目总览.md"), "项目映射的项目总览");
-      if (overview) validateWorkerPolicy(overview, "项目映射的项目总览");
+      if (overview) {
+        validateProjectInitialization(overview, "项目映射的项目总览");
+        validateWorkerPolicy(overview, "项目映射的项目总览");
+      }
     }
   } else if (!contentOnly) {
     errors.push("完整安装验真需要项目控制仓映射；仅核对候选内容请显式使用 --content-only");
@@ -319,6 +354,9 @@ if (manifest) {
   const gitignore = readUtf8(join(candidateRoot, ".gitignore"), "控制仓.gitignore");
   if (controlScript && !controlScript.includes("install-project-entry")) {
     errors.push("控制仓固定动作脚本缺少项目入口融合动作");
+  }
+  if (controlScript && !controlScript.includes('command === "initialization"')) {
+    errors.push("控制仓固定动作脚本缺少可恢复的项目初始化动作");
   }
   if (existsSync(candidateGuardPath)) {
     errors.push("候选交付包仍包含BEYOND身份护栏脚本");
