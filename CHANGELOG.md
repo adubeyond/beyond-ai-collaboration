@@ -6,6 +6,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.1.7] - 2026-08-16
+
+### Changed
+
+- Use the formal Worker final and platform task state as terminal truth. An idle source PM may receive one compact reminder; a busy or unknown PM is never interrupted, and the next user turn recovers results through one zero-duration platform snapshot.
+- Keep ordinary task packets short, classify Worker models by the task's primary work instead of risk words, and treat normal default business behavior as already covered rather than a new approval stop.
+- Require a Codex restart and new-process verification after replacing the project entry or Skills; ordinary project-document edits remain restart-free.
+
+### Removed
+
+- Stop creating new result-inbox records for formal tasks. Legacy pending records are deleted only after PM verification and workbench update instead of being retained as low-value long-term history.
+
+### Fixed
+
+- Prevent terminal delivery from interrupting and replacing a PM answer already being generated.
+- Preserve a recoverable path when the direct reminder is skipped or missed, without background polling or duplicate Worker creation.
+
 ## [3.1.6] - 2026-08-15
 
 ### Added

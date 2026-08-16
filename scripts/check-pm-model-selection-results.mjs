@@ -26,6 +26,7 @@ const approved = {
   B: resolve('local-aaaaaaaaaaaa', 'ordinary-engineering'),
   C: resolve('local-aaaaaaaaaaaa', 'complex-high-risk'),
   D: resolve('local-aaaaaaaaaaaa', 'bulk-structured'),
+  E: resolve('local-aaaaaaaaaaaa', 'ordinary-engineering'),
 };
 const unapproved = resolve('local-bbbbbbbbbbbb', 'complex-high-risk');
 
@@ -40,7 +41,8 @@ const taskSection = (label, nextLabel) => {
 const taskA = taskSection('A', 'B');
 const taskB = taskSection('B', 'C');
 const taskC = taskSection('C', 'D');
-const taskD = taskSection('D', null);
+const taskD = taskSection('D', 'E');
+const taskE = taskSection('E', null);
 
 const results = [];
 const check = (name, passed) => results.push({ name, passed: Boolean(passed) });
@@ -54,7 +56,7 @@ check('M-03 complex high-risk task receives Sol with xhigh reasoning', approved.
 check('M-04 high-volume clear audit uses Luna high reasoning', approved.D.createParameters.model === 'gpt-5.6-luna' && approved.D.createParameters.thinking === 'high' && /Luna/i.test(taskD) && /高|high/i.test(taskD));
 check(
   'M-05 runtime settings stay outside the business packet',
-  /不进入业务任务包的内容[\s\S]{0,240}(?:model|模型)[\s\S]{0,80}(?:thinking|推理)|(?:model|模型)[\s\S]{0,80}(?:thinking|推理)[\s\S]{0,240}不进入业务任务包/s.test(output),
+  /不(?:会)?进入业务任务包的内容[\s\S]{0,240}(?:model|模型)[\s\S]{0,80}(?:thinking|推理)|(?:model|模型)[\s\S]{0,80}(?:thinking|推理)[\s\S]{0,240}不(?:会)?进入业务任务包/s.test(output),
 );
 check(
   'M-06 model choice is limited to new Worker creation',
@@ -65,6 +67,8 @@ check('M-08 fixture remains read-only', execFileSync('git', ['status', '--short'
 check('M-09 Worker model policy does not change the current PM model', /当前\s*PM.{0,40}(?:不改变|不能改变|不会改变|无权改变)|(?:不改变|不能改变|不会改变|无权改变).{0,40}当前\s*PM/s.test(output));
 check('M-10 unapproved project keeps platform defaults', unapproved.decision === 'keep-platform-default' && Object.keys(unapproved.createParameters).length === 0 && /local-bbbbbbbbbbbb|未批准/.test(output));
 check('M-11 fixed resolver matches the actual task creation field names', ['model', 'thinking'].every((name) => Object.hasOwn(approved.C.createParameters, name)));
+check('M-12 bounded local account work stays on Terra high', approved.E.createParameters.model === 'gpt-5.6-terra' && approved.E.createParameters.thinking === 'high' && /Terra/i.test(taskE) && /高|high/i.test(taskE));
+check('M-13 credential checkpoints and normal VIP do not alone escalate the task', /(?:普通|常规|边界明确|本地).{0,80}(?:不升级|Terra|ordinary)|(?:凭据|验证码|VIP).{0,100}(?:不|并非).{0,24}(?:复杂高风险|升级)/is.test(taskE));
 
 const failed = results.filter((result) => !result.passed);
 console.log(JSON.stringify({ passed: results.length - failed.length, failed: failed.length, results }, null, 2));

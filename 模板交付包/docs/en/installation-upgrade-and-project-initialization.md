@@ -20,7 +20,7 @@ prepare the target package and six Skills
 → start a new PM for the main line
 ```
 
-The standard BEYOND path does not install an identity Hook and does not require `/hooks`, a runtime probe, or a restart for guard activation. Use a new ordinary conversation without an identity Skill for installation maintenance so an active PM or Worker does not replace its own project entry while doing business work.
+The standard BEYOND path does not install an identity Hook and does not require `/hooks` or a guard probe. Use a new ordinary conversation without an identity Skill for installation maintenance so an active PM or Worker does not replace its own project entry while doing business work. Wait for active tasks to stop before replacing the root entry or Skills; after installation, restart Codex and verify the loaded version from a new process.
 
 ## 2. Prepare the target release
 
@@ -115,7 +115,7 @@ Third-party Hooks are preserved and are not BEYOND verification targets. If a le
 
 ## 6. Let a PM take over
 
-After installation verification, minimum adoption, and the user's initialization choice, start a new PM at the project root. Complete all groups first when the user selected full initialization; when the user selected on-demand completion, ordinary work may begin and initialization can resume later. A restart is not mandatory unless the current client demonstrably retains stale Skill content.
+After installation verification, minimum adoption, and the user's initialization choice, start a new PM at the project root. Complete all groups first when the user selected full initialization; when the user selected on-demand completion, ordinary work may begin and initialization can resume later. Ordinary project-document edits do not force a restart. Replacing the root entry or Skills does: restart Codex and confirm the loaded version from a new process.
 
 ```text
 $identity-pm

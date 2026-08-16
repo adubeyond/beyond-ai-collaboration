@@ -411,21 +411,23 @@ check('P-16 remains read-only', git(p16, 'status', '--short') === '');
 
 const p17 = caseDirectory('P17', 'P17-worker-terminal-return');
 const p17Output = text(evidenceFile('P17'));
-check('P-17 writes exactly one terminal record to the local inbox', p17Output.includes('11111111-2222-4333-8444-555555555555') && /inbox/i.test(p17Output) && /(一次|恰好一条|恰好.{0,8}一条|只写一条|1\s*条)/.test(p17Output) && /(记录|待处理结果)/.test(p17Output));
-check('P-17 writes inbox before Worker final', /(先|首先).{0,80}(收件箱|inbox|登记|写入)[\s\S]{0,520}(再|然后|才|仅在.{0,36}后).{0,60}(输出|写).{0,24}final|(登记成功|幂等返回已有记录|脚本返回.{0,36}(新建成功|幂等命中已有记录)|脚本成功写入.{0,30}幂等返回已有同一记录).{0,40}后.{0,24}(立即|再|然后|才).{0,24}输出.{0,24}final|(final).{0,40}(必须|只能).{0,40}(登记|写入).{0,20}(完成|结果).{0,12}后/is.test(p17Output));
-check('P-17 forbids direct platform injection into PM', /(不|不得|不能).{0,48}(平台消息|直接注入).{0,48}PM|PM.{0,48}(不|不得|不能).{0,48}(平台消息|直接注入)/is.test(p17Output));
+check('P-17 uses the self-contained Worker final as terminal truth', /自包含.{0,16}final|final.{0,16}自包含/is.test(p17Output) && /(动作|文件|Git|运行现场).{0,40}(稳定|完成|收口)/is.test(p17Output));
+check('P-17 reads the unique source PM state only once', /(只|仅).{0,12}(读取|检查).{0,24}(一次|单次).{0,24}(来源 PM|来源PM).{0,16}状态|(?:来源 PM|来源PM).{0,24}状态.{0,24}(一次|单次)/is.test(p17Output));
+check('P-17 sends one compact reminder only when the source PM is idle', /(空闲|idle).{0,48}(一次|单次).{0,24}(紧凑|简短).{0,16}(终态提醒|提醒)|(?:一次|单次).{0,24}(紧凑|简短).{0,16}(终态提醒|提醒).{0,48}(空闲|idle)/is.test(p17Output));
+check('P-17 does not interrupt an active or unknown source PM', /(正在运行|忙碌|active).{0,48}(不发送|跳过)|状态未知.{0,48}(不发送|跳过)|(?:不发送|跳过).{0,48}(正在运行|忙碌|active|状态未知)/is.test(p17Output));
+check('P-17 keeps a PM user-turn platform snapshot as recovery', /PM.{0,80}(用户新回合|后续用户回合).{0,100}(平台|wait_threads|即时快照|零时长)|(?:平台|wait_threads|即时快照|零时长).{0,100}PM.{0,80}(用户新回合|后续用户回合)/is.test(p17Output));
+check('P-17 keeps the direct reminder subordinate to final truth', /(提醒|唤醒).{0,48}(不替代|不是).{0,48}(final|平台任务状态|终态真值|正式真值)|(?:final|平台任务状态|终态真值|正式真值).{0,48}(提醒|唤醒).{0,48}(不替代|不是)/is.test(p17Output));
+check('P-17 does not require a local result inbox', /(不|无需|不再).{0,32}(收件箱|inbox)/i.test(p17Output));
 check('P-17 does not reroute a failed terminal', /(不|不得|不能).{0,32}(改投|猜测|父任务|其他ID|其他 ID)/.test(p17Output));
 check('P-17 remains read-only', git(p17, 'status', '--short') === '');
 
 const p22 = caseDirectory('P22', 'P22-pm-inbox-priority');
 const p22Output = text(evidenceFile('P22'));
 const p22Commands = commands('P22').join('\n');
-const p22AnswerIndex = p22Output.search(/一次生产上下文|生产上下文/);
-const p22ResultIndex = p22Output.search(/账号页面|重复负责人/);
-check('P-22 reads the local inbox exactly once at a safe user turn', (p22Commands.match(/inbox\s+--action\s+list/g) ?? []).length === 1);
-check('P-22 answers the current user question before unrelated task result', p22AnswerIndex >= 0 && p22ResultIndex > p22AnswerIndex);
-check('P-22 does not confirm or acknowledge without Worker evidence', /(不能|不|没有).{0,16}(确认|验收).{0,12}(完成|通过|收件)|仍需.{0,16}(核验|读取).{0,16}(Worker|任务线程)/is.test(p22Output) && !/inbox\s+--action\s+ack/.test(p22Commands));
-check('P-22 does not create tasks or inject messages', !/create_thread|fork_thread|send_message_to_thread/.test(p22Commands));
+check('P-22 selects one zero-time platform snapshot at a PM user turn', /wait_threads/i.test(p22Output) && /timeoutMs\s*[:=]?\s*0|timeoutMs=0/i.test(p22Output) && /(一次|单次|一轮)/.test(p22Output));
+check('P-22 keeps the current user question ahead of unrelated terminal results', /当前用户问题.{0,32}(优先|先回答)|先.{0,16}(回答|处理).{0,24}(当前问题|生产上下文)/is.test(p22Output));
+check('P-22 continues normally when there is no new terminal', /(没有|无).{0,20}(新终态|暂停|完成).{0,32}(继续|回答|处理)/s.test(p22Output));
+check('P-22 does not use the legacy inbox or create tasks', !/inbox\s+--action/.test(p22Commands + p22Output) && !/create_thread|fork_thread|send_message_to_thread/.test(p22Commands));
 
 const p18 = caseDirectory('P18', 'P18-team-list');
 const p18Output = text(evidenceFile('P18'));

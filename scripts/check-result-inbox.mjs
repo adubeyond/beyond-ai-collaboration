@@ -81,8 +81,9 @@ try {
   run(["inbox", "--action", "ack", "--project-id", projectIdTwo, "--record-id", created.record.recordId], 2);
   const acknowledged = json(["inbox", "--action", "ack", "--project-id", projectIdOne, "--record-id", created.record.recordId]);
   check(acknowledged.acknowledged === created.record.recordId, "ack must confirm the requested record");
+  check(acknowledged.deleted === true, "ack must delete the consumed legacy record");
   check(json(["inbox", "--action", "list", "--project-id", projectIdOne]).count === 0, "acknowledged record must leave pending");
-  check(existsSync(join(controlRoot, acknowledged.archive)), "acknowledged record must be preserved in history");
+  check(!existsSync(join(controlRoot, "local", "inbox", "history")), "consumed legacy results must not create long-term history");
 
   run([
     "inbox", "--action", "enqueue", "--project-id", projectIdOne,

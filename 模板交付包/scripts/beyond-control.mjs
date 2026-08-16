@@ -826,13 +826,9 @@ function inbox() {
     }
     const source = join(inboxPendingDirectory(projectId), `${recordId}.json`);
     if (!existsSync(source)) fail(`当前项目结果收件箱找不到待确认记录：${recordId}`, 2);
-    const record = validateInboxRecord(JSON.parse(readUtf8(source, "待确认结果收件箱记录")), projectId);
-    const month = record.createdAt.slice(0, 7);
-    const target = join(controlRoot, "local", "inbox", "history", month, projectId, `${recordId}.json`);
-    if (existsSync(target)) fail(`结果收件箱历史已存在该记录：${recordId}`, 2);
-    mkdirSync(dirname(target), { recursive: true });
-    renameSync(source, target);
-    console.log(JSON.stringify({ acknowledged: recordId, projectId, archive: display(relative(controlRoot, target)) }, null, 2));
+    validateInboxRecord(JSON.parse(readUtf8(source, "待确认结果收件箱记录")), projectId);
+    rmSync(source, { force: true });
+    console.log(JSON.stringify({ acknowledged: recordId, projectId, deleted: true }, null, 2));
     return;
   }
   fail(`未知结果收件箱动作：${action}`, 2);
