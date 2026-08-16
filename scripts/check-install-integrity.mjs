@@ -28,8 +28,8 @@ function copySkills(root) {
 function fusedEntry(controlRelative, projectId) {
   return cpEntry()
     .replace(
-      "<!-- BEYOND-RUNTIME-VERSION: 3.1.6 -->",
-      `<!-- BEYOND-RUNTIME-VERSION: 3.1.6 -->\n<!-- BEYOND-CONTROL-ROOT: ${controlRelative} -->\n<!-- BEYOND-PROJECT-ID: ${projectId} -->`,
+      "<!-- BEYOND-RUNTIME-VERSION: 3.1.7 -->",
+      `<!-- BEYOND-RUNTIME-VERSION: 3.1.7 -->\n<!-- BEYOND-CONTROL-ROOT: ${controlRelative} -->\n<!-- BEYOND-PROJECT-ID: ${projectId} -->`,
     )
     .replace(/\]\(docs\//g, `](${controlRelative}/docs/`)
     .replace(/\]\(local\//g, `](${controlRelative}/local/`)
@@ -108,7 +108,7 @@ try {
 
   const oldEntryRoot = join(scratch, "old-entry");
   copySkills(oldEntryRoot);
-  writeFileSync(join(oldEntryRoot, "AGENTS.md"), cpEntry().replace("<!-- BEYOND-RUNTIME-VERSION: 3.1.6 -->\n", ""), "utf8");
+  writeFileSync(join(oldEntryRoot, "AGENTS.md"), cpEntry().replace(/<!-- BEYOND-RUNTIME-VERSION: 3\.1\.7 -->\r?\n/, ""), "utf8");
   run("旧项目入口混入", 1, join(oldEntryRoot, "skills"), join(oldEntryRoot, "AGENTS.md"), "缺少目标版本标记");
 
   const staleGuardRoot = join(scratch, "stale-guard");

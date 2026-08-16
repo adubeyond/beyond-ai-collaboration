@@ -320,13 +320,28 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
-    label: "worker callback contains only one primary evidence entry",
-    value: "`evidence`只写一个主证据或正式落点",
+    label: "worker final contains only one primary evidence entry",
+    value: "一个主证据或正式落点",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
-    label: "worker callback preserves the decisive business fact",
-    value: "`summary`保留一个决定裁决的业务主事实",
+    label: "worker final preserves the decisive business fact",
+    value: "一个决定裁决的业务主事实",
+  },
+  {
+    path: "模板交付包/skills/identity-worker/SKILL.md",
+    label: "worker terminal reminder only targets an idle source PM",
+    value: "明确为空闲就向该来源发送一次紧凑终态提醒",
+  },
+  {
+    path: "模板交付包/skills/identity-worker/SKILL.md",
+    label: "worker terminal reminder skips active or unknown PM state",
+    value: "正在运行、状态未知或读取失败就跳过",
+  },
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "PM user-turn snapshot remains terminal recovery",
+    value: "作为未发送、未送达或尚未消费终态的恢复路径",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
@@ -641,7 +656,7 @@ for (const fact of requiredSkillFacts) {
     errors.push(`关键 Skill 文件缺失：${fact.path}`);
     continue;
   }
-  const text = readFileSync(path, "utf8");
+  const text = readFileSync(path, "utf8").replace(/\r\n/g, "\n");
   if (!text.includes(fact.value)) {
     errors.push(`关键 Skill 规则缺失：${fact.label} (${fact.path})`);
   }
@@ -726,7 +741,7 @@ for (const fact of requiredTeamFacts) {
     errors.push(`团队协同关键文件缺失：${fact.path}`);
     continue;
   }
-  const text = readFileSync(path, "utf8");
+  const text = readFileSync(path, "utf8").replace(/\r\n/g, "\n");
   if (!text.includes(fact.value)) {
     errors.push(`团队协同关键规则缺失：${fact.label} (${fact.path})`);
   }
