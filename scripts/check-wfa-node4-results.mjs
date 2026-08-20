@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
 const runtimeRoot = process.env.BEYOND_ISOLATED_ROOT;
@@ -20,17 +20,22 @@ const commandList = events.split(/\r?\n/).filter(Boolean).flatMap((line) => {
 const commands = commandList.join('\n');
 
 const workbench = readFileSync(join(caseRoot, 'local', '当前工作台.md'), 'utf8');
-const historyPath = join(caseRoot, 'local', 'history', 'tasks', '2026-08.md');
-const history = existsSync(historyPath) ? readFileSync(historyPath, 'utf8') : '';
-const backupRoot = join(runtimeRoot, 'cases', '.beyond-local-backups', 'WFA02-workbench-convergence');
+const historyPath = join(caseRoot, 'local', 'history', 'workbench', '2026-08.md');
+const historyJsonPath = join(caseRoot, 'local', 'history', 'workbench', '2026-08.json');
+const history = [historyPath, historyJsonPath]
+  .filter((path) => existsSync(path))
+  .map((path) => readFileSync(path, 'utf8'))
+  .join('\n');
+const backupRoot = join(caseRoot, 'local', 'runtime', 'workbench', 'backups');
 const results = [];
 const check = (name, passed) => results.push({ name, passed: Boolean(passed) });
 
-check('WFA-02 PM uses the fixed workbench archive command', commandList.some((command) => command.includes('beyond-control.mjs workbench --action archive') && command.includes('worker-done')));
+check('WFA-02 PM uses the fixed runtime acceptance transaction', commandList.some((command) => command.includes('beyond-control.mjs runtime') && command.includes('--request')));
 check('WFA-02 selected completed task leaves the hot table', !workbench.includes('worker-done') && history.includes('worker-done') && history.includes('evidence/manager-fix.md'));
-check('WFA-02 active and retained completed tasks remain', workbench.includes('worker-active') && workbench.includes('worker-retain') && !history.includes('worker-retain'));
-check('WFA-02 local recovery backup exists', existsSync(backupRoot));
-check('WFA-02 PM reports the business result', /worker-done|重复负责人/.test(message) && /(已收拢|移出|归档)/.test(message) && /(保留|未动|没有动).{0,30}(worker-active|worker-retain|其他任务)/s.test(message));
+check('WFA-02 active and retained tasks remain', workbench.includes('worker-active') && workbench.includes('worker-retain') && !history.includes('worker-retain'));
+check('WFA-02 local recovery backup exists', existsSync(backupRoot) && readdirSync(backupRoot).some((name) => name.endsWith('.json')));
+check('WFA-02 PM reports the business result', /worker-done|重复负责人/.test(message) && /(已收拢|移出|归档|完成历史)/.test(message)
+  && /worker-active.{0,30}(保持|未改动)/s.test(message) && /worker-retain.{0,30}(仍留|保持|未改动)/s.test(message));
 check('WFA-02 PM creates no Worker or Action Skill detour', !/create_thread|fork_thread/.test(commands) && ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !commands.includes(name)));
 check('WFA-02 shared Git content remains clean', execFileSync('git', ['status', '--short'], { cwd: caseRoot, encoding: 'utf8' }).trim() === '');
 

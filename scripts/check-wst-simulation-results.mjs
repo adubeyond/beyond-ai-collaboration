@@ -88,13 +88,17 @@ const sim02Commands = commands('WST-SIM-02').join('\n');
 const sim02Changed = git(sim02Root, '-c', 'core.quotepath=false', 'diff', '--name-only').split(/\r?\n/).filter(Boolean).map((path) => path.replaceAll('\\', '/'));
 const sim02WorkerIds = [...`${sim02Workbench}\n${sim02Output}`.matchAll(/worker-site-[a-z0-9-]+/g)].map((match) => match[0]);
 
-check('SIM-02 changed only the PM workbench', sim02Changed.length === 0 && /beyond-control\.mjs.+workbench.+--action\s+(?:upsert|snapshot)/s.test(sim02Commands), sim02Changed.join('|'));
-check('SIM-02 kept the already-valid station A completed', /来源站甲分类采集与质量审查\s*\|\s*worker-site-a\s*\|\s*已完成/.test(sim02Workbench));
+check('SIM-02 changed only the PM workbench', sim02Changed.length === 0 && /beyond-control\.mjs.+runtime.+--request/s.test(sim02Commands), sim02Changed.join('|'));
+check('SIM-02 kept the already-valid station A without repeat work', /来源站甲分类采集与质量审查\s*\|\s*worker-site-a\s*\|\s*进行中\s*\|[^\n]*(已满足新口径|七个分类各50条)/.test(sim02Workbench));
 check('SIM-02 reopened station B on its original Worker', /来源站乙分类采集与质量审查\s*\|\s*worker-site-b\s*\|\s*进行中/.test(sim02Workbench));
 check('SIM-02 reopened station C on its original Worker', /来源站丙分类采集与质量审查\s*\|\s*worker-site-c\s*\|\s*进行中/.test(sim02Workbench));
 check('SIM-02 recorded the corrected per-category acceptance', /每个分类.{0,12}50|分类各50|各分类.{0,8}50/.test(sim02Workbench));
 check('SIM-02 removed the stale all-completed project snapshot', !/完成三个来源站的分类采集与质量审查\s*\|\s*已完成/.test(sim02Workbench));
-check('SIM-02 did not create a replacement Worker', sim02WorkerIds.every((id) => ['worker-site-a', 'worker-site-b', 'worker-site-c'].includes(id)) && /worker-site-b/.test(sim02Output) && /worker-site-c/.test(sim02Output));
+check('SIM-02 did not create a replacement Worker',
+  sim02WorkerIds.every((id) => ['worker-site-a', 'worker-site-b', 'worker-site-c'].includes(id))
+  && ['worker-site-a', 'worker-site-b', 'worker-site-c'].every((id) => sim02Workbench.includes(id))
+  && /站乙/.test(sim02Output) && /站丙/.test(sim02Output)
+  && !/create_thread|fork_thread/.test(sim02Commands));
 check('SIM-02 did not load Action Skills', ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !sim02Commands.includes(name)));
 check('SIM-02 did not ask the boss to reconfirm the explicit correction', /(无需|不需要|不必|不用).{0,12}(确认|批准)|无需再次/.test(sim02Output));
 
@@ -121,23 +125,33 @@ check(
     && /进行中|继续处理|继续终止公告/.test(commsOutput),
 );
 check('COMMS changes only the workbench through the recoverable fixed writer', commsChanged.length === 0
-  && /beyond-control\.mjs.+workbench.+--action\s+(?:progress|upsert)/s.test(commsCommands)
-  && commsBackups.some((name) => name.includes('workbench-progress') || name.includes('workbench-upsert'))
-  && !/Remove-Item[^\n]*(?:beyond-local-backups|workbench-(?:progress|upsert))/i.test(commsCommands), commsChanged.join('|'));
+  && /beyond-control\.mjs.+runtime.+--request/s.test(commsCommands)
+  && !/Remove-Item[^\n]*(?:runtime|workbench|backups)/i.test(commsCommands), commsChanged.join('|'));
 check('COMMS PM does not load Action Skills', !/task-(design|dev|test|ops)/.test(commsCommands));
 
 const callbackOutput = read(evidenceFile('WST-WORKER-CALLBACK'));
-const callbackRecord = callbackOutput.match(/```(?:yaml)?\s*([\s\S]*?)```/i)?.[1] ?? callbackOutput;
+const callbackRecord = callbackOutput;
 const callbackRequired = ['已完成', '不通过', 'evidence/quality-review.md', '同一冻结集合'];
 const callbackDetails = ['evidence/full-check.json', '集合 SHA-256', '136 项', '9 项', '197 项', '未创建 worktree', '未访问网络'];
-check('CALLBACK preserves control facts and primary finding', callbackRequired.every((fact) => callbackRecord.includes(fact)) && /原站\s*Worker/.test(callbackRecord) && (callbackRecord.includes('50/50') || /50\s*条[^。\n]*全部/.test(callbackRecord)) && (/section_name.{0,30}实际.{0,20}标段编号.{0,30}应.{0,20}标段名称/.test(callbackRecord) || /标段名称.{0,20}标段编号/.test(callbackRecord)));
+check('CALLBACK preserves control facts and primary finding', callbackRequired.every((fact) => callbackRecord.includes(fact)) && /原站\s*Worker/.test(callbackRecord) && (callbackRecord.includes('50/50') || /50\s*条[^。\n]*全部/.test(callbackRecord)) && (/section_name.{0,30}实际.{0,20}标段编号.{0,30}应.{0,20}标段名称/.test(callbackRecord) || /标段名称.{0,20}标段编号|标段编号.{0,30}(?:真实)?标段名称/.test(callbackRecord)));
 check('CALLBACK moves engineering detail to the evidence entry', callbackDetails.every((detail) => !callbackRecord.includes(detail)));
 check('CALLBACK remains compact', [...callbackOutput].length < 500, 'chars=' + [...callbackOutput].length);
+check('CALLBACK retires the legacy result inbox', !/应写入.{0,16}(结果)?收件箱|```yaml|task:\s*WST-/s.test(callbackOutput));
+
+const controlRoot = caseDirectory('WST-CONTROL-PLANE', 'WST-CONTROL-PLANE-integration');
+const controlOutput = read(evidenceFile('WST-CONTROL-PLANE'));
+const controlCommands = commands('WST-CONTROL-PLANE').join('\n');
+const controlState = JSON.parse(read(join(controlRoot, 'local', 'runtime', 'workbench', 'workbench-state.json')));
+check('CONTROL-PLANE accepts one verified Worker final through runtime', /beyond-control\.mjs.+runtime.+--request/s.test(controlCommands)
+  && !Object.values(controlState.tasks).some((task) => task.worker === 'worker-company-manager')
+  && controlState.recentMainlineResults.some((result) => result.worker === 'worker-company-manager'));
+check('CONTROL-PLANE does not revive legacy paths', !/workbench\s+--action|inbox\s+--action/.test(controlCommands));
+check('CONTROL-PLANE distinguishes source acceptance from release', /未发布|尚未发布|页面.{0,12}(未|没有).{0,8}变化|不能.{0,12}用户可用/s.test(controlOutput));
 
 const languageForbidden = ['node --test', 'exitCode', '4f82c1a0b7d9e2f3a11c', 'codex/fix-company-manager-dedup', 'companyManagers', 'managerCount', 'managerId', 'src/companyRelations.js', '7 条断言'];
 for (const caseName of ['WST-USER-LANGUAGE-DIRECT', 'WST-USER-LANGUAGE-WORKER']) {
   const output = read(evidenceFile(caseName));
-  check(caseName + ' preserves the business result and current usability', ['老板', '负责人', '测试', '页面'].every((fact) => output.includes(fact)) && /不再重复|重复负责人|重复显示/.test(output) && /尚未|还没有|不能确认可用|不能按线上已可用|还不能按/.test(output));
+  check(caseName + ' preserves the business result and current usability', ['老板', '负责人', '测试', '页面'].every((fact) => output.includes(fact)) && /不再重复|不会再重复|重复负责人|重复显示/.test(output) && /尚未|还没有|不能确认可用|不能按线上已可用|还不能按/.test(output));
   check(caseName + ' avoids unnecessary technical detail', languageForbidden.every((detail) => !output.includes(detail)));
 }
 

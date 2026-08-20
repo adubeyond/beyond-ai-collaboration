@@ -1,9 +1,14 @@
 {
   "schemaVersion": 3,
-  "releaseVersion": "3.1.7",
+  "releaseVersion": "3.2.0",
   "controlEntry": "AGENTS.md",
   "projectEntry": "AGENTS.md",
   "controlScript": "scripts/beyond-control.mjs",
+  "controlRuntimeFiles": [
+    "scripts/runtime/control-runtime.mjs",
+    "scripts/runtime/project-identity-provider.mjs",
+    "scripts/runtime/workbench-transaction.mjs"
+  ],
   "projectOverrideBegin": "<!-- BEGIN BEYOND PROJECT OVERRIDES -->",
   "projectOverrideEnd": "<!-- END BEYOND PROJECT OVERRIDES -->",
   "skills": [

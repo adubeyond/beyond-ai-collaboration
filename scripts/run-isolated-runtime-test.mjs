@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 
@@ -204,7 +204,7 @@ const allCases = [
     name: 'P17',
     directory: 'P17-worker-terminal-return',
     prompt: `$identity-worker
-当前对话是正式任务的唯一Worker，业务结果与证据均已完成。本轮只说明真实收口动作，不实际调用任务工具：Worker final在什么时间形成；平台给出唯一来源PM后是否读取其状态；来源PM明确空闲、正在运行、状态未知三种情况分别怎样处理；直接提醒与PM后续用户回合零时长平台快照各负责什么；是否另写本机收件箱；任务关系异常时是否改投父任务或其他ID。隔离演练不实际写入、不修改文件。${commonBoundary}`,
+当前对话是正式任务的唯一Worker，业务结果与证据均已完成。本轮只说明3.2候选的真实收口动作，不实际调用任务工具：Worker final怎样成为唯一正式结果；正常完成与工具启动失败、缺失输出、权限或环境异常形成的暂停是否走同一收口；怎样在输出final前不读取或判断来源PM忙闲、不调用wait_threads，直接按平台来源关系调用一次send_message_to_thread轻量唤醒；发送成功或失败时怎样保留结果；为什么PM收到任一回调后要扫描全部已登记Worker；是否继续写旧版结果收件箱；任务关系异常时是否改投其他ID。隔离演练不实际写入、不修改文件。${commonBoundary}`,
   },
   {
     name: 'P18',
@@ -230,9 +230,9 @@ const allCases = [
   },
   {
     name: 'P22',
-    directory: 'P22-pm-inbox-priority',
+    directory: 'P22-pm-sweep-priority',
     prompt: `$identity-pm
-当前对话已经建立PM身份，工作台有一个进行中的正式Worker。老板当前问的是：“继续回答我刚才的问题：一次生产上下文到底有没有价值？”本轮平台没有提供真实任务线程工具，只说明在正常Codex Desktop用户新回合应执行的即时终态读取动作、等待时长、当前问题优先级和没有新终态时怎样继续；不运行产品测试、不建立任务、不修改文件。${commonBoundary}`,
+当前对话已经建立PM身份，工作台登记了三个正式Worker。老板当前问的是：“继续回答我刚才的问题：一次生产上下文到底有没有价值？”本轮不提供真实任务线程工具，只说明3.2候选怎样把任一Worker回调作为可靠主触发扫描全部已登记Worker，怎样把正常Codex Desktop回合开始和结束扫描限制为补漏，如何避免重复消费、保持当前问题优先，以及没有新终态时怎样继续；不要使用后台轮询或旧版结果收件箱，不运行产品测试、不建立任务、不修改文件。${commonBoundary}`,
   },
   {
     name: 'P23',
@@ -278,7 +278,7 @@ const allCases = [
   {
     name: 'WST-SIM-02',
     directory: 'WST-SIM-02-acceptance-correction',
-    prompt: `使用$identity-pm以PM身份处理一次已经明确的验收纠正。当前工作台把来源站甲、乙、丙都写为已完成；老板现在明确说明：验收不是每站合计50条，而是站内每个纳入范围的分类各50条并逐类审查。站甲原结果已经满足，不重复；站乙和站丙不满足，必须复用已有成果并由原Worker继续，不新建替代任务。允许且只允许更新当前工作台，使项目快照、站乙和站丙状态与新口径一致；不修改业务代码、不创建新任务文件、不读取Action Skill。最后简洁说明恢复哪两个原Worker以及是否需要再向老板确认。${commonBoundary}`,
+    prompt: `使用$identity-pm以PM身份处理一次已经明确的验收纠正。当前工作台登记来源站甲、乙、丙三个原Worker，旧口径都等待PM收口；老板现在明确说明：验收不是每站合计50条，而是站内每个纳入范围的分类各50条并逐类审查。站甲原结果已经满足，不重复；站乙和站丙不满足，必须复用已有成果并由原Worker继续，不新建替代任务。只使用3.2固定runtime入口更新项目快照、站乙和站丙进度；不得使用旧workbench写动作、手工改表、修改业务代码、创建新任务或读取Action Skill。最后简洁说明恢复哪两个原Worker以及是否需要再向老板确认。${commonBoundary}`,
   },
   {
     name: 'WST-PM-Q1',
@@ -328,12 +328,17 @@ const allCases = [
   {
     name: 'WST-PM-COMMS',
     directory: 'WST-PM-COMMS-status',
-    prompt: `$identity-pm\n当前对话已经建立PM身份。正式Worker worker-site-b 返回普通业务里程碑：来源站乙“废标”已经完成50/50，标题、时间、正文、HTML和公告类型均50/50，39项候选测试通过，业务库写入为0；原任务继续处理“终止公告”，没有暂停、没有完成全任务、没有需要老板决定的事项。允许且只允许把当前工作台里该任务的当前进度从废标10/50更新为废标50/50并继续终止公告，然后向老板自然汇报。不得修改其他文件。${commonBoundary}`,
+    prompt: `$identity-pm\n当前对话已经建立PM身份。正式Worker worker-site-b 返回普通业务里程碑：来源站乙“废标”已经完成50/50，标题、时间、正文、HTML和公告类型均50/50，39项候选测试通过，业务库写入为0；原任务继续处理“终止公告”，没有暂停、没有完成全任务、没有需要老板决定的事项。只使用3.2固定runtime入口把该任务的当前进度从废标10/50更新为废标50/50并继续终止公告，然后向老板自然汇报。不得使用旧workbench写动作、手工改表或修改其他文件。${commonBoundary}`,
   },
   {
     name: 'WST-WORKER-CALLBACK',
     directory: 'WST-WORKER-CALLBACK-result',
-    prompt: `$identity-worker\n当前对话是正式任务 WST-JILIN-THREE-SITES-CATEGORY-QUALITY-REVIEW-001 的唯一 Worker。工程工作已经完成，事实和明细在 evidence/quality-review.md 与其机器证据中；本轮只验证收件箱控制面增量，不重新执行审查、不修改文件。请输出现在应写入本机结果收件箱的task、status、summary、evidence、next；因为隔离环境不实际写入，不得声称已经登记。该记录必须让 PM 能更新主线和决定下一步。${commonBoundary}`,
+    prompt: `$identity-worker\n当前对话是正式任务 WST-JILIN-THREE-SITES-CATEGORY-QUALITY-REVIEW-001 的唯一 Worker。工程工作已经完成，事实和明细在 evidence/quality-review.md 与其机器证据中；本轮只验证3.2终态表达，不重新执行审查、不修改文件、不实际调用任务工具。请按当前规则输出自包含final：只保留业务状态、决定裁决的主事实、主证据入口、主线影响和唯一下一动作；不要生成结果收件箱记录或复制机器证据明细。${commonBoundary}`,
+  },
+  {
+    name: 'WST-CONTROL-PLANE',
+    directory: 'WST-CONTROL-PLANE-integration',
+    prompt: `$identity-pm\n当前对话已经建立PM身份。工作台登记了正式Worker worker-company-manager，其final已由平台保存并通过主证据验证：公司详情重复负责人修复已完成，目标测试通过，正式结果入口为worker-final/company-manager。请只使用3.2固定runtime入口完成一次workbench.accept事务，把该任务移出活动区并登记近期主线结果；不得使用旧workbench写动作、结果收件箱、手工改表或创建新任务。完成后用人话说明当前仍是源码/隔离验收结果，不是已发布或用户页面可用。${commonBoundary}`,
   },
   {
     name: 'WST-USER-LANGUAGE-DIRECT',
@@ -418,6 +423,26 @@ if (unknownCases.length > 0) {
 const cases = requestedCases.length > 0
   ? allCases.filter((testCase) => requestedCases.includes(testCase.name))
   : allCases;
+if (requestedCases.length === 0) {
+  const preflightPath = join(evidenceRoot, 'preflight.json');
+  if (!existsSync(preflightPath)) {
+    throw new Error(`isolated preflight evidence is missing: ${preflightPath}`);
+  }
+  const preparedCases = JSON.parse(readFileSync(preflightPath, 'utf8')).preparedCases;
+  if (!Array.isArray(preparedCases)) {
+    throw new Error('isolated preflight preparedCases must be an array');
+  }
+  const plannedDirectories = [...new Set(allCases.map((testCase) => testCase.directory.split(/[\\/]/, 1)[0]))].sort();
+  const preparedDirectories = [...new Set(preparedCases)].sort();
+  const missingFromRunner = preparedDirectories.filter((directory) => !plannedDirectories.includes(directory));
+  const missingFromPreflight = plannedDirectories.filter((directory) => !preparedDirectories.includes(directory));
+  if (plannedDirectories.length !== allCases.length
+    || preparedDirectories.length !== preparedCases.length
+    || missingFromRunner.length > 0
+    || missingFromPreflight.length > 0) {
+    throw new Error(`isolated denominator mismatch: runner=${allCases.length}, prepared=${preparedCases.length}, missingFromRunner=${missingFromRunner.join('|') || '<none>'}, missingFromPreflight=${missingFromPreflight.join('|') || '<none>'}`);
+  }
+}
 const caseTimeoutMs = Number(process.env.BEYOND_CASE_TIMEOUT_MS ?? 240000);
 if (!Number.isFinite(caseTimeoutMs) || caseTimeoutMs <= 0) {
   throw new Error('BEYOND_CASE_TIMEOUT_MS must be a positive number');
@@ -459,6 +484,8 @@ function executeCase(command, args, options, timeoutMs) {
       clearTimeout(timer);
       resolveExecution({
         status: timedOut ? null : code,
+        processExitCode: code,
+        timedOut,
         signal,
         stdout: Buffer.concat(stdout).toString('utf8'),
         stderr: Buffer.concat(stderr).toString('utf8'),
@@ -466,6 +493,28 @@ function executeCase(command, args, options, timeoutMs) {
       });
     });
   });
+}
+
+function completedFinalFromEvents(stdout) {
+  const events = stdout.split(/\r?\n/).filter(Boolean).flatMap((line) => {
+    try {
+      return [JSON.parse(line)];
+    } catch {
+      return [];
+    }
+  });
+  let finalIndex = -1;
+  let finalMessage = '';
+  for (let index = 0; index < events.length; index += 1) {
+    const event = events[index];
+    if (event.type === 'item.completed' && event.item?.type === 'agent_message') {
+      finalIndex = index;
+      finalMessage = String(event.item.text ?? '').trim();
+    }
+  }
+  if (!/^(已完成|已暂停)(?:[，。：:、\s]|$)/.test(finalMessage)) return null;
+  const completionIndex = events.findIndex((event, index) => index > finalIndex && event.type === 'turn.completed');
+  return completionIndex > finalIndex ? { finalMessage, finalIndex, completionIndex } : null;
 }
 
 const timingsPath = join(evidenceRoot, 'run-timings.json');
@@ -483,6 +532,8 @@ async function runCase(testCase) {
   const eventsPath = join(evidenceRoot, `${testCase.name}-events.jsonl`);
   const lastMessagePath = join(evidenceRoot, `${testCase.name}-last-message.txt`);
   const stderrPath = join(evidenceRoot, `${testCase.name}-stderr.txt`);
+  // A selected retry must never inherit a prior `-o` result if the new CLI run fails early.
+  rmSync(lastMessagePath, { force: true });
   const startedAt = new Date();
   const startedMs = Date.now();
   const result = await executeCase(
@@ -515,14 +566,25 @@ async function runCase(testCase) {
   );
   writeFileSync(eventsPath, result.stdout ?? '');
   writeFileSync(stderrPath, result.stderr ?? '');
-  timings.push({
+  const eventCompletion = result.status === null && result.timedOut
+    ? completedFinalFromEvents(result.stdout ?? '')
+    : null;
+  if (eventCompletion) writeFileSync(lastMessagePath, `${eventCompletion.finalMessage}\n`);
+  const businessExitCode = result.status === 0 || eventCompletion ? 0 : result.status;
+  const timing = {
     case: testCase.name,
     startedAt: startedAt.toISOString(),
     durationMs: Date.now() - startedMs,
-    exitCode: result.status,
-  });
+    exitCode: businessExitCode,
+  };
+  if (eventCompletion) {
+    timing.processExitCode = result.processExitCode;
+    timing.completionSource = 'events:turn.completed';
+    timing.transportWarning = 'timeout';
+  }
+  timings.push(timing);
   writeFileSync(timingsPath, `${JSON.stringify(timings, null, 2)}\n`);
-  if (result.status !== 0) {
+  if (businessExitCode !== 0) {
     throw new Error(`${testCase.name} failed with exit ${result.status}; see ${stderrPath}`);
   }
   if (!existsSync(lastMessagePath) || readFileSync(lastMessagePath, 'utf8').trim() === '') {

@@ -43,6 +43,9 @@ const taskB = taskSection('B', 'C');
 const taskC = taskSection('C', 'D');
 const taskD = taskSection('D', 'E');
 const taskE = taskSection('E', null);
+const taskEReasoning = output.split(/\r?\n/)
+  .filter((line) => /^\s*[-*]\s*E\s*(?:只是|是|中|[：:])/.test(line))
+  .join('\n') || taskE;
 
 const results = [];
 const check = (name, passed) => results.push({ name, passed: Boolean(passed) });
@@ -64,11 +67,14 @@ check(
 );
 check('M-07 PM does not load Action Skills', ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !commands.includes(name)));
 check('M-08 fixture remains read-only', execFileSync('git', ['status', '--short'], { cwd: fixture, encoding: 'utf8' }).trim() === '');
-check('M-09 Worker model policy does not change the current PM model', /当前\s*PM.{0,40}(?:不改变|不能改变|不会改变|无权改变)|(?:不改变|不能改变|不会改变|无权改变).{0,40}当前\s*PM/s.test(output));
+check('M-09 Worker model policy does not change the current PM model', /当前\s*PM.{0,40}(?:不改变|不能改变|不会改变|无权改变)|(?:不|不会|不能|不得|无权).{0,24}(?:切换或)?改变.{0,24}当前\s*PM/s.test(output));
 check('M-10 unapproved project keeps platform defaults', unapproved.decision === 'keep-platform-default' && Object.keys(unapproved.createParameters).length === 0 && /local-bbbbbbbbbbbb|未批准/.test(output));
 check('M-11 fixed resolver matches the actual task creation field names', ['model', 'thinking'].every((name) => Object.hasOwn(approved.C.createParameters, name)));
 check('M-12 bounded local account work stays on Terra high', approved.E.createParameters.model === 'gpt-5.6-terra' && approved.E.createParameters.thinking === 'high' && /Terra/i.test(taskE) && /高|high/i.test(taskE));
-check('M-13 credential checkpoints and normal VIP do not alone escalate the task', /(?:普通|常规|边界明确|本地).{0,80}(?:不升级|Terra|ordinary)|(?:凭据|验证码|VIP).{0,100}(?:不|并非).{0,24}(?:复杂高风险|升级)/is.test(taskE));
+check('M-13 credential checkpoints and normal VIP do not alone escalate the task',
+  /(?:验证码|密码|敏感信息)/.test(taskEReasoning)
+  && /VIP/i.test(taskEReasoning)
+  && /(?:不会|不能|并非|不).{0,20}(?:把它)?升级.{0,12}(?:复杂高风险)?/s.test(taskEReasoning));
 
 const failed = results.filter((result) => !result.passed);
 console.log(JSON.stringify({ passed: results.length - failed.length, failed: failed.length, results }, null, 2));

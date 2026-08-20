@@ -271,7 +271,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "formal project tasks do not degrade to projectless",
-    value: "不得因平台项目列表暂时缺失而降级成 projectless",
+    value: "其他结果按返回原因报告，不降级成projectless",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
@@ -330,18 +330,23 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
-    label: "worker terminal reminder only targets an idle source PM",
-    value: "明确为空闲就向该来源发送一次紧凑终态提醒",
+    label: "worker uses one native wakeup without a custom result inbox",
+    value: "平台保存的当前Worker final是正式真值，不再复制终态正文到自建信箱",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
-    label: "worker terminal reminder skips active or unknown PM state",
-    value: "正在运行、状态未知或读取失败就跳过",
+    label: "worker terminal state uses a minimal explicit boundary",
+    value: "终态首行必须以`已完成`或`已暂停`开头",
   },
   {
     path: "模板交付包/AGENTS.md",
-    label: "PM user-turn snapshot remains terminal recovery",
-    value: "作为未发送、未送达或尚未消费终态的恢复路径",
+    label: "worker wakes once without inspecting PM state",
+    value: "不读取或判断PM忙闲、不调用`wait_threads`",
+  },
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "PM sweeps every registered Worker after a wakeup",
+    value: "扫描本PM已经登记的全部Worker任务",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",

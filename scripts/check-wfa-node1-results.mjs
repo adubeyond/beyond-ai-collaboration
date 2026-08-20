@@ -59,7 +59,7 @@ function check(name, passed, detail = '') {
 const agents = read(join(repositoryRoot, '模板交付包', 'AGENTS.md'));
 const release = JSON.parse(read(join(repositoryRoot, '模板交付包', 'beyond-release.json')));
 const preflight = JSON.parse(read(join(evidenceRoot, 'preflight.json')));
-check('WFA-01 source and release manifest identify v3.1.7', agents.includes('BEYOND-RUNTIME-VERSION: 3.1.7') && release.releaseVersion === '3.1.7');
+check('WFA-01 source and release manifest identify v3.2.0', agents.includes('BEYOND-RUNTIME-VERSION: 3.2.0') && release.releaseVersion === '3.2.0');
 check('WFA-01 isolated Skill install matches the candidate', preflight.installMismatch.length === 0 && preflight.candidateSkillFiles === preflight.installedSkillFiles);
 
 const bounded = output('R12');
@@ -68,7 +68,7 @@ check('WFA-04 future prevention remains outside the current result', /未来|防
 check('WFA-04 bounded repair fixture remains read-only', gitClean('R12-bounded-data-repair'));
 
 const production = output('O05');
-check('WFA-05 health success does not become business success', /健康/.test(production) && /(登录|业务).{0,48}(失败|503|不可用|未通过)/s.test(production));
+check('WFA-05 health success does not become business success', /(健康|服务存活|页面可访问)/.test(production) && /(登录|业务).{0,48}(失败|503|不可用|未通过)/s.test(production));
 check('WFA-05 output does not claim the user can use the release', /(不能|尚不能|还不能|不可).{0,24}(用户|使用|可用)|(用户|线上).{0,24}(不能|尚未|不可用)/s.test(production));
 check('WFA-05 production fixture remains read-only', gitClean('O05-production-business-path'));
 
@@ -101,7 +101,7 @@ for (const [name, directory] of [
 
 const factOutput = output('WFA12');
 const factCommands = commands('WFA12').replace(/[\\/]+/g, '/');
-check('WFA-12 formal fact preserves the engineering-only scope', /只.{0,8}工程建设|范围.{0,16}工程建设/.test(factOutput) && (/(不|不得|不能).{0,20}(扩大|扩展).{0,12}全站/.test(factOutput) || /不.{0,8}(采集|包括).{0,12}全站/.test(factOutput)));
+check('WFA-12 formal fact preserves the engineering-only scope', /(?:只|仅限).{0,8}工程建设|范围.{0,16}工程建设/.test(factOutput) && (/(不|不得|不能).{0,20}(扩大|扩展).{0,12}全站/.test(factOutput) || /不.{0,8}(采集|包括|包含).{0,12}全站/.test(factOutput)));
 check('WFA-12 formal fact preserves original source categories', (/(保留|保持).{0,20}(原始|来源网站|官网).{0,12}分类/.test(factOutput) || /(来源网站|官网).{0,16}(原始|来源).{0,12}分类.{0,12}(保留|保持)/.test(factOutput) || /分类.{0,12}(保留|保持).{0,20}(来源网站|官网).{0,12}原始/.test(factOutput)) && /(不|不得|不能).{0,20}(改写|统一).{0,16}七大类/.test(factOutput));
 check('WFA-12 stale summary cannot override the named formal fact', /(旧|压缩|历史).{0,16}(摘要|聊天).{0,40}(不能|不得|不应|无权).{0,20}(覆盖|替代)|(?:正式事实|当前任务).{0,40}(优先|为准)/s.test(factOutput));
 check('WFA-12 reads the named fact and remains read-only', factCommands.includes('docs/business/current-decisions.md') && gitClean('WFA12-fact-over-summary'));

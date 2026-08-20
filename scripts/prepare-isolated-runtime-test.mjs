@@ -72,6 +72,11 @@ function copyProjectFixture(target) {
   mkdirSync(join(target, "scripts"), { recursive: true });
   cpSync(join(candidateRoot, "scripts", "beyond-control.mjs"), join(target, "scripts", "beyond-control.mjs"));
   cpSync(
+    join(candidateRoot, "scripts", "runtime"),
+    join(target, "scripts", "runtime"),
+    { recursive: true },
+  );
+  cpSync(
     join(candidateRoot, "docs", "AI编程协同机制"),
     join(target, "docs", "AI编程协同机制"),
     { recursive: true },
@@ -713,8 +718,8 @@ console.log('completed ' + state.checkpoint + ' remaining=' + state.remaining);
 function setAcceptanceCorrectionWorkbench(root) {
   setWorkbench(
     root,
-    "| 2026-08-03 | 完成三个来源站的分类采集与质量审查 | 已完成 | 三站旧口径均已验收 | worker-site-a、worker-site-b、worker-site-c | 等待下一项业务任务 | 无 |",
-    "| 来源站甲分类采集与质量审查 | worker-site-a | 已完成 | 七个分类各50条，已完成审查 | 无 | task/site-a | 2026-08-03 |\n| 来源站乙分类采集与质量审查 | worker-site-b | 已完成 | 全站合计50条，已完成旧口径审查 | 无 | task/site-b | 2026-08-03 |\n| 来源站丙分类采集与质量审查 | worker-site-c | 已完成 | 五个分类各10条，共50条，已完成旧口径审查 | 无 | task/site-c | 2026-08-03 |",
+    "| 2026-08-03 | 完成三个来源站的分类采集与质量审查 | 进行中 | 三站旧口径等待PM收口 | worker-site-a、worker-site-b、worker-site-c | 按老板纠正后的口径重新裁决 | 无 |",
+    "| 来源站甲分类采集与质量审查 | worker-site-a | 进行中 | 七个分类各50条，已满足新口径，等待PM收口 | 无 | task/site-a | 2026-08-03 |\n| 来源站乙分类采集与质量审查 | worker-site-b | 进行中 | 全站合计50条，等待旧口径收口 | 无 | task/site-b | 2026-08-03 |\n| 来源站丙分类采集与质量审查 | worker-site-c | 进行中 | 五个分类各10条，共50条，等待旧口径收口 | 无 | task/site-c | 2026-08-03 |",
   );
 }
 
@@ -741,7 +746,7 @@ if (!existsSync(sourceAuth)) {
 }
 cpSync(sourceAuth, join(isolatedCodexHome, "auth.json"));
 
-for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return", "P18-team-list", "P19-team-from-business", "P20-new-init-cold", "P21-existing-init-cold", "P22-pm-inbox-priority", "P23-post-fusion-initialization", "WFA02-workbench-convergence", "WFA03-semantic-layers", "WFA06-audit-retest", "WFA08-shared-test-coupling", "WFA09-evidence-granularity", "WFA10-status-summary", "WFA12-fact-over-summary", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration", "K6-N03-approval", "K6-N05-discussion", "K6-N06-answer-only", "K6-N08-outage", "K6-N09-two-results", "K6-N10-temporary-model", "K6-W02-stage-progress", "K6-W04-background-job", "K6-W07-completion-question", "K6-G01-git-parallel", "K6-G03-tool-priority", "K6-B01-user-path"]) {
+for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return", "P18-team-list", "P19-team-from-business", "P20-new-init-cold", "P21-existing-init-cold", "P22-pm-sweep-priority", "P23-post-fusion-initialization", "WFA02-workbench-convergence", "WFA03-semantic-layers", "WFA06-audit-retest", "WFA08-shared-test-coupling", "WFA09-evidence-granularity", "WFA10-status-summary", "WFA12-fact-over-summary", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration", "K6-N03-approval", "K6-N05-discussion", "K6-N06-answer-only", "K6-N08-outage", "K6-N09-two-results", "K6-N10-temporary-model", "K6-W02-stage-progress", "K6-W04-background-job", "K6-W07-completion-question", "K6-G01-git-parallel", "K6-G03-tool-priority", "K6-B01-user-path"]) {
   copyProjectFixture(join(casesRoot, caseName));
 }
 
@@ -906,27 +911,15 @@ for (const caseName of ["P10-fresh-project-task", "P11-inherited-context-isolati
   initializeGit(root, `fixture: ${caseName}`);
 }
 
-const p22 = join(casesRoot, "P22-pm-inbox-priority");
+const p22 = join(casesRoot, "P22-pm-sweep-priority");
 setWorkbench(
   p22,
   "| 2026-08-14 | 继续回答老板当前问题 | 进行中 | 后台任务结果等待安全消费 | evidence/account-page.md | 先回答当前问题，再知会结果 | 无 |",
-  "| 完成账号页面修复 | worker-account-page | 进行中 | Worker正在交付结果 | 无 | evidence/account-page.md | 2026-08-14 |",
+  "| 完成账号页面修复 | worker-account-page | 进行中 | Worker A处理中 | 无 | 无 | 2026-08-14 |\n| 修复登录跳转 | worker-login | 进行中 | Worker B处理中 | 无 | 无 | 2026-08-14 |\n| 核对账号数据 | worker-data | 进行中 | Worker C处理中 | 无 | 无 | 2026-08-14 |",
 );
-writeFixture(p22, "projects/local-aaaaaaaaaaaa/项目总览.md", "# 收件箱隔离项目\n\n> 项目编号：`local-aaaaaaaaaaaa`。\n");
-writeFixture(p22, "local/inbox/pending/local-aaaaaaaaaaaa/11111111-2222-4333-8444-555555555555.json", `${JSON.stringify({
-  schemaVersion: 1,
-  recordId: "11111111-2222-4333-8444-555555555555",
-  projectId: "local-aaaaaaaaaaaa",
-  sourceThreadId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-  task: "完成账号页面修复",
-  status: "已完成",
-  summary: "账号页面重复负责人已经消除",
-  evidence: "evidence/account-page.md",
-  next: "PM核验正式任务线程后更新工作台",
-  createdAt: "2026-08-14T02:00:00.000Z",
-}, null, 2)}\n`);
+writeFixture(p22, "projects/local-aaaaaaaaaaaa/项目总览.md", "# Worker扫尾隔离项目\n\n> 项目编号：`local-aaaaaaaaaaaa`。\n");
 writeFixture(p22, "evidence/account-page.md", "# 账号页面修复结果\n\n这是任务的主证据入口；当前用例不提供正式Worker线程读取能力。\n");
-initializeGit(p22, "fixture: PM inbox must not override current user question");
+initializeGit(p22, "fixture: PM Worker sweep must not override current user question");
 
 const p13 = join(casesRoot, "P13-model-selection");
 setHealthyWorkbench(p13);
@@ -1059,8 +1052,8 @@ writeFixture(wfa02, "local/当前工作台.md", `# 当前工作台
 | 任务 / 业务结果 | 负责人 / 正式 thread | 状态 | 当前进度 | 暂停原因与恢复条件 | 正式结果 / 证据入口 | 更新时间 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 开发登录接口 | worker-active | 进行中 | 正在开发 | 无 | 无 | 2026-08-11 |
-| 修复重复负责人 | worker-done | 已完成 | 已验收且不再影响主线 | 无 | evidence/manager-fix.md | 2026-08-11 |
-| 部署登录修复 | worker-retain | 已完成 | 结果仍被当前主线消费 | 无 | evidence/release.md | 2026-08-11 |
+| 修复重复负责人 | worker-done | 进行中 | Worker final已核验，等待PM验收事务 | 无 | evidence/manager-fix.md | 2026-08-11 |
+| 部署登录修复 | worker-retain | 进行中 | 结果仍被当前主线消费 | 无 | evidence/release.md | 2026-08-11 |
 
 ## 2. 按需协调
 
@@ -1275,8 +1268,8 @@ const controlPlane = join(casesRoot, "WST-CONTROL-PLANE-integration");
 const controlPlaneProjectId = "local-c0ffee123456";
 setWorkbench(
   controlPlane,
-  "| 2026-08-04 | 修复公司详情重复负责人 | 进行中 | 已有明确故障和验收，尚未建立任务 | docs/business/company-manager-fix.md | PM建立一个正式Worker任务 | 无 |",
-  "| 当前无活动正式任务 | 无 | 已完成 | 等待PM按当前业务结果建立任务 | 无 | docs/business/company-manager-fix.md | 2026-08-04 |",
+  "| 2026-08-04 | 修复公司详情重复负责人 | 进行中 | Worker final已通过主证据核验 | worker-final/company-manager | PM执行验收事务 | 无 |",
+  "| 修复公司详情重复负责人 | worker-company-manager | 进行中 | 源码与测试已完成，等待PM验收 | 无 | evidence/worker-result.md | 2026-08-04 |",
 );
 writeFixture(controlPlane, "docs/business/company-manager-fix.md", `# 公司负责人重复问题
 
