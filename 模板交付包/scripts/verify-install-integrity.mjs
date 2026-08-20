@@ -39,6 +39,11 @@ const expectedSkills = [
   "task-test",
   "task-ops",
 ];
+const expectedControlRuntimeFiles = [
+  "scripts/runtime/control-runtime.mjs",
+  "scripts/runtime/project-identity-provider.mjs",
+  "scripts/runtime/workbench-transaction.mjs",
+];
 
 function display(path) {
   return path.split(sep).join("/");
@@ -308,6 +313,14 @@ if (manifest) {
   } else {
     for (const skill of manifest.skills) compareSkill(skill);
   }
+  if (!Array.isArray(manifest.controlRuntimeFiles)
+    || JSON.stringify(manifest.controlRuntimeFiles) !== JSON.stringify(expectedControlRuntimeFiles)) {
+    errors.push("候选版本清单必须完整声明确定性控制运行文件");
+  } else {
+    for (const relativePath of manifest.controlRuntimeFiles) {
+      readUtf8(join(candidateRoot, ...relativePath.split("/")), `候选控制运行文件${relativePath}`);
+    }
+  }
 
   const candidateAgents = readUtf8(join(candidateRoot, manifest.controlEntry), "候选控制仓入口");
   const installedAgents = readUtf8(projectAgentsPath, "项目入口");
@@ -332,6 +345,19 @@ if (manifest) {
     if (mappedControlScript && candidateControlScript && mappedControlScript !== candidateControlScript) {
       errors.push("项目映射的控制仓固定脚本与当前候选不一致");
     }
+    for (const relativePath of manifest.controlRuntimeFiles ?? []) {
+      const mappedRuntime = readUtf8(
+        join(mappedControlRoot, ...relativePath.split("/")),
+        `项目映射的控制运行文件${relativePath}`,
+      );
+      const candidateRuntime = readUtf8(
+        join(candidateRoot, ...relativePath.split("/")),
+        `候选控制运行文件${relativePath}`,
+      );
+      if (mappedRuntime && candidateRuntime && mappedRuntime !== candidateRuntime) {
+        errors.push(`项目映射的控制运行文件与当前候选不一致：${relativePath}`);
+      }
+    }
     if (!projectMatch) {
       errors.push("项目入口缺少BEYOND项目编号映射");
     } else {
@@ -347,6 +373,8 @@ if (manifest) {
   }
 
   const controlScript = readUtf8(join(candidateRoot, manifest.controlScript), "控制仓固定动作脚本");
+  const controlRuntime = readUtf8(join(candidateRoot, "scripts", "runtime", "control-runtime.mjs"), "控制运行统一入口");
+  const workbenchRuntime = readUtf8(join(candidateRoot, "scripts", "runtime", "workbench-transaction.mjs"), "工作台事务运行文件");
   const candidateHooksPath = join(candidateRoot, ".codex", "hooks.json");
   const candidateGuardPath = join(candidateRoot, ".codex", "beyond-runtime-guard.mjs");
   const installedHooksPath = join(projectRoot, ".codex", "hooks.json");
@@ -357,6 +385,15 @@ if (manifest) {
   }
   if (controlScript && !controlScript.includes('command === "initialization"')) {
     errors.push("控制仓固定动作脚本缺少可恢复的项目初始化动作");
+  }
+  if (controlScript && !controlScript.includes("workbenchMigration")) {
+    errors.push("控制仓固定动作脚本缺少老工作台迁移接入");
+  }
+  if (controlRuntime && !controlRuntime.includes("workbench.migrate")) {
+    errors.push("控制运行统一入口缺少老工作台迁移动作");
+  }
+  if (workbenchRuntime && !workbenchRuntime.includes("pre-3.2-markdown-workbench.md")) {
+    errors.push("工作台事务缺少迁移前Markdown备份");
   }
   if (existsSync(candidateGuardPath)) {
     errors.push("候选交付包仍包含BEYOND身份护栏脚本");

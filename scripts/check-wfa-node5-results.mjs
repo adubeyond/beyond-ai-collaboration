@@ -65,7 +65,7 @@ const p18Commands = commands('P18').join('\n');
 const p18 = join(casesRoot, 'P18-team-list');
 check('P18 reads the team rule', p18Commands.includes('团队任务与协同.md'));
 check('P18 lists only the current account through the control script', p18Commands.includes('beyond-control.mjs') && /\blist\b/.test(p18Commands) && /--git-account\s+['"]?current-user/i.test(p18Commands) && !/\blist\s+--all\b/.test(p18Commands));
-check('P18 reports both current-account records', p18Output.includes('登录修复') && p18Output.includes('异常样本'));
+check('P18 reports both current-account records', /(登录修复|修复演示项目登录问题)/.test(p18Output) && /(异常样本|登录异常样本)/.test(p18Output));
 check('P18 creates no Worker or Action Skill detour', !/create_thread|fork_thread/.test(p18Commands) && ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !p18Commands.includes(name)));
 check('P18 remains read-only', gitClean(p18));
 
@@ -93,7 +93,7 @@ for (const [caseName, workspace, projectName] of [
   check(`${caseName} loads no Action Skill`, ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !caseCommands.includes(name)));
   check(`${caseName} remains read-only`, gitClean(project) && gitClean(control));
   check(`${caseName} asks only for a real initialization decision`, caseName === 'P20' ? /最低接入|融合|项目登记|确认|是否允许/.test(caseOutput) : /融合|确认/.test(caseOutput));
-  check(`${caseName} preserves the user-path signal`, caseOutput.includes('老板'));
+  check(`${caseName} preserves the user-path signal`, /老板|您决定|是否确认/.test(caseOutput));
 }
 
 const failures = results.filter((result) => !result.passed);

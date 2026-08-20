@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
   copyFileSync,
@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { executeRuntimeRequest } from "./runtime/control-runtime.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const controlRoot = resolve(dirname(scriptPath), "..");
@@ -50,8 +51,6 @@ const workerMatrixV1 = {
   "complex-high-risk": { model: "gpt-5.6-sol", thinking: "xhigh" },
 };
 const legacyWorkerPolicyPattern = /(Luna|Terra|Sol|gpt-5\.[0-9]+-(?:luna|terra|sol)|模型矩阵|Worker.{0,20}(?:模型|推理))/i;
-const inboxStatuses = new Set(["已暂停", "已完成"]);
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function fail(message, code = 1) {
   console.error(message);
@@ -331,6 +330,23 @@ function legacyWorkbenchFacts(projectRoot) {
   };
 }
 
+function legacyWorkbenchIsDeclaredHistorical(projectRoot, existingAgents, legacyWorkbench) {
+  if (!legacyWorkbench?.path || !existingAgents) return false;
+  const managedWorkbench = join(controlRoot, "local", "当前工作台.md");
+  if (!existsSync(managedWorkbench) || !isInside(projectRoot, managedWorkbench)) return false;
+  const managedRelative = relative(projectRoot, managedWorkbench).replaceAll("\\", "/").toLowerCase();
+  if (!managedRelative || managedRelative.startsWith("../")) return false;
+  const managedText = readUtf8(managedWorkbench, "本机当前工作台");
+  if (!/###\s+1\.2\s+正式任务表|BEGIN BEYOND MANAGED WORKBENCH/.test(managedText)) return false;
+  return existingAgents.split(/\r?\n/).some((line) => {
+    const normalized = line.replaceAll("\\", "/").toLowerCase();
+    return normalized.includes(managedRelative)
+      && normalized.includes("唯一入口")
+      && normalized.includes("旧")
+      && normalized.includes("历史");
+  });
+}
+
 function inspectProject(projectRootValue) {
   if (!projectRootValue) fail("缺少 --project-root <业务项目目录>", 2);
   const projectRoot = resolve(projectRootValue);
@@ -347,7 +363,14 @@ function inspectProject(projectRootValue) {
   const projectId = registeredProjectId(projectRoot, remote) ?? stableId(remote ? "project" : "local", identity);
   const discovery = discoverMarkdown(projectRoot);
   const repositoryDiscovery = discoverRepositories(projectRoot, gitRoot);
-  const legacyWorkbench = legacyWorkbenchFacts(projectRoot);
+  const existingAgents = existsSync(join(projectRoot, "AGENTS.md")) ? readUtf8(join(projectRoot, "AGENTS.md"), "项目AGENTS.md") : "";
+  const detectedLegacyWorkbench = legacyWorkbenchFacts(projectRoot);
+  const legacyWorkbench = detectedLegacyWorkbench
+    ? {
+        ...detectedLegacyWorkbench,
+        historical: legacyWorkbenchIsDeclaredHistorical(projectRoot, existingAgents, detectedLegacyWorkbench),
+      }
+    : null;
   const overviewPath = join(controlRoot, "projects", projectId, "项目总览.md");
   const policyState = existsSync(overviewPath)
     ? parseWorkerPolicy(readUtf8(overviewPath, "项目总览"))
@@ -355,7 +378,6 @@ function inspectProject(projectRootValue) {
   const initializationState = existsSync(overviewPath)
     ? parseInitialization(readUtf8(overviewPath, "项目总览"))
     : { configured: false, state: defaultInitialization() };
-  const existingAgents = existsSync(join(projectRoot, "AGENTS.md")) ? readUtf8(join(projectRoot, "AGENTS.md"), "项目AGENTS.md") : "";
   const existingOverrides = extractBetween(existingAgents, overrideBegin, overrideEnd);
   const legacyWorkerPolicyCandidate = existingOverrides.split("\n").some((line) => legacyWorkerPolicyPattern.test(line));
   return {
@@ -376,7 +398,8 @@ function inspectProject(projectRootValue) {
     legacyWorkerPolicyCandidate,
     adoptionRequired: Boolean(
       repositoryDiscovery.remoteConflicts.length
-      || legacyWorkbench?.parseable && (legacyWorkbench.counts.进行中 + legacyWorkbench.counts.已暂停 > 0)
+      || legacyWorkbench?.parseable && !legacyWorkbench.historical
+        && (legacyWorkbench.counts.进行中 + legacyWorkbench.counts.已暂停 > 0)
     ),
   };
 }
@@ -565,7 +588,33 @@ function workbench() {
   ensureControl();
   const action = arg("--action") ?? "list";
   const workbenchPath = join(controlRoot, "local", "当前工作台.md");
-  const parsed = workbenchTasks(readUtf8(workbenchPath, "本机当前工作台"));
+  const workbenchText = readUtf8(workbenchPath, "本机当前工作台");
+  if (workbenchText.includes("<!-- BEGIN BEYOND MANAGED WORKBENCH -->")) {
+    if (action !== "list") {
+      fail("3.2机器工作台的写入只使用runtime workbench.*入口；旧workbench写动作已经退出主路径", 2);
+    }
+    const statePath = join(controlRoot, "local", "runtime", "workbench", "workbench-state.json");
+    let state;
+    try {
+      state = JSON.parse(readUtf8(statePath, "工作台机器状态"));
+    } catch (error) {
+      fail(`工作台机器状态无效：${error.message}`);
+    }
+    const records = Object.values(state.tasks ?? {}).map((record) => ({
+      task: record.task,
+      worker: record.worker,
+      status: record.status,
+      progress: record.progress,
+      pause: record.pause,
+      result: record.result,
+      updated: String(record.updatedAt ?? "").slice(0, 10),
+    }));
+    const counts = { 进行中: 0, 已暂停: 0, 已完成: 0 };
+    for (const record of records) counts[record.status] += 1;
+    console.log(JSON.stringify({ count: records.length, counts, records, source: "machine-state" }, null, 2));
+    return;
+  }
+  const parsed = workbenchTasks(workbenchText);
   if (action === "list") {
     const counts = { 进行中: 0, 已暂停: 0, 已完成: 0 };
     for (const record of parsed.records) counts[record.status] += 1;
@@ -710,128 +759,6 @@ function workbench() {
     localBackup: display(backup),
     remaining: parsed.records.length - selected.length,
   }, null, 2));
-}
-
-function validateInboxProjectId(value) {
-  const projectId = String(value ?? "").trim();
-  if (!/^(?:project|local)-[a-f0-9]{12}$/.test(projectId)) {
-    fail("结果收件箱需要有效 --project-id", 2);
-  }
-  const overviewPath = join(controlRoot, "projects", projectId, "项目总览.md");
-  if (!existsSync(overviewPath)) fail(`结果收件箱找不到已登记项目：${projectId}`, 2);
-  return projectId;
-}
-
-function validateInboxText(name, value, maximum) {
-  const text = String(value ?? "").trim();
-  if (!text || text.length > maximum || /[\r\n]/.test(text)) {
-    fail(`结果收件箱字段无效：${name}`, 2);
-  }
-  return text;
-}
-
-function validateInboxRecord(record, expectedProjectId = null) {
-  if (!record || typeof record !== "object" || Array.isArray(record)) fail("结果收件箱记录不是对象", 2);
-  const keys = ["schemaVersion", "recordId", "projectId", "sourceThreadId", "task", "status", "summary", "evidence", "next", "createdAt"];
-  if (Object.keys(record).sort().join("|") !== [...keys].sort().join("|")) {
-    fail("结果收件箱记录字段集合无效", 2);
-  }
-  if (record.schemaVersion !== 1 || !uuidPattern.test(record.recordId)) {
-    fail("结果收件箱记录版本或编号无效", 2);
-  }
-  if (!/^(?:project|local)-[a-f0-9]{12}$/.test(record.projectId)) fail("结果收件箱记录项目编号无效", 2);
-  if (expectedProjectId && record.projectId !== expectedProjectId) fail("结果收件箱记录不属于当前项目", 2);
-  if (!uuidPattern.test(record.sourceThreadId)) {
-    fail("结果收件箱记录来源thread无效", 2);
-  }
-  if (!inboxStatuses.has(record.status)) fail(`结果收件箱状态无效：${record.status}`, 2);
-  validateInboxText("task", record.task, 200);
-  validateInboxText("summary", record.summary, 500);
-  validateInboxText("evidence", record.evidence, 500);
-  validateInboxText("next", record.next, 500);
-  if (typeof record.createdAt !== "string" || Number.isNaN(Date.parse(record.createdAt))) {
-    fail("结果收件箱创建时间无效", 2);
-  }
-  return record;
-}
-
-function inboxPendingDirectory(projectId) {
-  return join(controlRoot, "local", "inbox", "pending", projectId);
-}
-
-function readPendingInbox(projectId) {
-  const directory = inboxPendingDirectory(projectId);
-  mkdirSync(directory, { recursive: true });
-  const records = [];
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith(".json")) fail(`结果收件箱存在非标准待处理项：${entry.name}`, 2);
-    const path = join(directory, entry.name);
-    let record;
-    try {
-      record = JSON.parse(readUtf8(path, `结果收件箱记录 ${entry.name}`));
-    } catch (error) {
-      if (error instanceof SyntaxError) fail(`结果收件箱JSON损坏：${entry.name}`, 2);
-      throw error;
-    }
-    validateInboxRecord(record);
-    if (`${record.recordId}.json` !== entry.name) fail(`结果收件箱文件名与记录编号不一致：${entry.name}`, 2);
-    if (record.projectId !== projectId) fail(`结果收件箱记录不属于目录项目：${entry.name}`, 2);
-    records.push(record);
-  }
-  return records.sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.recordId.localeCompare(right.recordId));
-}
-
-function inbox() {
-  ensureControl();
-  const action = arg("--action") ?? "list";
-  const projectId = validateInboxProjectId(arg("--project-id"));
-  if (action === "list") {
-    const records = readPendingInbox(projectId);
-    console.log(JSON.stringify({ projectId, count: records.length, records }, null, 2));
-    return;
-  }
-  if (action === "enqueue") {
-    const sourceThreadId = validateInboxText("source-thread", arg("--source-thread"), 80);
-    if (!uuidPattern.test(sourceThreadId)) {
-      fail("结果收件箱需要平台结构化注入的直接来源thread", 2);
-    }
-    const candidate = {
-      schemaVersion: 1,
-      recordId: randomUUID(),
-      projectId,
-      sourceThreadId,
-      task: validateInboxText("task", arg("--task"), 200),
-      status: validateInboxText("status", arg("--status"), 20),
-      summary: validateInboxText("summary", arg("--summary"), 500),
-      evidence: validateInboxText("evidence", arg("--evidence"), 500),
-      next: validateInboxText("next", arg("--next"), 500),
-      createdAt: new Date().toISOString(),
-    };
-    validateInboxRecord(candidate, projectId);
-    const pending = readPendingInbox(projectId);
-    const duplicate = pending.find((record) => ["projectId", "sourceThreadId", "task", "status", "summary", "evidence", "next"].every((key) => record[key] === candidate[key]));
-    if (duplicate) {
-      console.log(JSON.stringify({ mode: "existing", record: duplicate }, null, 2));
-      return;
-    }
-    const path = join(inboxPendingDirectory(projectId), `${candidate.recordId}.json`);
-    writeUtf8(path, `${JSON.stringify(candidate, null, 2)}\n`);
-    console.log(JSON.stringify({ mode: "created", record: candidate }, null, 2));
-    return;
-  }
-  if (action === "ack") {
-    const recordId = validateInboxText("record-id", arg("--record-id"), 80);
-    if (!uuidPattern.test(recordId)) {
-      fail("结果收件箱记录编号无效", 2);
-    }
-    const source = join(inboxPendingDirectory(projectId), `${recordId}.json`);
-    if (!existsSync(source)) fail(`当前项目结果收件箱找不到待确认记录：${recordId}`, 2);
-    validateInboxRecord(JSON.parse(readUtf8(source, "待确认结果收件箱记录")), projectId);
-    rmSync(source, { force: true });
-    console.log(JSON.stringify({ acknowledged: recordId, projectId, deleted: true }, null, 2));
-    return;
-  }
-  fail(`未知结果收件箱动作：${action}`, 2);
 }
 
 function detectGitAccount() {
@@ -1557,7 +1484,7 @@ function selectCanonicalRepositories(project) {
 
 function adoptLegacyWorkbench(project) {
   const legacy = project.legacyWorkbench;
-  if (!legacy?.parseable || legacy.active.length === 0) return null;
+  if (!legacy?.parseable || legacy.historical || legacy.active.length === 0) return null;
   const workbenchPath = join(controlRoot, "local", "当前工作台.md");
   const parsed = workbenchTasks(readUtf8(workbenchPath, "本机当前工作台"));
   const lines = [...parsed.lines];
@@ -1611,10 +1538,12 @@ function installProjectEntry(project) {
     fail("写入项目AGENTS.md前必须由用户确认融合，并传入 --confirm-fusion yes", 2);
   }
   project.canonicalRepositories = selectCanonicalRepositories(project);
-  if (project.legacyWorkbench && !project.legacyWorkbench.parseable && arg("--confirm-legacy-skip") !== "yes") {
+  if (project.legacyWorkbench && !project.legacyWorkbench.historical
+    && !project.legacyWorkbench.parseable && arg("--confirm-legacy-skip") !== "yes") {
     fail(`发现旧工作台但无法安全解析：${project.legacyWorkbench.path}（${project.legacyWorkbench.reason}）。请人工核对后传入 --confirm-legacy-skip yes，不能静默建立空工作台。`, 2);
   }
-  if (project.legacyWorkbench?.parseable && project.legacyWorkbench.active.length > 0
+  if (project.legacyWorkbench?.parseable && !project.legacyWorkbench.historical
+    && project.legacyWorkbench.active.length > 0
     && arg("--adopt-legacy-workbench") !== "yes") {
     fail(`旧工作台仍有${project.legacyWorkbench.active.length}个活动任务；请确认后传入 --adopt-legacy-workbench yes，将活动任务迁入本机工作台、已完成任务进入历史。`, 2);
   }
@@ -1636,6 +1565,11 @@ function installProjectEntry(project) {
     ? ensureProjectControlIsolation(project)
     : { changed: false, rules: [], backup: null };
   const adoption = arg("--adopt-legacy-workbench") === "yes" ? adoptLegacyWorkbench(project) : null;
+  const workbenchMigration = executeRuntimeRequest({
+    schemaVersion: 1,
+    requestId: `install-workbench-migration-${timestamp()}`,
+    action: "workbench.migrate",
+  }, { controlRoot }).result;
   const target = join(project.projectRoot, "AGENTS.md");
   const existing = existsSync(target) ? readUtf8(target) : "";
   const backupDirectory = join(controlRoot, "local", "backups", "project-entry", project.projectId);
@@ -1679,6 +1613,7 @@ function installProjectEntry(project) {
     controlRelative: rendered.controlRelative,
     projectIsolation,
     adoption,
+    workbenchMigration,
     legacyRuntimeCleanup,
     removedRuntimeState,
     workerPolicy: workerPolicy ? { policy: workerPolicy.policy, backup: workerPolicy.backup } : null,
@@ -1869,14 +1804,12 @@ function printHelp() {
     `  workbench --action upsert --task <业务结果> --thread <正式thread> --status 进行中|已暂停|已完成 --progress <当前进度> [--pause <原因与恢复条件>] [--result <证据入口>] [--updated <YYYY-MM-DD>]\n` +
     `  workbench --action snapshot --mainline <当前主线> --status 进行中|已暂停|已完成 --problem <当前主要问题> --evidence <一手依据> --next <当前下一步> [--decision <需要用户决定>] [--updated <YYYY-MM-DD>]\n` +
     `  workbench --action archive --threads <正式thread,...> [--completed-at <ISO时间>]\n` +
-    `  inbox --action enqueue --project-id <项目编号> --source-thread <来源thread> --task <业务结果> --status 已暂停|已完成 --summary <裁决主事实> --evidence <一个证据入口> --next <影响或下一步>\n` +
-    `  inbox --action list --project-id <项目编号>\n` +
-    `  inbox --action ack --project-id <项目编号> --record-id <记录编号>\n` +
     `  sync --action pull\n` +
     `  sync --action push --paths <逗号分隔路径> --message <提交说明> [--scope team|project-registration]\n` +
     `  archive --type task|collaboration --id <编号> --result <最终结果>\n` +
     `  backup-local [--reason <原因>]\n` +
-    `  restore-local --snapshot <备份目录> --confirm-restore yes`);
+    `  restore-local --snapshot <备份目录> --confirm-restore yes\n` +
+    `  runtime --request <JSON请求文件>  # 3.2确定性控制面统一入口`);
 }
 
 const command = process.argv[2] ?? "help";
@@ -1932,6 +1865,7 @@ else if (command === "init-control") {
       historyPath: display(result.adoption.historyPath),
       backup: display(result.adoption.backup),
     } : null,
+    workbenchMigration: result.workbenchMigration,
     initialization: result.initialization,
     workerPolicy: result.workerPolicy ? {
       policy: result.workerPolicy.policy,
@@ -1949,9 +1883,25 @@ else if (command === "init-control") {
   const filtered = account ? records.filter((item) => !item.owner || item.owner === account || item.participants?.split(",").map((value) => value.trim()).includes(account)) : records;
   console.log(JSON.stringify({ account: account ?? null, count: filtered.length, records: filtered }, null, 2));
 } else if (command === "workbench") workbench();
-else if (command === "inbox") inbox();
 else if (command === "sync") sync();
 else if (command === "archive") archiveRecord();
 else if (command === "backup-local") console.log(display(backupLocal(arg("--reason") ?? "manual")));
 else if (command === "restore-local") restoreLocal();
+else if (command === "runtime") {
+  const requestFile = arg("--request");
+  if (!requestFile) fail("runtime需要 --request <JSON请求文件>", 2);
+  let request;
+  try {
+    request = JSON.parse(readUtf8(resolve(requestFile), "runtime请求文件"));
+  } catch (error) {
+    fail(`runtime请求无效：${error.message}`, 2);
+  }
+  try {
+    const response = executeRuntimeRequest(request, { controlRoot });
+    console.log(JSON.stringify(response, null, 2));
+    if (response.ok !== true) process.exitCode = 1;
+  } catch (error) {
+    fail(`runtime执行失败：${error.message}`, 1);
+  }
+}
 else fail(`未知命令：${command}。使用 help 查看固定动作。`, 2);

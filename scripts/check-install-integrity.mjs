@@ -28,8 +28,8 @@ function copySkills(root) {
 function fusedEntry(controlRelative, projectId) {
   return cpEntry()
     .replace(
-      "<!-- BEYOND-RUNTIME-VERSION: 3.1.7 -->",
-      `<!-- BEYOND-RUNTIME-VERSION: 3.1.7 -->\n<!-- BEYOND-CONTROL-ROOT: ${controlRelative} -->\n<!-- BEYOND-PROJECT-ID: ${projectId} -->`,
+      "<!-- BEYOND-RUNTIME-VERSION: 3.2.0 -->",
+      `<!-- BEYOND-RUNTIME-VERSION: 3.2.0 -->\n<!-- BEYOND-CONTROL-ROOT: ${controlRelative} -->\n<!-- BEYOND-PROJECT-ID: ${projectId} -->`,
     )
     .replace(/\]\(docs\//g, `](${controlRelative}/docs/`)
     .replace(/\]\(local\//g, `](${controlRelative}/local/`)
@@ -100,6 +100,26 @@ try {
   writeFileSync(join(wrongControlRoot, "AGENTS.md"), fusedEntry("../missing-control", "project-demo"), "utf8");
   run("错误控制仓映射", 1, join(wrongControlRoot, "skills"), join(wrongControlRoot, "AGENTS.md"), "项目映射的控制仓版本清单不存在", false);
 
+  const missingRuntimeControl = join(scratch, "missing-runtime-control");
+  cpSync(packageRoot, missingRuntimeControl, { recursive: true });
+  writeProjectOverview(missingRuntimeControl, "project-missing-runtime");
+  rmSync(join(missingRuntimeControl, "scripts", "runtime", "control-runtime.mjs"));
+  const missingRuntimeRoot = join(scratch, "missing-runtime-project");
+  copySkills(missingRuntimeRoot);
+  writeFileSync(
+    join(missingRuntimeRoot, "AGENTS.md"),
+    fusedEntry("../missing-runtime-control", "project-missing-runtime"),
+    "utf8",
+  );
+  run(
+    "控制运行模块缺失",
+    1,
+    join(missingRuntimeRoot, "skills"),
+    join(missingRuntimeRoot, "AGENTS.md"),
+    "项目映射的控制运行文件scripts/runtime/control-runtime.mjs不存在",
+    false,
+  );
+
   const mixedRoot = join(scratch, "mixed");
   copySkills(mixedRoot);
   cpSync(join(packageRoot, "AGENTS.md"), join(mixedRoot, "AGENTS.md"));
@@ -108,7 +128,7 @@ try {
 
   const oldEntryRoot = join(scratch, "old-entry");
   copySkills(oldEntryRoot);
-  writeFileSync(join(oldEntryRoot, "AGENTS.md"), cpEntry().replace(/<!-- BEYOND-RUNTIME-VERSION: 3\.1\.7 -->\r?\n/, ""), "utf8");
+  writeFileSync(join(oldEntryRoot, "AGENTS.md"), cpEntry().replace(/<!-- BEYOND-RUNTIME-VERSION: 3\.2\.0 -->\r?\n/, ""), "utf8");
   run("旧项目入口混入", 1, join(oldEntryRoot, "skills"), join(oldEntryRoot, "AGENTS.md"), "缺少目标版本标记");
 
   const staleGuardRoot = join(scratch, "stale-guard");

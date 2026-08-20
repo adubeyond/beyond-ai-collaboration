@@ -5,6 +5,11 @@
 # Local scratch space
 /模板建设区/临时工作区/
 /模板建设区/发布候选/*/
+/.codex-migration/
+/.codex-work/
+/dist/
+/outputs/
+/*.canvas
 
 # Local environments and secrets
 .env

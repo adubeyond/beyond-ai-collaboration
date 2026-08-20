@@ -1,4 +1,4 @@
-# BEYOND 3.1 控制仓交付包
+# BEYOND 3.2 控制仓交付包
 
 首次安装、版本升级、新/老项目初始化和PM接手的完整顺序与可复制提示词，统一见[安装、升级与项目初始化指南](docs/安装升级与项目初始化指南.md)。本文只解释交付包结构和运行入口，不再维护第二套安装步骤。
 
@@ -107,9 +107,8 @@ node beyond-control/scripts/beyond-control.mjs install-project-entry --project-r
 
 团队模式下所有内部成员克隆同一个控制仓。用户说“拉取一下任务和协同”时，由 PM调用固定脚本同步并按当前 Git身份汇总；普通个人任务不读取`shared/`。
 
-PM查看本机任务或在验收后收拢已完成任务时，使用同一个固定脚本；收拢只处理明确点名、已有正式结果且不再影响主线的thread，执行前自动备份`local/`：
+3.2运行内核只把项目身份和工作台事务收进`runtime`机器入口。升级既有控制仓时，固定入口先备份并迁移旧Markdown工作台：进行中/已暂停任务进入机器状态，已完成记录退出高频区且不重复旧历史。Worker正常完成或异常暂停时，无条件尝试一次平台回传，再把结果留在Codex原生任务final；平台把消息安排到PM回答边界，回调只负责唤醒，PM扫描全部已登记Worker后验收。用户不用填写消息或回执字段。完成验收时，`workbench.accept`一次收拢活动任务和月度历史：
 
 ```powershell
-node scripts/beyond-control.mjs workbench --action list
-node scripts/beyond-control.mjs workbench --action archive --threads "<正式thread>"
+node scripts/beyond-control.mjs runtime --request "<由BEYOND生成的JSON请求文件>"
 ```

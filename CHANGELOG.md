@@ -6,6 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-08-20
+
+### Changed
+
+- Keep each formal result in the native Worker task final and send one native wakeup that the platform handles after the current PM answer boundary.
+- Let any Worker callback trigger one sweep of every registered Worker, so concurrent or coalesced callbacks are accepted without losing results.
+- Keep deterministic project identity and workbench transactions while removing result-body duplication from the control runtime.
+
+### Removed
+
+- Remove the experimental terminal receipt store, task envelope, notify dispatcher, host adapter, CLI resume provider, WindowsApps CLI mirror, and new-task result inbox path.
+
+### Fixed
+
+- Preserve a busy PM answer completely, then deliver completed Worker results in a separate turn without requiring another user message.
+- Make concurrent Worker completion idempotent: each final is accepted and archived once even when several notifications arrive together.
+- Migrate an existing 3.1 Markdown workbench into the 3.2 machine state during project-entry fusion: keep active and paused tasks, remove completed rows from the hot view without duplicating legacy history, and preserve an exact pre-migration backup.
+- Respect an existing project declaration that the control-local workbench is authoritative and a root-level legacy workbench is historical, so stale legacy tasks are not reactivated during upgrade.
+
 ## [3.1.7] - 2026-08-16
 
 ### Changed

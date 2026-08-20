@@ -25,7 +25,8 @@ These documents explain the public product, its operating model, and the first r
 | Previous release | [v3.1.3 Upgrade Guide](releases/v3.1.3.md) | Remove Hook trust, runtime probes, and mandatory restarts from the standard runtime while precisely cleaning legacy BEYOND Hook state |
 | Previous release | [v3.1.4 Upgrade Guide](releases/v3.1.4.md) | Correct stale mandatory-restart and identity-guard wording in the Quick Start |
 | Previous release | [v3.1.6 Upgrade Guide](releases/v3.1.6.md) | Continue from minimum adoption into verifiable full or on-demand project initialization |
-| Current release | [v3.1.7 Upgrade Guide](releases/v3.1.7.md) | Restore platform terminal delivery, protect a busy PM, and activate entry or Skill replacement after restart |
+| Previous release | [v3.1.7 Upgrade Guide](releases/v3.1.7.md) | Restore platform terminal delivery, protect a busy PM, and activate entry or Skill replacement after restart |
+| Current release | [v3.2.0 Upgrade Guide](releases/v3.2.0.md) | Use the formal Worker final, one native wakeup, and idempotent workbench transactions for lossless non-interrupting terminal closeout |
 | Real-project adoption | [Template package](../../模板交付包/README.md) → [template entry](../../模板交付包/AGENTS.md) | Understand the formal package, Skills, and initialization boundary |
 | Security and governance review | [Architecture](architecture.md) → [Security Policy](../../SECURITY.en.md) | Understand control rights, authorization, evidence, and risk boundaries |
 
