@@ -107,7 +107,7 @@ node beyond-control/scripts/beyond-control.mjs install-project-entry --project-r
 
 团队模式下所有内部成员克隆同一个控制仓。用户说“拉取一下任务和协同”时，由 PM调用固定脚本同步并按当前 Git身份汇总；普通个人任务不读取`shared/`。
 
-3.2运行内核只把项目身份和工作台事务收进`runtime`机器入口。升级既有控制仓时，固定入口先备份并迁移旧Markdown工作台：进行中/已暂停任务进入机器状态，已完成记录退出高频区且不重复旧历史。Worker正常完成或异常暂停时，无条件尝试一次平台回传，再把结果留在Codex原生任务final；平台把消息安排到PM回答边界，回调只负责唤醒，PM扫描全部已登记Worker后验收。用户不用填写消息或回执字段。完成验收时，`workbench.accept`一次收拢活动任务和月度历史：
+3.2运行内核只把项目身份和工作台事务收进`runtime`机器入口。升级既有控制仓时，固定入口先备份并迁移旧Markdown工作台：进行中/已暂停任务进入机器状态，已完成记录退出高频区且不重复旧历史。Worker正常完成或异常暂停时，先结束全部业务工具动作、形成final草稿，再把一次平台回传作为最后一次工具调用并立即输出Codex原生任务final；回调只负责唤醒，不证明线程已经结束，PM只验收已结束且final可读的Worker。用户不用填写消息或回执字段。完成验收时，`workbench.accept`一次收拢活动任务和月度历史：
 
 ```powershell
 node scripts/beyond-control.mjs runtime --request "<由BEYOND生成的JSON请求文件>"

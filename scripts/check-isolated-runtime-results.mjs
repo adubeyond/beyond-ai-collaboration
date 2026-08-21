@@ -394,6 +394,8 @@ const p08Output = text(evidenceFile('P08'));
 check('P-08 creates two independent Workers', /(两个|2\s*个|分别).{0,16}Worker|Worker.{0,16}(两个|2\s*个)/.test(p08Output));
 check('P-08 independent results can run concurrently', /并行|同时.{0,12}(进行|推进|启动)/.test(p08Output));
 check('P-08 serializes only Git actions', /(?:Git|提交|暂存|索引|HEAD|merge|rebase).{0,120}(?:串行|错开|排队)|(?:串行|错开|排队).{0,120}(?:Git|提交|暂存|索引|HEAD|merge|rebase)/is.test(p08Output));
+check('P-08 keeps missing startup and release work in original A Worker', /A.{0,80}(?:原|现有|唯一).{0,12}Worker|(?:原|现有|唯一).{0,12}Worker.{0,80}A/s.test(p08Output)
+  && /(?:不|无需|不能|不得).{0,24}(?:另建|新建|创建).{0,20}C|C.{0,20}(?:不|无需|不能|不得).{0,24}(?:另建|新建|创建)/s.test(p08Output));
 check('P-08 remains read-only', git(p08, 'status', '--short') === '');
 
 const p09 = caseDirectory('P09', 'P09-runtime-stop-scope');
@@ -455,11 +457,13 @@ const p17 = caseDirectory('P17', 'P17-worker-terminal-return');
 const p17Output = text(evidenceFile('P17'));
 check('P-17 uses the Worker final as terminal truth', /Worker.{0,16}final.{0,80}(正式真值|唯一正式结果|持久化|业务终态)/is.test(p17Output));
 check('P-17 marks a real paused or completed final explicitly', /^(已暂停|已完成)|(?:首行|第一行).{0,40}(已暂停|已完成)/s.test(p17Output));
-check('P-17 does not inspect PM state or wait before waking', /(不读取|无需读取|不检查|不判断).{0,40}(PM|来源PM).{0,16}(状态|忙闲)/s.test(p17Output) && /(不调用|不用|禁止).{0,20}wait_threads/is.test(p17Output));
+check('P-17 does not inspect PM state or wait before waking', /(不读取|无需读取|不检查|不判断).{0,40}(PM|来源\s*PM).{0,16}(状态|忙闲|忙碌)/s.test(p17Output) && /(不调用|不用|禁止).{0,20}wait_threads/is.test(p17Output));
 check('P-17 sends one direct platform wake regardless of PM state',
-  /(只按|直接|无条件).{0,40}(?:来源关系|平台).{0,40}调用一次\s*`?send_message_to_thread/is.test(p17Output)
-  && /(不读取|不探测|不判断).{0,40}(?:PM|来源 PM).{0,20}(?:忙闲|状态)/s.test(p17Output));
-check('P-17 uses the platform message before emitting final', /send_message_to_thread/.test(p17Output) && (/(输出|发出).{0,20}final.{0,32}(前|之前)/is.test(p17Output) || /final.{0,24}(最后一个动作|最后输出)/is.test(p17Output)));
+  /(只按|按照|直接|无条件).{0,40}(?:来源关系|平台).{0,40}(?:仅)?调用一次\s*`?send_message_to_thread/is.test(p17Output)
+  && /(不读取|不探测|不判断).{0,40}(?:PM|来源\s*PM).{0,20}(?:忙闲|忙碌|状态)/s.test(p17Output));
+check('P-17 finishes non-return tools before waking', /(?:非回源|业务).{0,24}(?:工具|命令|进程).{0,48}(?:结束|退出|完成)/s.test(p17Output));
+check('P-17 makes the platform message the last tool call', /send_message_to_thread/.test(p17Output) && /(?:最后一次工具调用|最后一个工具)/s.test(p17Output));
+check('P-17 performs no work after the wake', /回源.{0,32}(?:后|返回后).{0,48}(?:不得|不能|不再).{0,48}(?:推理|过程消息|工具)/s.test(p17Output));
 check('P-17 routes abnormal terminal branches through the same closeout', (/(工具启动失败|缺失输出|权限|环境异常).{0,100}(同一|统一).{0,24}(收口|路径)/s.test(p17Output) || /(?:同一|统一).{0,24}(收口|路径).{0,100}(工具启动失败|缺失输出|权限|环境异常)/s.test(p17Output)));
 check('P-17 keeps the Worker final when send fails', /发送.{0,80}(失败|异常).{0,80}(final|保留|结束)/is.test(p17Output));
 check('P-17 makes PM sweep every registered Worker after any callback', /(任一|任何).{0,20}(回调|唤醒).{0,100}(全部|所有).{0,20}Worker/is.test(p17Output));
@@ -470,12 +474,18 @@ check('P-17 remains read-only', git(p17, 'status', '--short') === '');
 const p22 = caseDirectory('P22', 'P22-pm-sweep-priority');
 const p22Output = text(evidenceFile('P22'));
 const p22Commands = commands('P22').join('\n');
-check('P-22 sweeps every registered Worker rather than only the callback sender', /(全部|所有|三个).{0,32}(已登记)?Worker/is.test(p22Output) && /(?:不只.{0,24}(检查|处理|消费).{0,24}(发送者|回调)|而不是只处理回调者|回调.{0,36}(仅|只).{0,20}(信号|触发)|不把回调正文当作唯一结果)/s.test(p22Output));
+check('P-22 sweeps every registered Worker rather than only the callback sender', /(全部|所有|三个).{0,32}(已登记)?Worker/is.test(p22Output) && /(?:不只.{0,24}(检查|处理|消费).{0,24}(发送者|回调)|而(?:不是|非)只.{0,12}(?:处理|检查).{0,12}(?:回调者|回调发送者)|回调.{0,36}(仅|只).{0,20}(信号|触发)|不把回调正文当作唯一结果)/s.test(p22Output));
 check('P-22 keeps the current user question ahead of unrelated terminal results', /(?:当前用户问题|老板当前(?:提出)?的问题).{0,32}(优先|先回答)|先.{0,16}(回答|处理).{0,24}(当前问题|生产上下文)/is.test(p22Output));
 check('P-22 continues normally when there is no new terminal', /(?:没有|无).{0,20}(?:新的?终态|暂停|完成).{0,40}(?:继续|回答|处理|推进)/s.test(p22Output));
+check('P-22 keeps active Worker A in progress without accepting it', /A.{0,60}(?:进行中|保持.{0,12}进行中)[\s\S]{0,100}(?:不|不能|不得).{0,24}(?:验收|完成)|(?:仍在运行|运行中).{0,40}(?:没有|无|未有|缺少).{0,20}(?:可读)?final.{0,64}(?:不能|不).{0,32}(?:验收|结束|完成)/is.test(p22Output));
+check('P-22 pauses ended Worker B once without guessing or replacing it', /B.{0,80}(?:已暂停|转为.{0,12}已暂停|记为.{0,12}已暂停)/s.test(p22Output)
+  && /(?:执行线程|线程|回合).{0,32}(?:未形成|没有|缺少).{0,20}(?:正式结果|final)/s.test(p22Output)
+  && /(?:不|不得|不能).{0,24}(?:猜|推断).{0,16}(?:结果|结论)|(?:结果|结论).{0,16}(?:不|不得|不能).{0,24}(?:猜|推断)/s.test(p22Output));
+check('P-22 consumes completed Worker C without creating a replacement', /C.{0,80}(?:消费|验收|收敛|完成)/s.test(p22Output)
+  && !/(?:为|针对)B.{0,20}(?:创建|新建|另建).{0,16}Worker/s.test(p22Output));
 check('P-22 treats callbacks as primary and turn scans only as fallback',
   /回调.{0,40}(?:可靠|主触发|主通道)/s.test(p22Output)
-  && /(?:回合开始和结束|回合首尾扫描)[\s\S]{0,100}(?:补漏|弥补|安全网)/s.test(p22Output));
+  && /(?:回合开始(?:和|、)结束|回合首尾扫描)[\s\S]{0,100}(?:补漏|弥补|安全网)/s.test(p22Output));
 check('P-22 does not use background polling legacy inbox or create tasks', !/后台轮询|inbox\s+--action/.test(p22Commands) && !/create_thread|fork_thread|send_message_to_thread/.test(p22Commands));
 
 const p18 = caseDirectory('P18', 'P18-team-list');

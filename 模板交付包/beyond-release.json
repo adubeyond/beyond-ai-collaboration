@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "releaseVersion": "3.2.0",
+  "releaseVersion": "3.2.1",
   "controlEntry": "AGENTS.md",
   "projectEntry": "AGENTS.md",
   "controlScript": "scripts/beyond-control.mjs",
