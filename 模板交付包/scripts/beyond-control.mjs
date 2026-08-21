@@ -190,7 +190,7 @@ function registeredProjectId(projectRoot, remote) {
 }
 
 const ignoredDiscoveryDirectories = new Set([
-  ".git", ".next", ".pytest_cache", ".tmp", ".codex_build", ".codex_exports",
+  ".git", ".next", ".pytest_cache", ".pytest-tmp", ".codex-pytest", ".beyond-local-backups", ".tmp", ".codex_build", ".codex_exports",
   ".codex_release", ".codex-artifacts", ".codex-out", "node_modules", "dist",
   "build", "coverage", "vendor", "artifacts", "logs", "tmp", "_publish", ".tmp_publish",
 ]);
@@ -803,7 +803,11 @@ function backupLocal(reason = "manual") {
   let suffix = 1;
   while (existsSync(target)) target = join(backupRoot(), `${stem}-${suffix++}`);
   mkdirSync(dirname(target), { recursive: true });
-  cpSync(source, target, { recursive: true, errorOnExist: true });
+  cpSync(source, target, {
+    recursive: true,
+    errorOnExist: true,
+    filter: (sourcePath) => sourcePath === source || !ignoredDiscoveryDirectories.has(basename(sourcePath)),
+  });
   return target;
 }
 

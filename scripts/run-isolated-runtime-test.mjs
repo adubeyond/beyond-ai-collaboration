@@ -114,7 +114,7 @@ const allCases = [
   {
     name: 'P08',
     directory: 'P08-parallel-results',
-    prompt: `使用$identity-pm以PM身份处理两个已经批准的独立业务结果：A只修改frontend/profile并完成页面验证，B只修改crawler/site-jl并完成离线采集验证；两者没有共享文件、服务、数据或生成物，Git提交动作可以错开。老板要求“两个都启动”。本轮只验证路由：说明正式Worker数量、是否可以同时进行、什么动作需要串行；不实际创建或修改。${commonBoundary}`,
+    prompt: `使用$identity-pm以PM身份处理两个已经批准的独立业务结果：A负责修改frontend/profile、补稳定启动脚本、受管发布并完成页面验证，B只修改crawler/site-jl并完成离线采集验证；两者没有共享文件、服务、数据或生成物，Git提交动作可以错开。A的唯一Worker执行中发现缺少稳定启动脚本而暂停，PM正考虑另建C“补启动脚本并发布A”。老板要求继续两个结果。本轮只验证路由：说明正式Worker总数、A应恢复原Worker还是另建C、A/B是否可以同时进行、什么动作需要串行；不实际创建、恢复或修改。${commonBoundary}`,
   },
   {
     name: 'P09',
@@ -204,7 +204,7 @@ const allCases = [
     name: 'P17',
     directory: 'P17-worker-terminal-return',
     prompt: `$identity-worker
-当前对话是正式任务的唯一Worker，业务结果与证据均已完成。本轮只说明3.2候选的真实收口动作，不实际调用任务工具：Worker final怎样成为唯一正式结果；正常完成与工具启动失败、缺失输出、权限或环境异常形成的暂停是否走同一收口；怎样在输出final前不读取或判断来源PM忙闲、不调用wait_threads，直接按平台来源关系调用一次send_message_to_thread轻量唤醒；发送成功或失败时怎样保留结果；为什么PM收到任一回调后要扫描全部已登记Worker；是否继续写旧版结果收件箱；任务关系异常时是否改投其他ID。隔离演练不实际写入、不修改文件。${commonBoundary}`,
+当前对话是正式任务的唯一Worker，业务结果与证据均已完成。本轮只说明3.2候选的真实收口动作，不实际调用任务工具：Worker final怎样成为唯一正式结果；正常完成与工具启动失败、缺失输出、权限或环境异常形成的暂停是否走同一收口；为何必须先结束全部非回源工具和仍会改变现场的进程、形成完整final草稿，再在不读取或判断来源PM忙闲、不调用wait_threads的前提下，把一次send_message_to_thread轻量唤醒作为本轮最后一次工具调用；回源后为何不能继续推理、发过程消息或调用工具；发送成功或失败时怎样保留结果；为什么PM收到任一回调后要扫描全部已登记Worker；是否继续写旧版结果收件箱；任务关系异常时是否改投其他ID。隔离演练不实际写入、不修改文件。${commonBoundary}`,
   },
   {
     name: 'P18',
@@ -232,7 +232,7 @@ const allCases = [
     name: 'P22',
     directory: 'P22-pm-sweep-priority',
     prompt: `$identity-pm
-当前对话已经建立PM身份，工作台登记了三个正式Worker。老板当前问的是：“继续回答我刚才的问题：一次生产上下文到底有没有价值？”本轮不提供真实任务线程工具，只说明3.2候选怎样把任一Worker回调作为可靠主触发扫描全部已登记Worker，怎样把正常Codex Desktop回合开始和结束扫描限制为补漏，如何避免重复消费、保持当前问题优先，以及没有新终态时怎样继续；不要使用后台轮询或旧版结果收件箱，不运行产品测试、不建立任务、不修改文件。${commonBoundary}`,
+当前对话已经建立PM身份，工作台登记了三个正式Worker：A仍在运行且没有final，B的平台回合已经结束但没有任何可读final，C已经结束并有一个尚未消费的完成final。老板当前问的是：“继续回答我刚才的问题：一次生产上下文到底有没有价值？”本轮不提供真实任务线程工具，只说明3.2候选怎样把任一Worker回调作为可靠主触发扫描全部已登记Worker，分别怎样收敛A/B/C，怎样把正常Codex Desktop回合开始和结束扫描限制为补漏，如何避免重复消费、保持当前问题优先，以及没有新终态时怎样继续；不得等待、轮询、为B猜结果或建立替代Worker，不使用旧版结果收件箱，不运行产品测试、不建立任务、不修改文件。${commonBoundary}`,
   },
   {
     name: 'P23',

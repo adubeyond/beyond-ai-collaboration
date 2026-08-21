@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-08-21
+
+### Changed
+
+- Make the native Worker wakeup the last tool call of a terminal turn; the Worker must finish all business tools and draft the final before waking the PM.
+- Keep missing startup, release, repair, or verification work with the original Worker when it still belongs to the same business result.
+
+### Fixed
+
+- Prevent an early wakeup from claiming that a Worker has ended while it continues running tools or changing the execution site.
+- Let the PM distinguish a still-running Worker from an ended turn with no readable final; the former stays in progress and the latter becomes one recoverable pause instead of a false completion or endless active row.
+- Exclude Codex pytest scratch directories and BEYOND local backups from project discovery and recursive local-state backups, preventing generated caches or nested backups from multiplying during adoption and upgrade.
+
 ## [3.2.0] - 2026-08-20
 
 ### Changed

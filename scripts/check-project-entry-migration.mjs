@@ -39,6 +39,12 @@ try {
   writeFileSync(join(projectRoot, ".codex", "existing-hook.mjs"), "process.exit(0);\n", "utf8");
   writeFileSync(join(projectRoot, ".codex", "beyond-runtime-guard.mjs"), "// BEYOND_RUNTIME_IDENTITY\n", "utf8");
   writeFileSync(join(projectRoot, ".codex", "hooks.json"), legacyHooks(), "utf8");
+  const ignoredPytestRoot = join(projectRoot, "crawler", ".codex-pytest", "pytest-of-Administrator");
+  mkdirSync(ignoredPytestRoot, { recursive: true });
+  writeFileSync(join(ignoredPytestRoot, "不得读取.md"), "# 临时测试现场\n", "utf8");
+  const ignoredBackupRoot = join(projectRoot, ".beyond-local-backups", "old");
+  mkdirSync(ignoredBackupRoot, { recursive: true });
+  writeFileSync(join(ignoredBackupRoot, "AGENTS.md"), "# 历史备份\n", "utf8");
 
   mkdirSync(join(controlRoot, ".codex"), { recursive: true });
   writeFileSync(join(controlRoot, ".codex", "beyond-runtime-guard.mjs"), "// installedControlRoot\n", "utf8");
@@ -48,6 +54,20 @@ try {
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, "{}\n", "utf8");
   }
+  for (const ignoredName of [".pytest_cache", ".pytest-tmp"]) {
+    const ignoredLocalCache = join(controlRoot, "local", ignoredName);
+    mkdirSync(ignoredLocalCache, { recursive: true });
+    writeFileSync(join(ignoredLocalCache, "不得备份.txt"), "temporary\n", "utf8");
+  }
+
+  const inspect = run([
+    join(controlRoot, "scripts", "beyond-control.mjs"), "inspect-project",
+    "--project-root", projectRoot,
+  ]);
+  const inspection = inspect.status === 0 ? JSON.parse(inspect.stdout) : null;
+  check("Codex pytest临时目录不进入项目调查", inspect.status === 0
+    && inspection.excludedDirectories.includes("crawler/.codex-pytest"), inspect.stderr || inspect.stdout);
+  check("BEYOND本机备份不进入项目调查", inspection.excludedDirectories.includes(".beyond-local-backups"));
 
   const command = [
     join(controlRoot, "scripts", "beyond-control.mjs"), "install-project-entry",
@@ -55,6 +75,11 @@ try {
   ];
   const install = run(command);
   check("项目入口迁移成功", install.status === 0, install.stderr || install.stdout);
+  const localBackupRoot = join(scratch, ".beyond-local-backups", "beyond-control");
+  const localBackupSnapshots = existsSync(localBackupRoot) ? readdirSync(localBackupRoot) : [];
+  check("本机状态备份跳过临时缓存目录", localBackupSnapshots.length > 0
+    && localBackupSnapshots.every((name) => [".pytest_cache", ".pytest-tmp"]
+      .every((ignoredName) => !existsSync(join(localBackupRoot, name, ignoredName)))));
 
   const agents = readFileSync(join(projectRoot, "AGENTS.md"), "utf8");
   const projectId = agents.match(/<!-- BEYOND-PROJECT-ID: ([^\n]+) -->/)?.[1]?.trim();
