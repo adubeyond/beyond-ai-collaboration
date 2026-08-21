@@ -23,6 +23,16 @@ function sweep(workers, consumed = new Set()) {
     .map((worker) => ({ threadId: worker.threadId, final: worker.final }));
 }
 
+const CALLBACK_SETTLE_LIMIT_MS = 30_000;
+
+function settleCallbackSender(finalDelayMs, finalStatus = 'completed') {
+  const waitCount = finalDelayMs > 0 ? 1 : 0;
+  if (finalDelayMs <= CALLBACK_SETTLE_LIMIT_MS) {
+    return { waitCount, status: finalStatus, finalReadable: true };
+  }
+  return { waitCount, status: 'active', finalReadable: false };
+}
+
 function validTerminalTrace(events) {
   const wakeIndex = events.indexOf('send-native-wakeup');
   const finalIndex = events.indexOf('emit-final');
@@ -75,13 +85,37 @@ test('one coalesced callback still sweeps every completed Worker', () => {
   assert.deepEqual(sweep(workers, new Set(['worker-b'])).map((item) => item.final), ['A', 'C']);
 });
 
+test('one bounded callback wait closes normal final-delivery races', () => {
+  for (const delayMs of [0, 5_000, 15_000, 29_000]) {
+    assert.deepEqual(settleCallbackSender(delayMs), {
+      waitCount: delayMs > 0 ? 1 : 0,
+      status: 'completed',
+      finalReadable: true,
+    });
+  }
+  assert.deepEqual(settleCallbackSender(15_000, 'paused'), {
+    waitCount: 1,
+    status: 'paused',
+    finalReadable: true,
+  });
+});
+
+test('bounded callback wait neither polls nor accepts a late missing final', () => {
+  assert.deepEqual(settleCallbackSender(30_001), {
+    waitCount: 1,
+    status: 'active',
+    finalReadable: false,
+  });
+});
+
 test('source rules use platform finals and remove the experimental delivery stack', () => {
   const agents = read('模板交付包/AGENTS.md');
   const pm = read('模板交付包/skills/identity-pm/SKILL.md');
+  const lifecycle = read('模板交付包/skills/identity-pm/references/lifecycle-and-closeout.md');
   const worker = read('模板交付包/skills/identity-worker/SKILL.md');
   const release = read('模板交付包/beyond-release.json');
-  assert.match(agents, /扫描本PM已经登记的全部Worker任务/);
-  assert.match(pm, /不能只看本次回调的发送者/);
+  assert.match(pm, /扫描工作台登记的全部Worker/);
+  assert.match(lifecycle, /再扫描全部登记Worker/);
   assert.match(worker, /不得从异常分支直接跳到final/);
   assert.match(worker, /不读取或判断来源PM忙闲/);
   assert.match(worker, /不调用`wait_threads`/);
@@ -89,6 +123,7 @@ test('source rules use platform finals and remove the experimental delivery stac
   assert.match(worker, /只把已形成的final作为本轮最后一个动作输出/);
   assert.match(worker, /工具启动失败、缺失输出、权限或环境异常/);
   assert.match(worker, /不再复制终态正文到自建信箱/);
+  assert.doesNotMatch(agents, /send_message_to_thread|wait_threads/);
   for (const retired of ['terminal-provider', 'terminal-host-adapter', 'host-notify-dispatcher', 'installation-migration', 'codex-thread-delivery-provider']) {
     assert.doesNotMatch(release, new RegExp(retired));
   }
@@ -96,21 +131,25 @@ test('source rules use platform finals and remove the experimental delivery stac
 
 test('premature return cannot claim completion or allow later Worker tools', () => {
   const pm = read('模板交付包/skills/identity-pm/SKILL.md');
+  const lifecycle = read('模板交付包/skills/identity-pm/references/lifecycle-and-closeout.md');
   const worker = read('模板交付包/skills/identity-worker/SKILL.md');
   assert.doesNotMatch(worker, /当前Worker任务已结束，请扫描正式final/);
   assert.match(worker, /最后一次非回源工具调用已经结束/);
   assert.match(worker, /回源工具必须是本轮最后一次工具调用/);
   assert.match(worker, /回源工具返回后不得继续推理、发送过程消息或调用任何工具/);
-  assert.match(pm, /仍在运行且没有可读final时保持`进行中`/);
-  assert.match(pm, /本轮已经结束且没有可读final/);
-  assert.match(pm, /用`workbench\.pause`一次记为`已暂停`/);
+  assert.match(lifecycle, /仍在运行且没有可读final/);
+  assert.match(lifecycle, /wait_threads\(timeoutMs=30000\)/);
+  assert.match(lifecycle, /只对该来源调用一次/);
+  assert.match(lifecycle, /不得循环/);
+  assert.match(lifecycle, /本轮已经结束且没有可读final/);
+  assert.match(lifecycle, /`workbench\.pause`一次把业务任务记为`已暂停`/);
 });
 
 test('missing implementation or release steps stay with the original business result', () => {
   const pm = read('模板交付包/skills/identity-pm/SKILL.md');
-  assert.match(pm, /启动脚本、控制器、发布或复验任务前/);
-  assert.match(pm, /新动作只是补齐原验收时恢复原 Worker/);
-  assert.match(pm, /活动和暂停任务的业务结果与验收/);
+  assert.match(pm, /同一结果的检查点、返工和补齐验收继续使用原Worker/);
+  assert.match(pm, /同一结果恢复或补充原Worker/);
+  assert.match(pm, /只有新的独立结果才新建/);
 });
 
 test('runtime exposes only project identity and workbench actions', () => {

@@ -478,6 +478,9 @@ check('P-22 sweeps every registered Worker rather than only the callback sender'
 check('P-22 keeps the current user question ahead of unrelated terminal results', /(?:当前用户问题|老板当前(?:提出)?的问题).{0,32}(优先|先回答)|先.{0,16}(回答|处理).{0,24}(当前问题|生产上下文)/is.test(p22Output));
 check('P-22 continues normally when there is no new terminal', /(?:没有|无).{0,20}(?:新的?终态|暂停|完成).{0,40}(?:继续|回答|处理|推进)/s.test(p22Output));
 check('P-22 keeps active Worker A in progress without accepting it', /A.{0,60}(?:进行中|保持.{0,12}进行中)[\s\S]{0,100}(?:不|不能|不得).{0,24}(?:验收|完成)|(?:仍在运行|运行中).{0,40}(?:没有|无|未有|缺少).{0,20}(?:可读)?final.{0,64}(?:不能|不).{0,32}(?:验收|结束|完成)/is.test(p22Output));
+check('P-22 uses one bounded settle wait only for callback source A', /A.{0,100}(?:一次|只调用一次).{0,40}(?:30秒|30000|wait_threads)|(?:一次|只调用一次).{0,40}(?:30秒|30000|wait_threads).{0,100}A/is.test(p22Output)
+  && /(?:不得|不能|不).{0,24}(?:循环|轮询)/s.test(p22Output)
+  && /(?:不得|不能|不).{0,24}(?:等待).{0,16}(?:未回调|其他)Worker/s.test(p22Output));
 check('P-22 pauses ended Worker B once without guessing or replacing it', /B.{0,80}(?:已暂停|转为.{0,12}已暂停|记为.{0,12}已暂停)/s.test(p22Output)
   && /(?:执行线程|线程|回合).{0,32}(?:未形成|没有|缺少).{0,20}(?:正式结果|final)/s.test(p22Output)
   && /(?:不|不得|不能).{0,24}(?:猜|推断).{0,16}(?:结果|结论)|(?:结果|结论).{0,16}(?:不|不得|不能).{0,24}(?:猜|推断)/s.test(p22Output));

@@ -59,6 +59,11 @@ const failures = observations.flatMap((item) => [
   ...(!item.clean ? [`${item.case}: changed fixture files`] : []),
   ...(item.loadedActionSkill ? [`${item.case}: PM loaded an Action Skill`] : []),
   ...(item.claimedCompletion ? [`${item.case}: falsely claimed business completion`] : []),
+  ...((item.output.match(/[？?]/g) ?? []).length > 1 ? [`${item.case}: asked more than one first-round question`] : []),
+  ...(item.case === 'WST-PM-Q3' && /发布什么.{0,30}(?:环境|服务器)|(?:环境|服务器).{0,30}发布什么/s.test(item.output)
+    ? [`${item.case}: bundled target environment into the first object question`] : []),
+  ...(item.case === 'WST-PM-Q4' && ['报错', '复现', '日志', '页面'].filter((term) => item.output.includes(term)).length > 1
+    ? [`${item.case}: bundled investigation details into the first object question`] : []),
 ]);
 
 const summary = {
