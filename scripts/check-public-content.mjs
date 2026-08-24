@@ -330,13 +330,13 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
-    label: "worker uses one native wakeup without a custom result inbox",
-    value: "平台保存的当前Worker final是正式真值，不再复制终态正文到自建信箱",
+    label: "worker saves one frozen final into a short-lived receipt",
+    value: "回执是同一份冻结final的短期控制快照",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "worker terminal state uses a minimal explicit boundary",
-    value: "终态首行必须以`已完成`或`已暂停`开头",
+    value: "首行必须以`已完成`或`已暂停`开头",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
@@ -499,6 +499,16 @@ const requiredSkillFacts = [
     value: "不得因无关文件阻塞就默认使用`--no-verify`、临时克隆或另一条分支",
   },
   {
+    path: "模板交付包/skills/task-dev/SKILL.md",
+    label: "failed dependency installation preserves reversible work and stops",
+    value: "保留当前已授权的可逆本地改动并直接说明未验证缺口",
+  },
+  {
+    path: "模板交付包/skills/task-dev/SKILL.md",
+    label: "failed dependency installation does not trigger version searches or repeated tests",
+    value: "不继续搜索依赖版本或替代来源，也不重复运行已经确定因依赖缺失而无法启动的测试",
+  },
+  {
     path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "untouched permission dimensions do not block execution",
     value: "未触及的维度不检查、不补字段，也不形成暂停",
@@ -507,6 +517,21 @@ const requiredSkillFacts = [
     path: "模板交付包/skills/task-test/SKILL.md",
     label: "PM does not execute complete testing",
     value: "PM不得读取本 Skill并直接运行完整测试",
+  },
+  {
+    path: "模板交付包/skills/task-test/SKILL.md",
+    label: "local development with existing tests does not select the testing skill",
+    value: "清晰局部开发任务附带运行现有测试时由 task-dev 直接完成，不单独触发本 Skill",
+  },
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "a rejected standard call permits only one targeted equivalent attempt",
+    value: "至多做一次不改变结果与风险的定点等价尝试",
+  },
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "a rejected standard call does not trigger broad fallback searches",
+    value: "不遍历全机、缓存、其他安装器、模型工具或网络搜索",
   },
   {
     path: "模板交付包/skills/task-test/SKILL.md",

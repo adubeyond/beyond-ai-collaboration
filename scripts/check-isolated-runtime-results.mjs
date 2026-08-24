@@ -455,19 +455,29 @@ check('P-16 remains read-only', git(p16, 'status', '--short') === '');
 
 const p17 = caseDirectory('P17', 'P17-worker-terminal-return');
 const p17Output = text(evidenceFile('P17'));
-check('P-17 uses the Worker final as terminal truth', /Worker.{0,16}final.{0,80}(正式真值|唯一正式结果|持久化|业务终态)/is.test(p17Output));
+check('P-17 freezes one terminal truth for receipt and final', /(?:同一份|一份).{0,24}(?:冻结)?final.{0,120}(?:pending|回执)|(?:pending|回执).{0,120}(?:同一份|一份).{0,24}(?:冻结)?final/is.test(p17Output));
 check('P-17 marks a real paused or completed final explicitly', /^(已暂停|已完成)|(?:首行|第一行).{0,40}(已暂停|已完成)/s.test(p17Output));
+check('P-17 persists the frozen terminal through the fixed runtime', /worker-result\.enqueue/.test(p17Output) && /projectId/.test(p17Output) && /taskId/.test(p17Output));
+check('P-17 keeps the receipt short-lived and non-authoritative', /(?:不是|不作为).{0,28}(?:第二.{0,8}(?:真值|结果)|业务真值|消息历史|长期)/s.test(p17Output));
 check('P-17 does not inspect PM state or wait before waking', /(不读取|无需读取|不检查|不判断).{0,40}(PM|来源\s*PM).{0,16}(状态|忙闲|忙碌)/s.test(p17Output) && /(不调用|不用|禁止).{0,20}wait_threads/is.test(p17Output));
+check('P-17 uses the platform source thread rather than the Worker thread as callback target',
+  /source_thread_id/i.test(p17Output)
+  && /(?:Worker|当前任务).{0,24}threadId.{0,40}(?:不是|不能|不得).{0,24}(?:回源|目标)/is.test(p17Output));
+check('P-17 discovers a deferred native callback tool instead of treating it as absent',
+  /ALL_TOOLS/.test(p17Output)
+  && /codex_app__send_message_to_thread/.test(p17Output)
+  && /(?:顶层|直接).{0,32}(?:未显示|不可见).{0,40}(?:不等于|不能.{0,12}判断).{0,24}(?:不存在|不可用)/s.test(p17Output));
 check('P-17 sends one direct platform wake regardless of PM state',
-  /(只按|按照|直接|无条件).{0,40}(?:来源关系|平台).{0,40}(?:仅)?调用一次\s*`?send_message_to_thread/is.test(p17Output)
+  /(?:直接|无条件).{0,40}(?:唯一来源|source_thread_id).{0,40}(?:仅)?调用一次/is.test(p17Output)
   && /(不读取|不探测|不判断).{0,40}(?:PM|来源\s*PM).{0,20}(?:忙闲|忙碌|状态)/s.test(p17Output));
 check('P-17 finishes non-return tools before waking', /(?:非回源|业务).{0,24}(?:工具|命令|进程).{0,48}(?:结束|退出|完成)/s.test(p17Output));
 check('P-17 makes the platform message the last tool call', /send_message_to_thread/.test(p17Output) && /(?:最后一次工具调用|最后一个工具)/s.test(p17Output));
+check('P-17 omits optional host and model parameters', /(?:不附加|不传|省略).{0,30}(?:hostId|host).{0,80}(?:模型|model|推理)|(?:hostId|host).{0,50}(?:不附加|不传|省略)/is.test(p17Output));
 check('P-17 performs no work after the wake', /回源.{0,32}(?:后|返回后).{0,48}(?:不得|不能|不再).{0,48}(?:推理|过程消息|工具)/s.test(p17Output));
 check('P-17 routes abnormal terminal branches through the same closeout', (/(工具启动失败|缺失输出|权限|环境异常).{0,100}(同一|统一).{0,24}(收口|路径)/s.test(p17Output) || /(?:同一|统一).{0,24}(收口|路径).{0,100}(工具启动失败|缺失输出|权限|环境异常)/s.test(p17Output)));
 check('P-17 keeps the Worker final when send fails', /发送.{0,80}(失败|异常).{0,80}(final|保留|结束)/is.test(p17Output));
 check('P-17 makes PM sweep every registered Worker after any callback', /(任一|任何).{0,20}(回调|唤醒).{0,100}(全部|所有).{0,20}Worker/is.test(p17Output));
-check('P-17 retires the legacy result inbox from new terminal flow', /(不写|不再写|不使用|旧版).{0,40}(结果收件箱|收件箱|inbox)/i.test(p17Output));
+check('P-17 deletes the short-lived receipt only after workbench commit', /(?:workbench\.(?:pause|accept)|工作台.{0,8}(?:暂停|完成)).{0,100}(?:成功|提交).{0,60}(?:worker-result\.ack|删除.{0,12}回执)/is.test(p17Output));
 check('P-17 does not reroute a failed terminal', /(不|不得|不能).{0,32}(改投|猜测|父任务|其他ID|其他 ID)/.test(p17Output));
 check('P-17 remains read-only', git(p17, 'status', '--short') === '');
 
@@ -477,15 +487,18 @@ const p22Commands = commands('P22').join('\n');
 check('P-22 sweeps every registered Worker rather than only the callback sender', /(全部|所有|三个).{0,32}(已登记)?Worker/is.test(p22Output) && /(?:不只.{0,24}(检查|处理|消费).{0,24}(发送者|回调)|而(?:不是|非)只.{0,12}(?:处理|检查).{0,12}(?:回调者|回调发送者)|回调.{0,36}(仅|只).{0,20}(信号|触发)|不把回调正文当作唯一结果)/s.test(p22Output));
 check('P-22 keeps the current user question ahead of unrelated terminal results', /(?:当前用户问题|老板当前(?:提出)?的问题).{0,32}(优先|先回答)|先.{0,16}(回答|处理).{0,24}(当前问题|生产上下文)/is.test(p22Output));
 check('P-22 continues normally when there is no new terminal', /(?:没有|无).{0,20}(?:新的?终态|暂停|完成).{0,40}(?:继续|回答|处理|推进)/s.test(p22Output));
-check('P-22 keeps active Worker A in progress without accepting it', /A.{0,60}(?:进行中|保持.{0,12}进行中)[\s\S]{0,100}(?:不|不能|不得).{0,24}(?:验收|完成)|(?:仍在运行|运行中).{0,40}(?:没有|无|未有|缺少).{0,20}(?:可读)?final.{0,64}(?:不能|不).{0,32}(?:验收|结束|完成)/is.test(p22Output));
-check('P-22 uses one bounded settle wait only for callback source A', /A.{0,100}(?:一次|只调用一次).{0,40}(?:30秒|30000|wait_threads)|(?:一次|只调用一次).{0,40}(?:30秒|30000|wait_threads).{0,100}A/is.test(p22Output)
-  && /(?:不得|不能|不).{0,24}(?:循环|轮询)/s.test(p22Output)
-  && /(?:不得|不能|不).{0,24}(?:等待).{0,16}(?:未回调|其他)Worker/s.test(p22Output));
+check('P-22 consumes active-looking Worker A from the matching frozen receipt without waiting', /A.{0,100}(?:pending|回执).{0,100}(?:验收|收敛|完成)/is.test(p22Output)
+  && /A.{0,120}(?:不等待|无需等待|不调用.{0,16}wait_threads)/is.test(p22Output));
+check('P-22 lists all pending receipts once without polling', /worker-result\.list/.test(p22Output)
+  && /(?:全部|所有).{0,24}(?:pending|回执)/is.test(p22Output)
+  && /(?:不得|不能|不).{0,24}(?:循环|轮询)/s.test(p22Output));
 check('P-22 pauses ended Worker B once without guessing or replacing it', /B.{0,80}(?:已暂停|转为.{0,12}已暂停|记为.{0,12}已暂停)/s.test(p22Output)
   && /(?:执行线程|线程|回合).{0,32}(?:未形成|没有|缺少).{0,20}(?:正式结果|final)/s.test(p22Output)
   && /(?:不|不得|不能).{0,24}(?:猜|推断).{0,16}(?:结果|结论)|(?:结果|结论).{0,16}(?:不|不得|不能).{0,24}(?:猜|推断)/s.test(p22Output));
 check('P-22 consumes completed Worker C without creating a replacement', /C.{0,80}(?:消费|验收|收敛|完成)/s.test(p22Output)
   && !/(?:为|针对)B.{0,20}(?:创建|新建|另建).{0,16}Worker/s.test(p22Output));
+check('P-22 acknowledges receipts only after workbench commits', /workbench\.accept|workbench\.pause/.test(p22Output)
+  && /(?:成功|提交).{0,60}worker-result\.ack|worker-result\.ack.{0,80}(?:之后|仅在).{0,20}(?:成功|提交)/is.test(p22Output));
 check('P-22 treats callbacks as primary and turn scans only as fallback',
   /回调.{0,40}(?:可靠|主触发|主通道)/s.test(p22Output)
   && /(?:回合开始(?:和|、)结束|回合首尾扫描)[\s\S]{0,100}(?:补漏|弥补|安全网)/s.test(p22Output));

@@ -204,7 +204,7 @@ const allCases = [
     name: 'P17',
     directory: 'P17-worker-terminal-return',
     prompt: `$identity-worker
-当前对话是正式任务的唯一Worker，业务结果与证据均已完成。本轮只说明3.2候选的真实收口动作，不实际调用任务工具：Worker final怎样成为唯一正式结果；正常完成与工具启动失败、缺失输出、权限或环境异常形成的暂停是否走同一收口；为何必须先结束全部非回源工具和仍会改变现场的进程、形成完整final草稿，再在不读取或判断来源PM忙闲、不调用wait_threads的前提下，把一次send_message_to_thread轻量唤醒作为本轮最后一次工具调用；回源后为何不能继续推理、发过程消息或调用工具；发送成功或失败时怎样保留结果；为什么PM收到任一回调后要扫描全部已登记Worker；是否继续写旧版结果收件箱；任务关系异常时是否改投其他ID。隔离演练不实际写入、不修改文件。${commonBoundary}`,
+当前对话是正式任务的唯一Worker，任务包已经提供projectId与taskId，业务结果与证据均已完成。本轮只说明3.2候选的真实收口动作，不实际调用任务工具：怎样先结束全部业务工具和仍会改变现场的进程、冻结一份首行为已完成或已暂停的final；怎样通过现有runtime的worker-result.enqueue把同一正文保存为短期pending；回执为什么不是第二业务真值、消息历史或长期证据；正常完成与工具启动失败、缺失输出、权限或环境异常是否走同一收口；回源目标从哪里取得，为什么当前Worker threadId不是回源目标；怎样从ALL_TOOLS发现codex_app__send_message_to_thread；为什么回源只传必填字段而不附加可选hostId、模型或推理参数；怎样在不判断PM忙闲、不调用wait_threads的前提下把一次轻量唤醒作为最后一次工具调用，并随后输出完全相同的冻结final；发送或回执保存失败时怎样如实结束；为什么PM收到任一回调后要先扫描全部pending再扫描全部登记Worker；工作台提交成功后怎样删除回执；来源缺失或矛盾时是否猜测或改投其他ID。隔离演练不实际写入、不修改文件。${commonBoundary}`,
   },
   {
     name: 'P18',
@@ -232,7 +232,7 @@ const allCases = [
     name: 'P22',
     directory: 'P22-pm-sweep-priority',
     prompt: `$identity-pm
-当前对话已经建立PM身份，工作台登记了三个正式Worker：本次回调来源A仍在运行且没有final，B的平台回合已经结束但没有任何可读final，C已经结束并有一个尚未消费的完成final。老板当前问的是：“继续回答我刚才的问题：一次生产上下文到底有没有价值？”本轮不提供真实任务线程工具，只说明3.2候选怎样把任一Worker回调作为可靠主触发扫描全部已登记Worker，怎样只对仍在落定final的回调来源A做一次30秒有界等待并在返回后再扫全部Worker，分别怎样收敛A/B/C，怎样把正常Codex Desktop回合开始和结束扫描限制为补漏，如何避免重复消费、保持当前问题优先，以及等待后仍没有新终态时怎样继续；不得循环轮询、等待未回调Worker、为B猜结果或建立替代Worker，不使用旧版结果收件箱，不运行产品测试、不建立任务、不修改文件。${commonBoundary}`,
+当前对话已经建立PM身份，工作台登记了三个正式Worker：本次回调来源A线程仍显示运行且final暂不可读，但已有与projectId、taskId和当前PM匹配的已完成pending；B的平台回合已经结束，既没有pending也没有可读final；C已经结束并有一个尚未消费的已完成pending。老板当前问的是：“继续回答我刚才的问题：一次生产上下文到底有没有价值？”本轮不提供真实任务线程工具，只说明3.2候选怎样把回调作为主触发，先用worker-result.list读取全部pending、再扫描全部登记Worker；怎样核对并分别收敛A/B/C，何时执行workbench.pause或accept、何时才worker-result.ack；平台final暂不可读时为什么A不需要等待，B为什么不能猜结果；怎样限制补扫、避免重复消费并保持当前问题优先。不得循环轮询、等待未回调Worker、为B建立替代Worker，不运行产品测试、不建立任务、不修改文件。${commonBoundary}`,
   },
   {
     name: 'P23',
@@ -333,7 +333,7 @@ const allCases = [
   {
     name: 'WST-WORKER-CALLBACK',
     directory: 'WST-WORKER-CALLBACK-result',
-    prompt: `$identity-worker\n当前对话是正式任务 WST-JILIN-THREE-SITES-CATEGORY-QUALITY-REVIEW-001 的唯一 Worker。工程工作已经完成，事实和明细在 evidence/quality-review.md 与其机器证据中；本轮只验证3.2终态表达，不重新执行审查、不修改文件、不实际调用任务工具。请按当前规则输出自包含final：只保留业务状态、决定裁决的主事实、主证据入口、主线影响和唯一下一动作；不要生成结果收件箱记录或复制机器证据明细。${commonBoundary}`,
+    prompt: `$identity-worker\n当前对话是正式任务 WST-JILIN-THREE-SITES-CATEGORY-QUALITY-REVIEW-001 的唯一 Worker。工程工作已经完成，事实和明细在 evidence/quality-review.md 与其机器证据中；本轮只验证3.2终态表达，不重新执行审查、不修改文件、不实际调用任务工具。请按当前规则输出自包含final：只保留业务状态、决定裁决的主事实、主证据入口、主线影响和唯一下一动作；说明真实任务会保存同一份短期pending，但不要在本轮生成回执或复制机器证据明细。${commonBoundary}`,
   },
   {
     name: 'WST-CONTROL-PLANE',

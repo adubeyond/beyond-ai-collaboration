@@ -14,12 +14,12 @@
 
 ## 3. 当前裁决
 
-1. Worker任务final是正式结果唯一存放处；
-2. Worker形成完整final草稿后，无条件向唯一来源PM发送一次原生唤醒，并把该发送作为最后一次工具调用；不判断PM忙闲，不等待PM，也不在回调后继续业务动作；
-3. 发送异常时直接输出final并结束，Worker任务中的final继续保底；
-4. PM把回调当作扫尾信号，在回合开始、结束和回调触发时扫描全部已登记Worker；
-5. 工作台只保存Worker任务ID、业务状态、final入口和最小消费事实；
-6. 本机结果收件箱、notify适配器、CLI恢复、任务信封和终态正文副本退出新任务主路径。
+1. Worker先冻结一份自包含final并写入项目内短期pending，再输出用户可见任务final；平台final可读时仍以它为正式真值，不以逐字一致作为验收条件；
+2. pending保存成功后，无条件向唯一来源PM发送一次原生唤醒，并把该发送作为最后一次工具调用；不判断PM忙闲，不等待PM，也不在回调后继续业务动作；
+3. 发送异常时仍输出final并结束；平台final可读时与pending核对，不可读时由pending补齐控制面；
+4. PM把回调当作扫尾信号，先读取当前项目全部pending，再扫描全部已登记Worker；
+5. 工作台提交暂停或完成成功后才删除对应pending；失败时保留供幂等重试，不归档正文；
+6. Hook、notify适配器、额外Codex CLI、后台进程、轮询和长期结果收件箱继续退出主路径。
 
 ## 4. 2026-08-19 新系统复现与修正
 
@@ -38,3 +38,15 @@ R1先把异常终态并入统一收口，但仍要求Worker判断PM忙闲并等�
 裁决保持Worker收口顺序不变，不恢复信箱、Hook、CLI或第二次回调。PM收到回调后若来源仍在运行且没有final，只对该来源执行一次30秒有界`wait_threads`；返回后再扫描全部登记Worker一次。等待后仍无final则保持`进行中`并结束，不循环、不等待未回调Worker、不提前验收。回归必须覆盖0、5、15、29秒落定，超过30秒不误验收，完成/暂停、多Worker扫描和幂等消费。
 
 本地确定性回归已覆盖上述时序，10/10通过。隔离提示词用例确认只等待回调来源、不等待其他Worker、等待后只重扫一次。真实Codex Desktop基础闭环中，完成Worker和暂停Worker各回调一次、各形成一份final、各验收一次，回调后均无工具调用；本轮两份final在PM作出等待判断前已经落定，因此该现场只证明基础闭环，30秒竞态仍以确定性回归为证据，不把未命中的概率现场写成已命中。
+
+## 6. 2026-08-22 延迟工具发现缺口
+
+R5异机正式任务中，PM通过`codex_app__create_thread`创建了用户可见Worker，Worker完成代码、4项测试和本地提交后输出final，但没有回源。只读取证确认：任务包装已经提供来源PM的`source_thread_id`；`codex_app__send_message_to_thread`也存在于`ALL_TOOLS`，但没有在Worker顶层工具声明中直接显示。Worker只检查了顶层工具，错误地把“未直接显示”判断成“工具不可用”。
+
+同一Worker随后通过`ALL_TOOLS`发现延迟工具，并以原`source_thread_id`执行一次原生回传；PM被成功唤醒，读取原Worker final后只验收、归档一次。由此裁决：不恢复Hook、信箱、CLI或轮询；Worker回源目标只认平台任务包装的`source_thread_id`，顶层未显示回源工具时必须从`ALL_TOOLS`发现`codex_app__send_message_to_thread`并通过工具编排入口调用。创建接口返回的Worker `threadId`不能冒充来源PM，来源缺失或矛盾时仍按真实回源缺口收口。
+
+## 7. 2026-08-23 暂停恢复回合不可读
+
+R6真机测试证明新Worker正常完成、真实暂停、忙碌PM和并行收口均可用；但PM向已暂停原Worker发送恢复输入后，平台出现两类独立故障：附带可选`hostId`时新turn以`items=[]`空响应结束；只发送`threadId + prompt`时Worker界面可见新final，PM的`read_thread`和即时快照仍返回空。旧测试只覆盖了首次暂停和重新扫描已结束final，没有覆盖“同一暂停Worker进入第二turn并回传第二终态”。
+
+R7不改变已通过的原生回调路径，只补一个项目内短期pending：正式任务包携带`projectId + taskId`；Worker在回调前通过现有`runtime`写入同一份冻结final；PM按任务标识消费，工作台事务成功后立即删除。恢复发送只传当前工具必填字段，当前标准为`threadId + prompt`，不附加可选`hostId`、模型或推理参数。该机制没有常驻进程、Hook、notify分支、额外CLI、轮询、消息历史或长期正文归档。

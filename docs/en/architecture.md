@@ -1,4 +1,4 @@
-# BEYOND 3.1 Architecture Overview
+# BEYOND 3.2 Architecture Overview
 
 **English** | [简体中文完整版](../系统架构与运行机制.md)
 
@@ -17,7 +17,7 @@ BEYOND turns Codex into a PM-led agent team. Its purpose is to complete real bus
 
 PM and Worker are agent identities. Design, development, testing, and operations are methods, not additional agents.
 
-Version 3.1 preserves the v3.0.9 ordinary task path. It adds an independent `beyond-control/` repository under the current project root by default, containing BEYOND documents, project-level documents, team tasks, and collaboration records. The user may explicitly place it outside the project only when several separate projects need one shared control repository. Business code remains in its existing repositories. Personal tasks do not load the shared team path.
+Version 3.2 preserves the short ordinary-task path and the project-local `beyond-control/` repository. It adds deterministic project identity, transactional workbench convergence, and one short-lived terminal receipt that closes a host gap in resumed Worker turns without adding a Hook, notifier adapter, daemon, or extra Codex CLI.
 
 ## Default task flow
 
@@ -26,13 +26,14 @@ user result
 → PM records one task and assigns one Worker
 → Worker reads only relevant project facts
 → Worker designs, implements, tests, repairs, and delivers continuously
-→ Worker returns either completion or one real blocking reason
-→ PM verifies evidence and updates the workbench
+→ Worker freezes one final, stores the same text as pending, wakes PM once, and outputs the final
+→ PM verifies evidence, updates the workbench, and deletes the consumed pending receipt
 ```
 
 A normal task package contains only:
 
 ```text
+projectId + taskId
 business result
 scope and explicit non-goals
 acceptance criteria
@@ -41,7 +42,7 @@ relevant project-fact entries
 real pause boundaries
 ```
 
-The packet is a compact business contract, not a PM-authored execution manual. A formal task is fresh, user-visible, and bound to the formal project; a fork that inherits PM history, a projectless task, or an internal helper cannot carry a formal business result. The task explicitly starts only the Worker identity. The Worker treats only the current task wrapper, direct user instructions in that task, and named facts as control context; inherited PM history is unverified evidence, not identity or authorization. The Worker then selects and loads one Action Skill for the current primary problem and may switch methods later without creating stage-specific tasks.
+The packet is a compact business contract, not a PM-authored execution manual. A formal task is fresh, user-visible, and bound to the formal project; a fork that inherits PM history, a projectless task, or an internal helper cannot carry a formal business result. The task explicitly starts only the Worker identity. Before the one native callback, the Worker stores the exact frozen final as project-local pending state. This is a short-lived control snapshot, not a second business result or message archive; PM deletes it only after the matching workbench transaction succeeds. The Worker then selects and loads one Action Skill for the current primary problem and may switch methods later without creating stage-specific tasks.
 
 Test verdicts preserve the full coverage denominator, including failures, skips, and exclusions. Offline evidence does not impersonate current DOM, GUI, network, database, or runtime canaries, and a task-scoped candidate verdict does not turn a failing repository-wide gate green. Testing by the same Worker is professional testing, not independent testing.
 

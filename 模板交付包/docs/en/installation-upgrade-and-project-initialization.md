@@ -22,6 +22,8 @@ prepare the target package and six Skills
 
 The standard BEYOND path does not install an identity Hook and does not require `/hooks` or a guard probe. Use a new ordinary conversation without an identity Skill for installation maintenance so an active PM or Worker does not replace its own project entry while doing business work. Wait for active tasks to stop before replacing the root entry or Skills; after installation, restart Codex and verify the loaded version from a new process.
 
+The runtime uses the existing fixed `runtime` entry for project identity, workbench transactions, and one short-lived Worker-result receipt. A Worker stores the exact frozen final before one native callback, then outputs the same user-visible final. PM removes the pending body only after the matching workbench update succeeds. This does not install a Hook, notify branch, daemon, or extra Codex CLI, and it does not retain a message archive.
+
 ## 2. Prepare the target release
 
 Obtain the immutable package from the target Release. Put the complete `模板交付包` under the business-project root as `beyond-control`; do not scatter package files over the project.
