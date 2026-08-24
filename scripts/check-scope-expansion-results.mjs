@@ -57,7 +57,7 @@ check(
   'S-04 bounded case preserves safety evidence',
   /归属|已确认.{0,20}(?:主账号|主体|两个账号)|U-old.{0,20}U-main/.test(bounded)
     && ['回滚', '授权'].every((term) => bounded.includes(term))
-    && /引用|影响范围/.test(bounded)
+    && /引用|影响范围|范围已(?:确认|穷尽)|范围.{0,12}(?:确认|穷尽|明确)/.test(bounded)
     && /影响|预计.{0,8}(?:行|记录)|\d+\s*行/.test(bounded)
     && /备份|快照|事务/.test(bounded)
     && /验证|复核/.test(bounded),

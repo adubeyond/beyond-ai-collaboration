@@ -108,7 +108,7 @@ Explicit non-goals: do not add multiplication, division, a command-line interfac
 Allowed actions: read the current project; modify src/calc.js, test/calc.test.js, and the project documents defined by the template; run npm test and npm run check.
 Acceptance: both commands exit with code 0, the existing add test still passes, and the new subtract test passes.
 
-Follow the minimum read path in the root AGENTS.md. Record one task in the workbench and create one Worker with the six-field task packet. The Worker must remain responsible for the result and combine design, development, and testing as needed. Return the formal result and current-run evidence to the PM. Write reusable engineering facts only when the task actually confirms them; do not create a capability-initialization task.
+Follow the minimum read path in the root AGENTS.md. Record one task in the workbench and create one Worker with the compact task packet plus its `projectId + taskId` control line. The Worker must remain responsible for the result and combine design, development, and testing as needed. Return the formal result and current-run evidence to the PM. Write reusable engineering facts only when the task actually confirms them; do not create a capability-initialization task.
 ```
 
 The message deliberately supplies the business result, non-goals, file boundary, command permissions, and acceptance criteria. It tests the complete automatic path rather than the PM's ability to ask many questions.

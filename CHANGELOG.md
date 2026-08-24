@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.2] - 2026-08-24
+
+### Added
+
+- Add one project-local short-lived Worker-result receipt to the existing fixed runtime. It stores the exact frozen final before the native callback, survives restart, and is deleted after the matching workbench transaction succeeds.
+
+### Changed
+
+- Let a current, explicit, informed, object-specific user instruction override BEYOND defaults and historical project preferences without merging separate authorization dimensions or weakening system and platform constraints.
+- Keep clear local development that only runs existing tests inside `task-dev`; the Worker continues to choose Action Skills from the business result instead of receiving a PM-selected method.
+
+### Fixed
+
+- Recover a paused Worker with only the send tool's required `threadId + prompt` fields instead of optional host/model parameters that can create an empty follow-up turn.
+- Let PM close a resumed Worker's second terminal result even when the host UI shows the final but `read_thread` and immediate task snapshots cannot read it.
+- Derive a stable workbench operation from `receiptId`, so an interruption after state commit but before receipt deletion does not duplicate acceptance or history.
+- Stop a rejected standard tool or dependency path after at most one targeted equivalent attempt, preserve authorized reversible work, and avoid whole-machine, cache, installer, version, or web searches that do not advance the requested result.
+
 ## [3.2.1] - 2026-08-21
 
 ### Changed

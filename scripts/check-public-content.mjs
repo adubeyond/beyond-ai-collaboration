@@ -241,27 +241,27 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "PM keeps the workbench as a dashboard",
-    value: "当前工作台是 PM 的团队仪表盘，不是业务执行许可证或 Git 真值副本",
+    value: "当前工作台是PM的团队仪表盘，不是业务执行许可证、过程日志或Git真值副本",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
-    label: "PM uses a six-field task packet",
-    value: "普通任务包最多包含六项",
+    label: "PM uses a short task contract",
+    value: "普通任务包不是表单，通常只有两到四个短段",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "PM does not promote discussion into task control",
-    value: "讨论、建议、候选方案和 PM推断没有控制效力",
+    value: "讨论、建议、候选方案和PM推断没有控制效力",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "a design checkpoint does not create an implementation Worker",
-    value: "不得再建立一个实施 Worker",
+    value: "不得再建立一个实施Worker",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "formal worker prompt starts only the Worker identity",
-    value: "在新任务初始提示首行只放`$identity-worker`",
+    value: "初始提示首行只放`$identity-worker`",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
@@ -271,7 +271,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "formal project tasks do not degrade to projectless",
-    value: "其他结果按返回原因报告，不降级成projectless",
+    value: "结果不是`verified`时按真实原因停止，不降级成projectless",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
@@ -299,9 +299,9 @@ const requiredSkillFacts = [
     value: "进入第一个专业动作前必须完整读取一个与主要问题匹配的 Action Skill",
   },
   {
-    path: "模板交付包/AGENTS.md",
+    path: "模板交付包/skills/task-dev/SKILL.md",
     label: "local development does not preload testing method",
-    value: "开发方法能够运行现有测试并完成验收就不加载测试 Skill",
+    value: "清晰局部改动可以由开发方法直接运行现有测试并交付",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
@@ -330,23 +330,23 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
-    label: "worker uses one native wakeup without a custom result inbox",
-    value: "平台保存的当前Worker final是正式真值，不再复制终态正文到自建信箱",
+    label: "worker saves one frozen final into a short-lived receipt",
+    value: "回执是同一份冻结final的短期控制快照",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "worker terminal state uses a minimal explicit boundary",
-    value: "终态首行必须以`已完成`或`已暂停`开头",
+    value: "首行必须以`已完成`或`已暂停`开头",
   },
   {
-    path: "模板交付包/AGENTS.md",
+    path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "worker wakes once without inspecting PM state",
-    value: "不读取或判断PM忙闲、不调用`wait_threads`",
+    value: "不读取或判断来源PM忙闲，不调用`wait_threads`",
   },
   {
-    path: "模板交付包/AGENTS.md",
+    path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "PM sweeps every registered Worker after a wakeup",
-    value: "扫描本PM已经登记的全部Worker任务",
+    value: "扫描工作台登记的全部Worker",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
@@ -376,12 +376,12 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "PM does not turn ordinary failures into pauses",
-    value: "不把普通失败、Skill 切换、PM 消费或本地提交制造成暂停",
+    value: "普通失败、Skill切换、工作台未同步、可逆本地修改和已授权本地提交不构成暂停",
   },
   {
     path: "模板交付包/AGENTS.md",
     label: "action skills do not take identity or task control",
-    value: "设计、开发、测试、运维只是动作能力，不改变 PM 或执行者身份，也不接管任务控制权",
+    value: "设计、开发、测试和运维只是动作能力，不改变PM或Worker身份，也不接管任务控制权",
   },
   {
     path: "模板交付包/AGENTS.md",
@@ -391,12 +391,12 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/AGENTS.md",
     label: "continue does not authorize persistent automation",
-    value: "不自动授权创建定时器、周期唤醒、心跳、长期监控或其他持久控制对象",
+    value: "不自动授权定时器、周期唤醒、心跳、长期监控或其他持久控制对象",
   },
   {
     path: "模板交付包/AGENTS.md",
     label: "internal context recovery is not user-visible progress",
-    value: "上下文压缩、恢复、交接或内部 checkpoint 形成的摘要只用于继续工作，不向用户原样输出",
+    value: "上下文压缩、恢复和内部checkpoint只用于继续工作，不向用户原样输出",
   },
   {
     path: "模板交付包/AGENTS.md",
@@ -406,7 +406,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/AGENTS.md",
     label: "first-minute updates require a real decision change",
-    value: "开工后60秒内，只有结论、安全边界或所需用户决定确实变化时才补一条简短更新",
+    value: "开工后60秒内，只有结论、安全边界或所需用户决定确实变化时才补充",
   },
   {
     path: "模板交付包/AGENTS.md",
@@ -499,6 +499,16 @@ const requiredSkillFacts = [
     value: "不得因无关文件阻塞就默认使用`--no-verify`、临时克隆或另一条分支",
   },
   {
+    path: "模板交付包/skills/task-dev/SKILL.md",
+    label: "failed dependency installation preserves reversible work and stops",
+    value: "保留当前已授权的可逆本地改动并直接说明未验证缺口",
+  },
+  {
+    path: "模板交付包/skills/task-dev/SKILL.md",
+    label: "failed dependency installation does not trigger version searches or repeated tests",
+    value: "不继续搜索依赖版本或替代来源，也不重复运行已经确定因依赖缺失而无法启动的测试",
+  },
+  {
     path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "untouched permission dimensions do not block execution",
     value: "未触及的维度不检查、不补字段，也不形成暂停",
@@ -507,6 +517,21 @@ const requiredSkillFacts = [
     path: "模板交付包/skills/task-test/SKILL.md",
     label: "PM does not execute complete testing",
     value: "PM不得读取本 Skill并直接运行完整测试",
+  },
+  {
+    path: "模板交付包/skills/task-test/SKILL.md",
+    label: "local development with existing tests does not select the testing skill",
+    value: "清晰局部开发任务附带运行现有测试时由 task-dev 直接完成，不单独触发本 Skill",
+  },
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "a rejected standard call permits only one targeted equivalent attempt",
+    value: "至多做一次不改变结果与风险的定点等价尝试",
+  },
+  {
+    path: "模板交付包/AGENTS.md",
+    label: "a rejected standard call does not trigger broad fallback searches",
+    value: "不遍历全机、缓存、其他安装器、模型工具或网络搜索",
   },
   {
     path: "模板交付包/skills/task-test/SKILL.md",
@@ -671,17 +696,17 @@ const requiredTeamFacts = [
   {
     path: "模板交付包/AGENTS.md",
     label: "3.1 keeps team collaboration off the personal hot path",
-    value: "普通项目接手、正式 Worker任务、Action Skill切换和个人任务不读取共享区",
+    value: "普通项目接手、正式Worker任务、Action Skill切换和个人任务不读取共享区",
   },
   {
     path: "模板交付包/AGENTS.md",
     label: "3.1 preserves the 3.0.9 formal Worker",
-    value: "不替代 3.0.9 的正式 Worker",
+    value: "不替代当前成员自己的正式Worker",
   },
   {
-    path: "模板交付包/skills/identity-pm/SKILL.md",
+    path: "模板交付包/skills/identity-pm/references/dispatch-and-init.md",
     label: "PM initialization and collaboration exceptions are narrowly scoped",
-    value: "两条例外都不扩张到业务代码、测试、仓库配置、成员权限、环境、数据或发布",
+    value: "两者都不扩张到业务源码、测试、仓库配置、成员权限、环境、数据或发布",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
@@ -691,7 +716,7 @@ const requiredTeamFacts = [
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "installed PM resolves the team entry through the project root",
-    value: "当前项目根`AGENTS.md`在“规则所有者”中映射的团队任务与协同入口",
+    value: "完整读取当前项目根`AGENTS.md`映射的团队入口",
   },
   {
     path: "模板交付包/docs/AI编程协同机制/团队任务与协同.md",
@@ -759,14 +784,14 @@ const requiredTaskStateFacts = [
     value: "业务状态只使用`进行中 / 已暂停 / 已完成`",
   },
   {
-    path: "模板交付包/skills/identity-pm/SKILL.md",
+    path: "模板交付包/skills/identity-pm/references/cross-task-coordination.md",
     label: "BEYOND does not create or recommend worktrees",
-    value: "BEYOND 不创建、推荐或默认使用 worktree",
+    value: "BEYOND不创建或推荐 worktree",
   },
   {
-    path: "模板交付包/skills/identity-pm/SKILL.md",
+    path: "模板交付包/skills/identity-pm/references/cross-task-coordination.md",
     label: "same directory is not automatically a conflict",
-    value: "同一目录本身不是冲突",
+    value: "目录相同本身不是冲突",
   },
   {
     path: "模板交付包/skills/identity-pm/references/dispatch-and-init.md",

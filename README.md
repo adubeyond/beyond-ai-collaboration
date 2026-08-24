@@ -10,9 +10,9 @@ BEYOND is a document-driven AI engineering collaboration system for Codex. It tu
 
 Most AI coding tools focus on generating code faster. BEYOND focuses on a harder problem: helping AI understand a real project, stay within authorization, finish a complete business task, prove the result, and become more effective as project knowledge grows.
 
-[Installation and Project Initialization](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [v3.2.1 Upgrade Guide](docs/en/releases/v3.2.1.md) · [Architecture](docs/en/architecture.md) · [Control Repository Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
+[Installation and Project Initialization](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [v3.2.2 Upgrade Guide](docs/en/releases/v3.2.2.md) · [Architecture](docs/en/architecture.md) · [Control Repository Package](模板交付包) · [Contributing](CONTRIBUTING.en.md) · [中文首页](README.zh-CN.md)
 
-> The current release is `v3.2.1`. It keeps the formal Worker final as task truth, makes the native wakeup the Worker's last tool call, and excludes generated test caches and local backups from recursive adoption backups.
+> The current release is `v3.2.2`. It adds a short-lived terminal receipt for paused-Worker recovery and lets current explicit instructions override BEYOND defaults while preserving distinct authorization boundaries and a shorter ordinary-task path.
 
 ## What BEYOND changes
 

@@ -1,6 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { ProjectIdentityProvider } from './project-identity-provider.mjs';
+import { WorkerResultReceiptStore } from './worker-result-receipts.mjs';
 import { WorkbenchTransactionStore } from './workbench-transaction.mjs';
 
 const ACTIONS = new Set([
@@ -12,6 +13,9 @@ const ACTIONS = new Set([
   'workbench.snapshot',
   'workbench.accept',
   'workbench.recover',
+  'worker-result.enqueue',
+  'worker-result.list',
+  'worker-result.ack',
 ]);
 
 function object(value, label) {
@@ -32,6 +36,7 @@ function roots(controlRoot, request) {
     codexHome,
     projectIdentityRoot: path.join(localRuntime, 'project-identity'),
     workbenchRoot: path.join(localRuntime, 'workbench'),
+    workerResultRoot: path.join(localRuntime, 'worker-results'),
     viewPath: path.join(controlRoot, 'local', '当前工作台.md'),
     historyRoot: path.join(controlRoot, 'local', 'history', 'workbench'),
   };
@@ -45,6 +50,10 @@ function workbench(config) {
   });
 }
 
+function workerResults(config) {
+  return new WorkerResultReceiptStore({ runtimeRoot: config.workerResultRoot });
+}
+
 function execute(action, request, config) {
   if (action === 'project.resolve') {
     return new ProjectIdentityProvider({
@@ -52,6 +61,9 @@ function execute(action, request, config) {
       runtimeRoot: config.projectIdentityRoot,
     }).resolve(object(request.input, 'project identity input'));
   }
+  if (action === 'worker-result.enqueue') return workerResults(config).enqueue(object(request.input, 'Worker result receipt'));
+  if (action === 'worker-result.list') return workerResults(config).list(object(request.input, 'Worker result receipt filter'));
+  if (action === 'worker-result.ack') return workerResults(config).acknowledge(object(request.input, 'Worker result receipt acknowledgement'));
   const store = workbench(config);
   if (action === 'workbench.migrate') return store.startupStatus();
   if (action === 'workbench.register') return store.registerTask(object(request.input, 'task registration'));
@@ -69,9 +81,15 @@ function execute(action, request, config) {
 export function executeRuntimeRequest(rawRequest, context) {
   const request = object(rawRequest, 'runtime request');
   if (request.schemaVersion !== 1) throw new Error('unsupported runtime request schema');
-  const requestId = nonEmpty(request.requestId, 'requestId');
   const action = nonEmpty(request.action, 'action');
   if (!ACTIONS.has(action)) throw new Error(`unsupported runtime action: ${action}`);
+  let requestId;
+  if (request.requestId !== undefined) requestId = nonEmpty(request.requestId, 'requestId');
+  else if (action.startsWith('worker-result.')) {
+    const input = object(request.input, 'Worker result request input');
+    const identity = input.receiptId ?? input.taskId ?? input.projectId ?? 'all';
+    requestId = `${action}:${nonEmpty(String(identity), 'Worker result request identity')}`;
+  } else requestId = nonEmpty(request.requestId, 'requestId');
   const controlRoot = path.resolve(nonEmpty(context?.controlRoot, 'controlRoot'));
   return { schemaVersion: 1, requestId, action, ok: true, result: execute(action, request, roots(controlRoot, request)) };
 }

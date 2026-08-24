@@ -42,6 +42,7 @@ const expectedSkills = [
 const expectedControlRuntimeFiles = [
   "scripts/runtime/control-runtime.mjs",
   "scripts/runtime/project-identity-provider.mjs",
+  "scripts/runtime/worker-result-receipts.mjs",
   "scripts/runtime/workbench-transaction.mjs",
 ];
 
@@ -374,6 +375,7 @@ if (manifest) {
 
   const controlScript = readUtf8(join(candidateRoot, manifest.controlScript), "控制仓固定动作脚本");
   const controlRuntime = readUtf8(join(candidateRoot, "scripts", "runtime", "control-runtime.mjs"), "控制运行统一入口");
+  const workerResultRuntime = readUtf8(join(candidateRoot, "scripts", "runtime", "worker-result-receipts.mjs"), "Worker短期终态运行文件");
   const workbenchRuntime = readUtf8(join(candidateRoot, "scripts", "runtime", "workbench-transaction.mjs"), "工作台事务运行文件");
   const candidateHooksPath = join(candidateRoot, ".codex", "hooks.json");
   const candidateGuardPath = join(candidateRoot, ".codex", "beyond-runtime-guard.mjs");
@@ -391,6 +393,12 @@ if (manifest) {
   }
   if (controlRuntime && !controlRuntime.includes("workbench.migrate")) {
     errors.push("控制运行统一入口缺少老工作台迁移动作");
+  }
+  if (controlRuntime && !controlRuntime.includes("worker-result.enqueue")) {
+    errors.push("控制运行统一入口缺少Worker短期终态动作");
+  }
+  if (workerResultRuntime && (!workerResultRuntime.includes("pendingRoot") || !workerResultRuntime.includes("acknowledge"))) {
+    errors.push("Worker短期终态运行文件缺少pending或消费删除能力");
   }
   if (workbenchRuntime && !workbenchRuntime.includes("pre-3.2-markdown-workbench.md")) {
     errors.push("工作台事务缺少迁移前Markdown备份");
