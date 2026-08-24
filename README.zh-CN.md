@@ -2,6 +2,8 @@
 
 [English](README.md) | **简体中文**
 
+![BEYOND — Beyond Chat. Build Reality.](.github/assets/social-preview.png)
+
 > **Beyond Chat. Build Reality.**
 > 让 Codex 不只回答问题，而是持续完成真实项目目标。
 
@@ -9,7 +11,7 @@ BEYOND 是一套面向 **Codex Desktop 本地项目**的开源 AI 工程协同�
 
 它适合已经在用 Codex 做真实开发，但正在被这些问题困扰的人：新对话反复失忆、任务完成后无人收口、阶段过多需要人工续推、测试通过却无法判断能否发布，以及多个任务并行时责任和写入边界混乱。
 
-[下载 BEYOND v3.2.2](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.2) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [3.2.2 升级说明](docs/releases/v3.2.2.md) · [系统架构](docs/系统架构与运行机制.md)
+[下载 BEYOND v3.2.2](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.2) · [90 秒真实案例](docs/真实案例与90秒演示.md) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [3.2.2 升级说明](docs/releases/v3.2.2.md) · [系统架构](docs/系统架构与运行机制.md)
 
 ## BEYOND 带来什么
 
@@ -138,6 +140,7 @@ $identity-pm
 
 | 想做什么 | 从这里开始 |
 | --- | --- |
+| 看一次真实完成与暂停恢复 | [真实案例与 90 秒演示](docs/真实案例与90秒演示.md) |
 | 安装、升级或回退 | [安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md) |
 | 在干净示例中体验 | [快速开始](docs/快速开始.md) |
 | 理解PM、Worker、文档和运行时 | [系统架构与运行机制](docs/系统架构与运行机制.md) |
