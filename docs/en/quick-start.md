@@ -1,4 +1,4 @@
-# BEYOND 3.1 Quick Start
+# BEYOND 3.2.2 Quick Start
 
 This page is for the minimal fixture. For real-project installation, upgrades, new/existing-project initialization, and copy-ready prompts, use the [Installation, Upgrade, and Project Initialization Guide](../../模板交付包/docs/en/installation-upgrade-and-project-initialization.md) instead of assembling an adoption sequence from this example.
 
@@ -18,7 +18,7 @@ The guide does not touch a real server, database, production environment, or rem
 - Node.js 18 or later. The fixture uses only built-in modules and needs no `npm install`.
 - A writable local directory.
 
-If you want to invoke `$identity-pm`, `$identity-worker`, and `$task-*` directly, install the six Skills from this repository. Restart Codex only if the current client demonstrably retains stale Skill content. If the Skills are not installed, explicitly reference their project-local `SKILL.md` paths.
+If you want to invoke `$identity-pm`, `$identity-worker`, and `$task-*` directly, install the six Skills from this repository. Restart Codex after the first installation or any replacement of global Skills. A restart is unnecessary when only project-local `SKILL.md` files are referenced and the global copies did not change.
 
 Confirm the environment:
 
@@ -76,7 +76,7 @@ Verify the actual installed copy from the immutable release checkout:
 node beyond-control/scripts/verify-install-integrity.mjs --installed-skills-root "<Codex Skills directory>" --project-agents "<business project root>/AGENTS.md"
 ```
 
-Installation or upgrade is complete only when this command exits with code `0` and confirms that all six Skills, the control-repository structure, and the full project runtime kernel match with no legacy BEYOND Hook content. `--content-only` checks candidate content but does not prove project fusion. Restart Codex only if the current client demonstrably retains stale Skill content, then create a new task from the demo root.
+The on-disk installation is complete only when this command exits with code `0` and confirms that all six Skills, the control-repository structure, and the full project runtime kernel match with no legacy BEYOND Hook content. `--content-only` checks candidate content but does not prove project fusion. Restart Codex after installing or replacing global Skills, then create a new task from the demo root.
 
 ## Run the initial baseline
 
@@ -124,8 +124,9 @@ flowchart LR
     E --> F["npm test"]
     F -->|"failed"| E
     F -->|"passed"| G["npm run check"]
-    G -->|"passed"| H["Formal result and current evidence"]
-    H --> I["PM accepts and updates workbench"]
+    G -->|"passed"| H["Freeze final and save short-lived receipt"]
+    H --> J["Use callback as the last tool call, then output final"]
+    J --> I["PM verifies, accepts, and removes receipt"]
 ```
 
 Normal behavior:
@@ -135,6 +136,15 @@ Normal behavior:
 - Missing project facts do not block unrelated work. The Worker writes reusable facts in the original task only when they are actually confirmed.
 - Ordinary implementation or test failures are repaired and retested in the same task.
 - Git, dependencies, servers, production, and data remain untouched because they were not authorized.
+
+### Execution decisions in 3.2.2
+
+- When the current instruction already defines the result, boundary, and acceptance criteria, the PM and Worker take the shortest viable path instead of adding questions or stages for BEYOND defaults.
+- When wording such as “optimize this” can lead to materially different outcomes, ask one result-changing question. Investigate technical details that the project itself can answer instead of sending them back to the user.
+- Current explicit authorization may override ordinary CLI-versus-browser preferences, but it does not expand into credentials, production, shared data, or destructive operations that were not authorized.
+- Prefer a CLI when it provides the same capability. Use a browser when the user explicitly requests it or the task depends on an existing signed-in session, extension, or visible UI state.
+- The PM passes the same business result and boundary to the Worker. The Worker must not narrow current authorization by reviving stale habits, historical preferences, or extra process.
+- When current evidence disproves one route, return to the goal and choose the smallest viable alternative instead of repeating the same failure or expanding into unrelated redesign.
 
 ## Verify the result
 
@@ -151,6 +161,7 @@ Also verify:
 - `test/calc.test.js` covers `add(2, 3) === 5` and `subtract(5, 2) === 3`.
 - The PM workbench records one formal task, its Worker, progress, and completion instead of doing the implementation itself.
 - The formal task contains implementation, current-run validation, and completion evidence.
+- A new Worker saves a short-lived receipt matching the formal final before calling the PM back; the PM removes it after the matching workbench transaction succeeds instead of retaining a second result archive.
 - Project documents contain only investigated or verified facts.
 - Git, services, network, servers, production, and data show zero operations.
 
