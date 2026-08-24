@@ -2,6 +2,8 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
+![BEYOND — Beyond Chat. Build Reality.](.github/assets/social-preview.png)
+
 > **Beyond Chat. Build Reality.**
 > Help Codex finish real project outcomes instead of stopping at answers.
 
@@ -9,7 +11,7 @@ BEYOND is an open-source AI engineering collaboration system for **local Codex D
 
 It is built for people already using Codex on real repositories who are tired of repeated context loss, finished Workers that never return to the PM, stage-heavy workflows that require constant “continue” prompts, ambiguous claims such as “tests passed” versus “released,” and conflicting writes across parallel tasks.
 
-[Download BEYOND v3.2.2](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.2) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [3.2.2 Upgrade Guide](docs/en/releases/v3.2.2.md) · [Architecture](docs/en/architecture.md)
+[Download BEYOND v3.2.2](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.2) · [90-second real case](docs/en/real-case-and-90-second-demo.md) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [3.2.2 Upgrade Guide](docs/en/releases/v3.2.2.md) · [Architecture](docs/en/architecture.md)
 
 ## What BEYOND changes
 
@@ -138,6 +140,7 @@ It is not currently a good fit for:
 
 | Goal | Start here |
 | --- | --- |
+| See a real completion and pause/resume path | [Real case and 90-second demo](docs/en/real-case-and-90-second-demo.md) |
 | Install, upgrade, or roll back | [Installation, Upgrade, and Project Initialization](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) |
 | Try a clean fixture | [Quick Start](docs/en/quick-start.md) |
 | Understand PM, Worker, documents, and runtime | [Architecture](docs/en/architecture.md) |

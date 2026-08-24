@@ -9,6 +9,7 @@ These documents explain the public product, its operating model, and the first r
 | Reader | Suggested path | Goal |
 | --- | --- | --- |
 | First visit | [Product home](../../README.md) → [Architecture](architecture.md) | Understand the problem and decide whether BEYOND fits |
+| See a real result first | [Real case and 90-second demo](real-case-and-90-second-demo.md) | See one completion, callback closeout, and pause/resume path |
 | Existing v3.0.1 user | [v3.0.3 Upgrade Guide](releases/v3.0.3.md) → [Quick Start](quick-start.md) | Understand the rebuilt runtime and migrate without overwriting project facts |
 | First use or upgrade | [Installation, Upgrade, and Project Initialization](../../模板交付包/docs/en/installation-upgrade-and-project-initialization.md) | Install the target release, initialize a new or existing project, and start the PM |
 | Minimal fixture | [Quick Start](quick-start.md) → [minimal fixture](../../examples/minimal-project/README.md) | Verify the baseline and complete the first task |
@@ -27,7 +28,8 @@ These documents explain the public product, its operating model, and the first r
 | Previous release | [v3.1.6 Upgrade Guide](releases/v3.1.6.md) | Continue from minimum adoption into verifiable full or on-demand project initialization |
 | Previous release | [v3.1.7 Upgrade Guide](releases/v3.1.7.md) | Restore platform terminal delivery, protect a busy PM, and activate entry or Skill replacement after restart |
 | Previous release | [v3.2.0 Upgrade Guide](releases/v3.2.0.md) | Use the formal Worker final, one native wakeup, and idempotent workbench transactions for lossless non-interrupting terminal closeout |
-| Current release | [v3.2.1 Upgrade Guide](releases/v3.2.1.md) | Prevent post-wakeup Worker activity and recursive copies of generated test caches or local backups |
+| Previous release | [v3.2.1 Upgrade Guide](releases/v3.2.1.md) | Prevent post-wakeup Worker activity and recursive copies of generated test caches or local backups |
+| Current release | [v3.2.2 Upgrade Guide](releases/v3.2.2.md) | Restore goal-first execution, meaningful clarification, CLI-first behavior, and explicit authorization without weakening real safety boundaries |
 | Real-project adoption | [Template package](../../模板交付包/README.md) → [template entry](../../模板交付包/AGENTS.md) | Understand the formal package, Skills, and initialization boundary |
 | Security and governance review | [Architecture](architecture.md) → [Security Policy](../../SECURITY.en.md) | Understand control rights, authorization, evidence, and risk boundaries |
 
