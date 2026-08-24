@@ -22,11 +22,37 @@ prepare the target package and six Skills
 
 The standard BEYOND path does not install an identity Hook and does not require `/hooks` or a guard probe. Use a new ordinary conversation without an identity Skill for installation maintenance so an active PM or Worker does not replace its own project entry while doing business work. Wait for active tasks to stop before replacing the root entry or Skills; after installation, restart Codex and verify the loaded version from a new process.
 
-The runtime uses the existing fixed `runtime` entry for project identity, workbench transactions, and one short-lived Worker-result receipt. A Worker stores the exact frozen final before one native callback, then outputs the same user-visible final. PM removes the pending body only after the matching workbench update succeeds. This does not install a Hook, notify branch, daemon, or extra Codex CLI, and it does not retain a message archive.
+The 3.2.2 runtime uses the existing fixed `runtime` entry for project identity, workbench transactions, and one short-lived Worker-result receipt. A Worker stores the exact frozen final before one native callback, then outputs the same user-visible final. PM removes the pending body only after the matching workbench update succeeds. This does not install a Hook, notify branch, daemon, or extra Codex CLI, and it does not retain a message archive.
 
 ## 2. Prepare the target release
 
-Obtain the immutable package from the target Release. Put the complete `模板交付包` under the business-project root as `beyond-control`; do not scatter package files over the project.
+The immutable BEYOND 3.2.2 artifacts are:
+
+- Release: <https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.2>
+- Package: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.2/BEYOND-3.2.2.zip>
+- SHA-256 file: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.2/BEYOND-3.2.2.zip.sha256>
+
+Download and verify on Windows without using a web UI for Git operations:
+
+```powershell
+curl.exe -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.2/BEYOND-3.2.2.zip" -o "BEYOND-3.2.2.zip"
+curl.exe -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.2/BEYOND-3.2.2.zip.sha256" -o "BEYOND-3.2.2.zip.sha256"
+$expectedHash = ((Get-Content -LiteralPath ".\BEYOND-3.2.2.zip.sha256" -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+$actualHash = (Get-FileHash -LiteralPath ".\BEYOND-3.2.2.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actualHash -ne $expectedHash) { throw "BEYOND-3.2.2.zip SHA-256 mismatch" }
+Expand-Archive -LiteralPath ".\BEYOND-3.2.2.zip" -DestinationPath ".\BEYOND-3.2.2-install"
+```
+
+On Linux or macOS:
+
+```bash
+curl -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.2/BEYOND-3.2.2.zip" -o BEYOND-3.2.2.zip
+curl -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.2/BEYOND-3.2.2.zip.sha256" -o BEYOND-3.2.2.zip.sha256
+sha256sum -c BEYOND-3.2.2.zip.sha256
+unzip BEYOND-3.2.2.zip -d BEYOND-3.2.2-install
+```
+
+Continue only when the verification command confirms that the package matches the SHA-256 file attached to the same Release. Extraction produces one complete `beyond-control/` directory. Put that directory under the business-project root instead of scattering package files over the project.
 
 Install these six directories from `beyond-control/skills/` into the active Codex Skills directory:
 
@@ -45,7 +71,7 @@ Prompt for an AI-assisted maintenance conversation:
 
 ```text
 This is BEYOND installation maintenance. Do not create a PM, Worker, or business task.
-Install or upgrade the current project's beyond-control directory and six global Skills from the target official release.
+Install or upgrade the current project's beyond-control directory and six global Skills from the official BEYOND 3.2.2 release. First confirm that the package matches the BEYOND-3.2.2.zip.sha256 file attached to the same Release.
 Back up the project entry and local control data. Preserve native rules and real local, projects, and shared content; never replace them with empty templates.
 If a legacy BEYOND identity Hook exists, remove only BEYOND handlers and guard files while preserving all other Hooks and .codex content.
 Run installation verification afterward. Do not claim project initialization or business work is complete.
@@ -111,7 +137,9 @@ From the project root, run:
 node beyond-control/scripts/verify-install-integrity.mjs --installed-skills-root "<Codex Skills directory>" --project-agents "<business-project-root>/AGENTS.md"
 ```
 
-Installation is verified only when it exits `0` and confirms matching Skills, control structure, and project runtime entry. It also rejects remaining legacy BEYOND guard content. `--content-only` checks candidate content only; it does not prove project fusion.
+Installation is verified only when it exits `0` and confirms matching Skills, control structure, and project runtime entry. It also rejects remaining legacy BEYOND guard content. `--content-only` checks candidate content only; it does not prove project fusion. Restart Codex after the on-disk check and confirm the project identity and loaded release from a new process.
+
+An ordinary installation does not require the user to rerun the release-qualification matrix for normal completion, genuine pause, busy-PM handling, parallel closeout, and multi-stage recovery. Those are release gates. For a first adoption or a suspected host-callback problem, use only one no-business-write smoke Worker to verify `receipt enqueue → native callback → final → PM acceptance → receipt removal`.
 
 Third-party Hooks are preserved and are not BEYOND verification targets. If a legacy BEYOND guard remains, rerun the fixed existing-project fusion path instead of deleting the whole `.codex` directory.
 
