@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.3] - 2026-08-25
+
+### Changed
+
+- Route Git, PR, required CI, SSH, deployment, release, and rollback operations through the current project root and the unique owner selected by its project fact index before applying generic operations guidance.
+
+### Fixed
+
+- Prevent a project-local historical copy, migrated mirror, stale worktree, or generic Skill reference from silently replacing the managed Git/PR script or server runbook that the project declares as current.
+
 ## [3.2.2] - 2026-08-24
 
 ### Added

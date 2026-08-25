@@ -11,7 +11,7 @@ BEYOND 是一套面向 **Codex Desktop 本地项目**的开源 AI 工程协同�
 
 它适合已经在用 Codex 做真实开发，但正在被这些问题困扰的人：新对话反复失忆、任务完成后无人收口、阶段过多需要人工续推、测试通过却无法判断能否发布，以及多个任务并行时责任和写入边界混乱。
 
-[下载 BEYOND v3.2.2](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.2) · [90 秒真实案例](docs/真实案例与90秒演示.md) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [3.2.2 升级说明](docs/releases/v3.2.2.md) · [系统架构](docs/系统架构与运行机制.md)
+[下载 BEYOND v3.2.3](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.3) · [90 秒真实案例](docs/真实案例与90秒演示.md) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [3.2.3 升级说明](docs/releases/v3.2.3.md) · [系统架构](docs/系统架构与运行机制.md)
 
 ## BEYOND 带来什么
 
@@ -24,7 +24,7 @@ BEYOND 是一套面向 **Codex Desktop 本地项目**的开源 AI 工程协同�
 | 测试通过、允许改文件、允许提交和允许发布被混为一谈 | 文件、Git、网络、服务器、数据和生产权限分别判断 |
 | 多个任务并行时互相覆盖或重复验收 | PM登记唯一Worker和写入边界；同一结果只验收、归档一次 |
 
-## 3.2.2 的核心能力
+## 3.2.3 的核心能力
 
 - **目标优先**：用户当前明确的目标、边界和授权优先于BEYOND普通偏好和历史习惯。
 - **必要才澄清**：能从代码、配置、Git、测试和环境查明的内容先调查；只有答案会改变业务结果时才问用户。
@@ -55,8 +55,8 @@ PM不会代替Worker写代码，也不会为了“掌控进度”持续读取和
 
 ### 1. 下载正式版本
 
-- [BEYOND-3.2.2.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.2/BEYOND-3.2.2.zip)
-- [BEYOND-3.2.2.zip.sha256](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.2/BEYOND-3.2.2.zip.sha256)
+- [BEYOND-3.2.3.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.3/BEYOND-3.2.3.zip)
+- [BEYOND-3.2.3.zip.sha256](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.3/BEYOND-3.2.3.zip.sha256)
 
 先核对校验文件，再解压。完整命令见[安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md)。
 
@@ -66,7 +66,7 @@ PM不会代替Worker写代码，也不会为了“掌控进度”持续读取和
 
 ```text
 这是BEYOND安装维护请求，不建立PM、Worker或业务任务。
-请使用我已下载并验真通过的BEYOND 3.2.2正式发布包，安装或升级当前项目的beyond-control和六个全局Skill。
+请使用我已下载并验真通过的BEYOND 3.2.3正式发布包，安装或升级当前项目的beyond-control和六个全局Skill。
 先精确备份；保留项目原生规则以及local、projects、shared中的真实内容，不用空模板覆盖。
 完成项目入口融合和安装验真后停止，等待我重启Codex。不要启动、恢复或修改业务任务。
 ```
@@ -79,7 +79,7 @@ task-design      task-dev
 task-test        task-ops
 ```
 
-BEYOND 3.2.2不安装身份Hook、notify分支、守护进程或额外Codex CLI。
+BEYOND 3.2.3不安装身份Hook、notify分支、守护进程或额外Codex CLI。
 
 ### 3. 重启并接手项目
 
@@ -131,7 +131,7 @@ $identity-pm
 
 ## 当前边界
 
-- 当前正式版本是`v3.2.2`，主要面向Codex Desktop本地项目。
+- 当前正式版本是`v3.2.3`，主要面向Codex Desktop本地项目。
 - 标准安装与运行路径已在真实Windows项目中验证；公开脚本同时覆盖内容、安装结构和最小示例。
 - 不同平台对任务创建、线程回调和持久权限的支持不同，不能把一个平台的通过结论外推到所有环境。
 - BEYOND不收集安装遥测；GitHub Release下载量只能统计发布资产下载，不能代表全部安装或实际活跃用户。
@@ -144,7 +144,7 @@ $identity-pm
 | 安装、升级或回退 | [安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md) |
 | 在干净示例中体验 | [快速开始](docs/快速开始.md) |
 | 理解PM、Worker、文档和运行时 | [系统架构与运行机制](docs/系统架构与运行机制.md) |
-| 查看3.2.2变化 | [升级说明](docs/releases/v3.2.2.md) · [CHANGELOG](CHANGELOG.md) |
+| 查看3.2.3变化 | [升级说明](docs/releases/v3.2.3.md) · [CHANGELOG](CHANGELOG.md) |
 | 阅读控制仓结构 | [模板交付包说明](模板交付包/README.md) |
 | 提交问题或改进 | [Issues](https://github.com/adubeyond/beyond-ai-collaboration/issues) · [贡献指南](CONTRIBUTING.md) |
 | 私密报告安全问题 | [安全政策](SECURITY.md) |
