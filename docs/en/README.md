@@ -29,7 +29,7 @@ These documents explain the public product, its operating model, and the first r
 | Previous release | [v3.1.7 Upgrade Guide](releases/v3.1.7.md) | Restore platform terminal delivery, protect a busy PM, and activate entry or Skill replacement after restart |
 | Previous release | [v3.2.0 Upgrade Guide](releases/v3.2.0.md) | Use the formal Worker final, one native wakeup, and idempotent workbench transactions for lossless non-interrupting terminal closeout |
 | Previous release | [v3.2.1 Upgrade Guide](releases/v3.2.1.md) | Prevent post-wakeup Worker activity and recursive copies of generated test caches or local backups |
-| Current release | [v3.2.2 Upgrade Guide](releases/v3.2.2.md) | Restore goal-first execution, meaningful clarification, CLI-first behavior, and explicit authorization without weakening real safety boundaries |
+| Current release | [v3.2.3 Upgrade Guide](releases/v3.2.3.md) | Route Git, PR, required CI, SSH, and server operations through the current project's owned facts and runbooks |
 | Real-project adoption | [Template package](../../模板交付包/README.md) → [template entry](../../模板交付包/AGENTS.md) | Understand the formal package, Skills, and initialization boundary |
 | Security and governance review | [Architecture](architecture.md) → [Security Policy](../../SECURITY.en.md) | Understand control rights, authorization, evidence, and risk boundaries |
 

@@ -644,6 +644,21 @@ const requiredSkillFacts = [
     value: "写回项目事实索引登记的现有环境所有者",
   },
   {
+    path: "模板交付包/skills/task-ops/SKILL.md",
+    label: "operations route through the current project entry and fact index",
+    value: "先读取当前项目根入口，再按其中的规则所有者找到项目事实索引指定的唯一 Git/PR 或运行手册正文",
+  },
+  {
+    path: "模板交付包/skills/task-ops/references/git-and-resource-closeout.md",
+    label: "Git and required CI use the project-owned managed entry",
+    value: "从当前项目根入口进入项目事实索引，读取其指定的唯一 Git/PR 正文和受管脚本",
+  },
+  {
+    path: "模板交付包/skills/task-ops/references/capability-and-runbook.md",
+    label: "server operations use the project-owned runbook",
+    value: "先读取当前项目根入口，再按其中的规则所有者进入项目事实索引",
+  },
+  {
     path: "模板交付包/skills/task-ops/references/git-and-resource-closeout.md",
     label: "legacy runbooks do not create worktrees",
     value: "旧 runbook要求创建“干净 worktree”不改变本规则",

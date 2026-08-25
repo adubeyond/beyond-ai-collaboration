@@ -28,8 +28,8 @@ function copySkills(root) {
 function fusedEntry(controlRelative, projectId) {
   return cpEntry()
     .replace(
-      "<!-- BEYOND-RUNTIME-VERSION: 3.2.2 -->",
-      `<!-- BEYOND-RUNTIME-VERSION: 3.2.2 -->\n<!-- BEYOND-CONTROL-ROOT: ${controlRelative} -->\n<!-- BEYOND-PROJECT-ID: ${projectId} -->`,
+      "<!-- BEYOND-RUNTIME-VERSION: 3.2.3 -->",
+      `<!-- BEYOND-RUNTIME-VERSION: 3.2.3 -->\n<!-- BEYOND-CONTROL-ROOT: ${controlRelative} -->\n<!-- BEYOND-PROJECT-ID: ${projectId} -->`,
     )
     .replace(/\]\(docs\//g, `](${controlRelative}/docs/`)
     .replace(/\]\(local\//g, `](${controlRelative}/local/`)

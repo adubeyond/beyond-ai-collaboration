@@ -128,6 +128,9 @@ requireText("S2测试失败回原Worker", test, "同一个 Worker切换开发方
 
 // S3：已授权生产发布。
 requireText("S3相同授权不再等待PM", ops, "不等待 PM二次激活");
+requireText("运维项目路由先读根入口和事实索引", ops, "先读取当前项目根入口，再按其中的规则所有者找到项目事实索引指定的唯一 Git/PR 或运行手册正文");
+requireText("Git收口复用项目唯一正式入口", gitCloseout, "从当前项目根入口进入项目事实索引，读取其指定的唯一 Git/PR 正文和受管脚本");
+requireText("服务器运维复用项目唯一正式入口", opsFacts, "先读取当前项目根入口，再按其中的规则所有者进入项目事实索引");
 requireText("S3首次核验实际目标", ops, "连接目标时现场确认主机身份和实际运行落点");
 requireText("S3单一来源四项事实", production, "普通单一来源发布先核对四个身份事实");
 requireText("S3一次建立生产上下文", production, "形成一份生产上下文");
@@ -445,11 +448,11 @@ requireText("文档治理入口只在真实命中时读取", agents, "工作台�
 requireText("00入口承接异常文档治理", documentEntry, "只有项目初始化、项目接手发现工作台缺失/冲突或需要处理事实归位、文档创建更新与历史回收");
 requireText("初始化不进入普通任务热路径", agents, "不进入普通任务热路径");
 requireText("升级先核对当前直接事实", agents, "初始化优先复用现有`AGENTS.md`、代码、Git和Markdown事实");
-requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.2.2");
+requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.2.3");
 requireText("项目覆盖有专用边界", agents, "BEGIN BEYOND PROJECT OVERRIDES");
 requireText("安装逐文件对账六个Skill", installVerifier, "安装Skill内容不一致");
 requireText("安装核对项目完整运行内核", installVerifier, "项目入口的BEYOND运行内核与控制仓候选不一致");
-requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.2.2"');
+requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.2.3"');
 requireText("个人路径不读取团队共享区", agents, "普通项目接手、正式Worker任务、Action Skill切换和个人任务不读取共享区");
 requireText("团队协同不替代正式Worker", agents, "不替代当前成员自己的正式Worker");
 requireText("PM初始化与协同权限严格限域", pmDispatch, "两者都不扩张到业务源码、测试、仓库配置、成员权限、环境、数据或发布");
