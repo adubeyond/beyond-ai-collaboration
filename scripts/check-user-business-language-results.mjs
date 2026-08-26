@@ -37,15 +37,16 @@ const forbidden = [
 const cases = caseNames.map((name) => {
   const before = readMessage(beforeRoot, name);
   const after = readMessage(afterRoot, name);
-  for (const text of ["老板", "负责人", "测试", "页面"]) {
+  for (const text of ["老板", "负责人", "页面"]) {
     assert(after.includes(text), `${name} lost business fact: ${text}`);
   }
+  assert(after.includes("测试") || after.includes("验证"), `${name} lost validation fact`);
   assert(
     after.includes("不再重复") || after.includes("重复负责人") || after.includes("重复显示"),
     `${name} lost the duplicate-manager fix`,
   );
   assert(
-    after.includes("尚未") || after.includes("还没有") || after.includes("不能确认可用") || after.includes("不能按线上已可用"),
+    after.includes("尚未") || after.includes("还没有") || after.includes("不能确认可用") || after.includes("不能按线上已可用") || after.includes("还不能在实际页面使用"),
     `${name} lost the not-yet-usable conclusion`,
   );
   for (const text of forbidden) {

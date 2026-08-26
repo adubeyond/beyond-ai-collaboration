@@ -54,15 +54,27 @@ function workerResults(config) {
   return new WorkerResultReceiptStore({ runtimeRoot: config.workerResultRoot });
 }
 
+function projectIdentity(config) {
+  return new ProjectIdentityProvider({
+    controlRoot: config.controlRoot,
+    runtimeRoot: config.projectIdentityRoot,
+  });
+}
+
 function execute(action, request, config) {
   if (action === 'project.resolve') {
-    return new ProjectIdentityProvider({
-      controlRoot: config.controlRoot,
-      runtimeRoot: config.projectIdentityRoot,
-    }).resolve(object(request.input, 'project identity input'));
+    return projectIdentity(config).resolve(object(request.input, 'project identity input'));
   }
-  if (action === 'worker-result.enqueue') return workerResults(config).enqueue(object(request.input, 'Worker result receipt'));
-  if (action === 'worker-result.list') return workerResults(config).list(object(request.input, 'Worker result receipt filter'));
+  if (action === 'worker-result.enqueue') {
+    const input = object(request.input, 'Worker result receipt');
+    projectIdentity(config).requireRegisteredProject(input.projectId);
+    return workerResults(config).enqueue(input);
+  }
+  if (action === 'worker-result.list') {
+    const input = object(request.input, 'Worker result receipt filter');
+    if (input.projectId !== undefined) projectIdentity(config).requireRegisteredProject(input.projectId);
+    return workerResults(config).list(input);
+  }
   if (action === 'worker-result.ack') return workerResults(config).acknowledge(object(request.input, 'Worker result receipt acknowledgement'));
   const store = workbench(config);
   if (action === 'workbench.migrate') return store.startupStatus();

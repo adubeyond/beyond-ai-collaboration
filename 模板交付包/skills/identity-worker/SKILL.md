@@ -110,11 +110,13 @@ PM 或用户一次授权业务结果、范围和当前放行边界。范围内�
 
 正式任务的正常完成、工具启动失败、缺失输出、权限或环境异常等所有真实终态都进入同一个收口，不得从异常分支直接跳到final。先稳定业务动作、文件、Git与运行现场，确认最后一次业务工具调用已经结束、没有仍会改变现场的命令或进程，再形成完整自包含final草稿但不输出；首行必须以`已完成`或`已暂停`开头。
 
-正式任务在回源前通过固定`runtime`入口执行一次`worker-result.enqueue`，把任务包中的`projectId + taskId`、当前包装的`source_thread_id`、业务状态和完整final草稿保存为待处理终态；只有平台明确提供当前Worker threadId时才附带，不为取得它增加扫描。`runtime --request`后必须传JSON请求文件路径，不能传JSON正文；请求固定为`{"schemaVersion":1,"action":"worker-result.enqueue","input":{"projectId":"…","taskId":"…","sourceThreadId":"…","businessState":"已完成或已暂停","finalText":"…"}}`，字段名不得自行改写，`requestId`和`createdAt`对`worker-result`可省略。回执是同一份冻结final的短期控制快照，不是第二种业务真值、消息历史或长期证据。保存成功后不得再改变final草稿；保存失败时在final中如实说明，但不循环重试或建设旁路。
+正式任务在回源前通过固定`runtime`入口执行一次`worker-result.enqueue`，把任务包中的`projectId + taskId`、当前包装的`source_thread_id`、业务状态和完整final草稿保存为待处理终态；只有平台明确提供当前Worker threadId时才附带，不为取得它增加扫描。这个`runtime`只取当前正式项目根`AGENTS.md`映射的项目身份与工作台事务入口，相对路径从该项目根解析；不得搜索、猜测或替换为其他项目、源码仓、模板或候选包的入口，映射缺失或冲突时如实报告保存失败且不跨根回退。`runtime --request`后必须传JSON请求文件路径，不能传JSON正文；请求固定为`{"schemaVersion":1,"action":"worker-result.enqueue","input":{"projectId":"…","taskId":"…","sourceThreadId":"…","businessState":"已完成或已暂停","finalText":"…"}}`，字段名不得自行改写，`requestId`和`createdAt`对`worker-result`可省略。回执是同一份冻结final的短期控制快照，不是第二种业务真值、消息历史或长期证据。保存成功后不得再改变final草稿；保存失败时在final中如实说明，但不循环重试或建设旁路。
 
 随后不读取或判断来源PM忙闲，不调用`wait_threads`。回源目标只取当前平台任务包装提供的`source_thread_id`；创建接口返回的当前Worker `threadId`不是回源目标，来源缺失或矛盾时不得猜测。`send_message_to_thread`未在顶层直接显示时，必须从`ALL_TOOLS`发现规范工具`codex_app__send_message_to_thread`并通过承载它的工具编排入口调用；顶层未显示不等于工具不存在。当前标准调用固定只传`threadId + prompt`：`{"threadId":"<source_thread_id>","prompt":"当前Worker正在提交终态；请扫描待处理终态并在任务线程结束后核对final"}`；字段名必须是`prompt`，不得写成`message`，也不附加可选`hostId`、模型或推理参数。直接向唯一来源调用一次，且回源工具必须是本轮最后一次工具调用。无论发送成功或失败都不循环、不重试、不改投其他ID；回源工具返回后不得继续推理、发送过程消息或调用任何工具，只把已冻结的同一份final作为本轮最后一个动作输出并结束。用户检查点、普通进展和仍在继续的阶段结果不使用终态开头。
 
 Worker任务和正式证据入口保存工程详情。final默认只保留一个决定裁决的业务主事实、一个主证据或正式落点、主线变化与唯一下一动作；涉及对象归属或前后值时按主证据原方向写清，不能倒置。机器明细留在主证据内，不复制成长消息。暂停时写清唯一原因、安全现场和恢复条件。
+
+老板直接询问业务结果和现在能否使用时，先回答业务结果与真实可用性；除非用户追问或工程细节直接决定裁决，面向用户的final不复述测试命令与数量、提交哈希、分支名或内部字段，把这些留在正式证据入口。
 
 到达用户检查点时在同一任务内交付本段结果并等待用户；这不是完成终态，也不向 PM请求续派。用户确认后由当前 Worker直接继续。
 

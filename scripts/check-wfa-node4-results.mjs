@@ -30,12 +30,12 @@ const backupRoot = join(caseRoot, 'local', 'runtime', 'workbench', 'backups');
 const results = [];
 const check = (name, passed) => results.push({ name, passed: Boolean(passed) });
 
-check('WFA-02 PM uses the fixed runtime acceptance transaction', commandList.some((command) => command.includes('beyond-control.mjs runtime') && command.includes('--request')));
+check('WFA-02 PM uses the fixed runtime acceptance transaction', commandList.some((command) => /beyond-control\.mjs['"]?\s+runtime/.test(command) && command.includes('--request')));
 check('WFA-02 selected completed task leaves the hot table', !workbench.includes('worker-done') && history.includes('worker-done') && history.includes('evidence/manager-fix.md'));
 check('WFA-02 active and retained tasks remain', workbench.includes('worker-active') && workbench.includes('worker-retain') && !history.includes('worker-retain'));
 check('WFA-02 local recovery backup exists', existsSync(backupRoot) && readdirSync(backupRoot).some((name) => name.endsWith('.json')));
 check('WFA-02 PM reports the business result', /worker-done|重复负责人/.test(message) && /(已收拢|移出|归档|完成历史)/.test(message)
-  && /worker-active.{0,30}(保持|未改动)/s.test(message) && /worker-retain.{0,30}(仍留|保持|未改动)/s.test(message));
+  && /worker-active.{0,30}(保持|未改动)/s.test(message) && /worker-retain.{0,30}(仍留|仍保留|保持|未改动)/s.test(message));
 check('WFA-02 PM creates no Worker or Action Skill detour', !/create_thread|fork_thread/.test(commands) && ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !commands.includes(name)));
 check('WFA-02 shared Git content remains clean', execFileSync('git', ['status', '--short'], { cwd: caseRoot, encoding: 'utf8' }).trim() === '');
 

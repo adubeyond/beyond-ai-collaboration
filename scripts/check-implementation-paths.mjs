@@ -80,6 +80,8 @@ const workbench = read("模板交付包/docs/AI编程协同机制/当前工作�
 const gitCloseout = read("模板交付包/skills/task-ops/references/git-and-resource-closeout.md");
 const quickStartZh = read("docs/快速开始.md");
 const quickStartEn = read("docs/en/quick-start.md");
+const installGuideZh = read("模板交付包/docs/安装升级与项目初始化指南.md");
+const installGuideEn = read("模板交付包/docs/en/installation-upgrade-and-project-initialization.md");
 
 // 默认运行路径不依赖Hook；升级只精确清理BEYOND旧护栏，不接管第三方Hook。
 requireMissingFile("候选不交付Hook配置", "模板交付包/.codex/hooks.json");
@@ -102,6 +104,10 @@ forbidText("中文快速开始不强制重启", quickStartZh, "验真通过后�
 forbidText("英文快速开始不强制重启", quickStartEn, "install the six Skills from this repository and restart Codex");
 forbidText("英文快速开始不宣称安装身份护栏", quickStartEn, "project-level `.codex` guard");
 requireText("架构明确Hook不是安装前提", architecture, "BEYOND不把平台Hook作为身份或安装前提");
+requireText("中文安装不要求Git项目", installGuideZh, "不得把`git rev-parse`成功作为项目根前提");
+requireText("中文备份对账包含隐藏文件", installGuideZh, "Get-ChildItem -Force -Recurse -File");
+requireText("英文安装不要求Git项目", installGuideEn, "never make a successful `git rev-parse` a prerequisite");
+requireText("英文备份对账包含隐藏文件", installGuideEn, "Get-ChildItem -Force -Recurse -File");
 
 // S1：普通局部 BUG。
 requireText("S1清晰请求不制造任务", agents, "清晰请求不输出接手仪式，不凭空制造正式任务");
@@ -130,6 +136,10 @@ requireText("S2测试失败回原Worker", test, "同一个 Worker切换开发方
 requireText("S3相同授权不再等待PM", ops, "不等待 PM二次激活");
 requireText("运维项目路由先读根入口和事实索引", ops, "先读取当前项目根入口，再按其中的规则所有者找到项目事实索引指定的唯一 Git/PR 或运行手册正文");
 requireText("Git收口复用项目唯一正式入口", gitCloseout, "从当前项目根入口进入项目事实索引，读取其指定的唯一 Git/PR 正文和受管脚本");
+requireText("Git同名本地副本不冒充正式入口", gitCloseout, "未跟踪文件、stash、备份、临时修订和其他分支副本");
+requireText("Git局部入口漂移不阻断整项任务", gitCloseout, "局部漂移只隔离该副本");
+requireText("required CI正常推进保持进行中", gitCloseout, "仍有明确责任实例、状态入口或正常推进信号时保持任务`进行中`");
+requireText("PM不把正常CI等待登记为暂停", pmLifecycle, "required CI 正在排队或运行");
 requireText("服务器运维复用项目唯一正式入口", opsFacts, "先读取当前项目根入口，再按其中的规则所有者进入项目事实索引");
 requireText("S3首次核验实际目标", ops, "连接目标时现场确认主机身份和实际运行落点");
 requireText("S3单一来源四项事实", production, "普通单一来源发布先核对四个身份事实");
@@ -265,8 +275,13 @@ requireText("Worker回执只做短期控制快照", worker, "短期控制快照"
 requireText("Worker终态异常不改投", worker, "不改投其他ID");
 requireText("旧上下文凭据不自动授权", workerCapability, "凭据不自动成为当前任务授权");
 requireText("Worker字段映射不倒置", worker, "按主证据原方向写清，不能倒置");
+requireText("Worker用户交付隐藏非决定性工程明细", worker, "面向用户的final不复述测试命令与数量、提交哈希、分支名或内部字段");
 requireText("PM回调触发全量扫尾", pm, "任何回调都按收口reference先读取当前项目全部待处理终态回执，再扫描工作台登记的全部Worker");
 requireText("PM结果读取不后台轮询", pmLifecycle, "不得高频轮询或用补读冒充唤醒主通道");
+requireText("PM自然回合补读活动任务pending", pmLifecycle, "非回调触发的自然PM回合开始时");
+requireText("PM自然回合空列表走最短路径", pmLifecycle, "列表为空时立即继续老板当前目标，不读取Worker");
+requireText("PM自然回合不扫描无关Worker", pmLifecycle, "不扫描无关Worker");
+requireText("PM遗留回执只做幂等补ack", pmLifecycle, "工作台事务已经幂等成功时才补一次`worker-result.ack`");
 requireText("PM当前用户问题优先", pm, "当前用户问题始终优先");
 requireText("PM沿正式final与证据核验", pm, "final指向的一手证据是否直接覆盖验收");
 requireText("PM不以逐字一致制造重复终态", pm, "不要求措辞逐字一致");
@@ -448,11 +463,11 @@ requireText("文档治理入口只在真实命中时读取", agents, "工作台�
 requireText("00入口承接异常文档治理", documentEntry, "只有项目初始化、项目接手发现工作台缺失/冲突或需要处理事实归位、文档创建更新与历史回收");
 requireText("初始化不进入普通任务热路径", agents, "不进入普通任务热路径");
 requireText("升级先核对当前直接事实", agents, "初始化优先复用现有`AGENTS.md`、代码、Git和Markdown事实");
-requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.2.3");
+requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.2.4");
 requireText("项目覆盖有专用边界", agents, "BEGIN BEYOND PROJECT OVERRIDES");
 requireText("安装逐文件对账六个Skill", installVerifier, "安装Skill内容不一致");
 requireText("安装核对项目完整运行内核", installVerifier, "项目入口的BEYOND运行内核与控制仓候选不一致");
-requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.2.3"');
+requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.2.4"');
 requireText("个人路径不读取团队共享区", agents, "普通项目接手、正式Worker任务、Action Skill切换和个人任务不读取共享区");
 requireText("团队协同不替代正式Worker", agents, "不替代当前成员自己的正式Worker");
 requireText("PM初始化与协同权限严格限域", pmDispatch, "两者都不扩张到业务源码、测试、仓库配置、成员权限、环境、数据或发布");

@@ -746,12 +746,26 @@ if (!existsSync(sourceAuth)) {
 }
 cpSync(sourceAuth, join(isolatedCodexHome, "auth.json"));
 
-for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return", "P18-team-list", "P19-team-from-business", "P20-new-init-cold", "P21-existing-init-cold", "P22-pm-sweep-priority", "P23-post-fusion-initialization", "WFA02-workbench-convergence", "WFA03-semantic-layers", "WFA06-audit-retest", "WFA08-shared-test-coupling", "WFA09-evidence-granularity", "WFA10-status-summary", "WFA12-fact-over-summary", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration", "K6-N03-approval", "K6-N05-discussion", "K6-N06-answer-only", "K6-N08-outage", "K6-N09-two-results", "K6-N10-temporary-model", "K6-W02-stage-progress", "K6-W04-background-job", "K6-W07-completion-question", "K6-G01-git-parallel", "K6-G03-tool-priority", "K6-B01-user-path"]) {
+for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return", "P18-team-list", "P19-team-from-business", "P20-new-init-cold", "P21-existing-init-cold", "P22-pm-sweep-priority", "P23-post-fusion-initialization", "P24-pm-natural-pending-recovery", "WFA02-workbench-convergence", "WFA03-semantic-layers", "WFA06-audit-retest", "WFA08-shared-test-coupling", "WFA09-evidence-granularity", "WFA10-status-summary", "WFA12-fact-over-summary", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration", "K6-N03-approval", "K6-N05-discussion", "K6-N06-answer-only", "K6-N08-outage", "K6-N09-two-results", "K6-N10-temporary-model", "K6-W02-stage-progress", "K6-W04-background-job", "K6-W07-completion-question", "K6-G01-git-parallel", "K6-G03-tool-priority", "K6-B01-user-path", "L5-file-hygiene", "L8B-explicit-authorization", "L9-control-root"]) {
   copyProjectFixture(join(casesRoot, caseName));
 }
 
 initializeGit(join(casesRoot, "I03-discovery"), "fixture: isolated discovery");
 initializeGit(join(casesRoot, "R01-direct"), "fixture: direct local change");
+initializeGit(join(casesRoot, "L5-file-hygiene"), "fixture: vague request and exact file hygiene");
+initializeGit(join(casesRoot, "L8B-explicit-authorization"), "fixture: explicit object-scoped authorization");
+
+const l9 = join(casesRoot, "L9-control-root");
+writeFileSync(
+  join(l9, "AGENTS.md"),
+  readFileSync(join(l9, "AGENTS.md"), "utf8").replace(
+    /^(<!-- BEYOND-RUNTIME-VERSION: [^\r\n]+ -->)/,
+    `$1\n<!-- BEYOND-CONTROL-ROOT: ./beyond-control -->\n<!-- BEYOND-PROJECT-ID: local-control-root-test -->`,
+  ),
+);
+writeFixture(l9, "beyond-control/scripts/beyond-control.mjs", "// current formal project runtime\n");
+writeFixture(l9, "decoy-template/scripts/beyond-control.mjs", "// unrelated template candidate runtime\n");
+initializeGit(l9, "fixture: current project runtime mapping with decoy");
 
 const r02 = join(casesRoot, "R02-worker");
 writeFixture(r02, "src/normalizeLabel.js", `export function normalizeLabel(value) {
@@ -920,6 +934,14 @@ setWorkbench(
 writeFixture(p22, "projects/local-aaaaaaaaaaaa/项目总览.md", "# Worker扫尾隔离项目\n\n> 项目编号：`local-aaaaaaaaaaaa`。\n");
 writeFixture(p22, "evidence/account-page.md", "# 账号页面修复结果\n\n这是任务的主证据入口；当前用例不提供正式Worker线程读取能力。\n");
 initializeGit(p22, "fixture: PM Worker sweep must not override current user question");
+
+const p24 = join(casesRoot, "P24-pm-natural-pending-recovery");
+setWorkbench(
+  p24,
+  "| 2026-08-26 | 保持当前业务目标并恢复遗漏终态 | 进行中 | A、B结果已保存，等待自然回合补读 | worker-a、worker-b | 先回答老板当前问题，再收口匹配回执 | 无 |",
+  "| 完成任务A | worker-a | 进行中 | 已保存完成pending，忙碌回调未形成后续PM回合 | 无 | 无 | 2026-08-26 |\n| 完成任务B | worker-b | 进行中 | 已保存完成pending，原生回调遗漏 | 无 | 无 | 2026-08-26 |",
+);
+initializeGit(p24, "fixture: natural PM turn recovers matching pending results once");
 
 const p13 = join(casesRoot, "P13-model-selection");
 setHealthyWorkbench(p13);

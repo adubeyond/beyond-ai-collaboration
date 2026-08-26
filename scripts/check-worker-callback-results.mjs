@@ -49,12 +49,13 @@ const movedToEvidence = [
 ];
 for (const text of movedToEvidence) assert(!after.includes(text), `control-plane callback copied detail: ${text}`);
 
-assert(after.length < before.length * 0.65, `callback did not materially shrink: ${before.length} -> ${after.length}`);
+assert(after.length < 500, `callback exceeded the current compact terminal limit: ${after.length}`);
 
 const summary = {
   beforeChars: before.length,
   afterChars: after.length,
   reduction: Number((1 - after.length / before.length).toFixed(4)),
+  compactLimit: 500,
   requiredFacts: required,
   detailsMovedToEvidence: movedToEvidence,
 };

@@ -1,4 +1,4 @@
-# BEYOND 3.2.3 Quick Start
+# BEYOND 3.2.4 Quick Start
 
 This page is for the minimal fixture. For real-project installation, upgrades, new/existing-project initialization, and copy-ready prompts, use the [Installation, Upgrade, and Project Initialization Guide](../../模板交付包/docs/en/installation-upgrade-and-project-initialization.md) instead of assembling an adoption sequence from this example.
 
@@ -137,7 +137,7 @@ Normal behavior:
 - Ordinary implementation or test failures are repaired and retested in the same task.
 - Git, dependencies, servers, production, and data remain untouched because they were not authorized.
 
-### Execution decisions in 3.2.3
+### Execution decisions in 3.2.4
 
 - When the current instruction already defines the result, boundary, and acceptance criteria, the PM and Worker take the shortest viable path instead of adding questions or stages for BEYOND defaults.
 - When wording such as “optimize this” can lead to materially different outcomes, ask one result-changing question. Investigate technical details that the project itself can answer instead of sending them back to the user.
