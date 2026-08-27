@@ -23,7 +23,7 @@
 
 调用`worker-policy --action resolve --project-id <当前项目> --task-kind <类别>`取得具体参数。只有项目总览已经保存老板明确批准、仅适用于新建正式Worker的策略时才覆盖平台默认；当前PM对话中老板明确指定的临时参数可以覆盖后续新Worker，当前PM本身不变，模型参数不写进业务任务包。
 
-创建接口只有返回`threadId + hostId`才算成功。只返回`clientThreadId`表示仍在排队，不登记成Worker、不轮询追认；创建失败只报告一次，不改用fork、projectless、内部助手或其他目录补建。创建成功后最多重命名标题一次，失败不重建任务；返回成功即登记并结束PM回合，不再调用`wait_threads`或读取Worker确认派发，不等待或转播过程。
+创建接口只有返回`threadId + hostId`才算成功。只返回`clientThreadId`表示仍在排队，不登记成Worker、不轮询追认；创建失败只报告一次，不改用fork、projectless、内部助手或其他目录补建，也不妨碍继续处理同一条老板消息中其他互不依赖结果的创建请求。每个创建成功后最多重命名标题一次，失败不重建任务，并立即登记；单个结果或本消息全部创建请求处理完后结束PM回合，不再调用`wait_threads`或读取Worker确认派发，也不轮询、不等待或转播过程。
 
 ## 2. 首次项目接入
 

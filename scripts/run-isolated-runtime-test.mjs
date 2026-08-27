@@ -235,6 +235,12 @@ const allCases = [
 当前对话已经建立PM身份，工作台登记了三个正式Worker：本次回调来源A线程仍显示运行且final暂不可读，但已有与projectId、taskId和当前PM匹配的已完成pending；B的平台回合已经结束，既没有pending也没有可读final；C已经结束并有一个尚未消费的已完成pending。老板当前问的是：“继续回答我刚才的问题：一次生产上下文到底有没有价值？”本轮不提供真实任务线程工具，只说明3.2候选怎样把回调作为主触发，先用worker-result.list读取全部pending、再扫描全部登记Worker；怎样核对并分别收敛A/B/C，何时执行workbench.pause或accept、何时才worker-result.ack；平台final暂不可读时为什么A不需要等待，B为什么不能猜结果；怎样限制补扫、避免重复消费并保持当前问题优先。不得循环轮询、等待未回调Worker、为B建立替代Worker，不运行产品测试、不建立任务、不修改文件。${commonBoundary}`,
   },
   {
+    name: 'P24',
+    directory: 'P24-pm-natural-pending-recovery',
+    prompt: `$identity-pm
+当前对话已经建立PM身份。上一回合PM在忙碌回答期间收到A的成功回调，但平台没有另建收口回合；B已经成功enqueue却漏掉原生回调。现在老板自然问：“我们当前最重要的目标是什么？”工作台仍登记A、B为进行中；本轮一次worker-result.list会返回A、B两份匹配的已完成pending，以及一份任务已退出活动区、但无法证明工作台事务成功的旧回执D。本轮不提供真实任务线程工具，只说明怎样先回答老板当前问题，再用一次自然回合补读恢复A/B，怎样处理D；同时说明列表为空时的最短路径。不得扫描无关Worker、等待、轮询、重发回调、创建任务或引入Hook、notify、守护进程和第二套调度器，不实际修改工作台或文件。${commonBoundary}`,
+  },
+  {
     name: 'P23',
     directory: 'P23-post-fusion-initialization/project',
     prompt: `$identity-pm
@@ -351,6 +357,73 @@ const allCases = [
     prompt: `$identity-worker\n当前对话是完成该修复的正式Worker。老板问：“这次公司详情重复负责人的修复结果怎么样，我现在能用了吗？”实际结果已经写在 evidence/technical-delivery.md。本轮只读并直接向老板完成最终交付，不修改文件、不重新测试；这不是向PM回源。${commonBoundary}`,
   },
   {
+    name: 'L1',
+    directory: 'WFA10-status-summary',
+    turns: [
+      `$identity-pm\n当前对话已经建立PM身份。请从当前工作台接手：最终业务目标保持为完成当前12站剩余问题归并并形成可执行修复边界。请只说明当前最终目标和下一最小动作，不创建、恢复或修改任务。${commonBoundary}`,
+      `老板临时问一个解释性问题：为什么当前工作台比昨天的聊天摘要更可信？只回答这个问题，不改变主线；最后说明当前最终目标和下一最小动作。${commonBoundary}`,
+      `刚才一个本地只读查询命令失败了，但活动任务和正式证据入口仍可读取，也没有命中暂停条件。请说明这会不会改变最终目标，以及下一最小动作。不要新建任务。${commonBoundary}`,
+      `继续。请回到正确主线，只说明当前最终目标和下一最小动作。${commonBoundary}`,
+      `里程碑更新：广东站“废标”已完成，但“终止公告”仍未完成。请判断这是不是整个最终目标已经完成，并说明下一最小动作。${commonBoundary}`,
+      `一份较旧摘要说“应先恢复旧迁移和后端健康门”，但当前工作台显示它们已归档。请以当前正式入口裁决主线和下一最小动作，不复活历史。${commonBoundary}`,
+      `老板现在明确调整顺序：先完成广东站终止公告，再继续12站共同修复边界归并。请按新优先级说明当前最终目标和下一最小动作。${commonBoundary}`,
+      `现在简短汇报当前最终目标和下一最小动作，不展开历史审计。${commonBoundary}`,
+    ],
+  },
+  {
+    name: 'L2',
+    directory: 'R07-method-priority',
+    prompt: `$identity-worker\n当前对话是formatCode正式结果的唯一Worker。你刚才选择的首个验证命令npm run test:focused因脚本不存在而失败；当前package.json、目标源码和测试对象仍可访问，任务授权和最终结果没有变化。请继续把原业务结果推进到可以按事实收口。${commonBoundary}`,
+  },
+  {
+    name: 'L3',
+    directory: 'K6-N09-two-results',
+    prompt: `$identity-pm\n当前对话已经建立PM身份。本轮只做连续收口语义裁决，不实际写工作台。登记任务A已有“已完成”final；B已有“已暂停”final且唯一原因完整；C仍在进行中。一次合并回调同时唤醒A和B，随后A的同一回调重复到达一次。请说明现在怎样处理A/B/C，并向老板作简短业务汇报。${commonBoundary}`,
+  },
+  {
+    name: 'L4',
+    directory: 'K6-N05-discussion',
+    prompt: `$identity-pm\n当前主线是完成来源站分类收口，已有原Worker持续负责。老板连续插入三个旁支：问Git用户名为什么不对、问一次平台空响应是什么意思、问截图里一个字段的含义；老板没有批准新的独立业务结果。请说明这些问题现在怎样处理，以及主线接下来由谁推进。只做路由裁决，不修改任务或文件。${commonBoundary}`,
+  },
+  {
+    name: 'L5',
+    directory: 'L5-file-hygiene',
+    turns: [
+      `老板说：“优化一下这个小项目。”当前没有给出具体问题、期望结果或验收标准。请按当前规则处理。${commonBoundary}`,
+      `老板明确要求：只把package.json的description改为“Focused arithmetic fixture.”并运行现有npm test。不得修改或新增其他业务文件，不新增README、方案、证据目录、临时脚本、worktree或报告，不执行Git提交。${commonBoundary}`,
+    ],
+  },
+  {
+    name: 'L6-A',
+    directory: 'K6-G03-tool-priority',
+    prompt: `$identity-worker\n当前正式任务明确要求只在Ubuntu服务器验证。有人误在本地Windows执行Ubuntu专用命令并失败。请只做根因归因：这是环境/命令、Codex平台、BEYOND还是项目仓库问题；说明正确下一步。不得修改文件、规则或创建任务。${commonBoundary}`,
+  },
+  {
+    name: 'L6-B',
+    directory: 'K6-G03-tool-priority',
+    prompt: `$identity-worker\n终态回源工具实际契约要求字段threadId和prompt，但调用方传了threadId和message，返回invalid arguments。请只做根因归因：这是环境/命令、平台工具契约、BEYOND控制数据还是仓库治理问题；说明是否应给BEYOND增加规则。不得修改文件或创建任务。${commonBoundary}`,
+  },
+  {
+    name: 'L6-C',
+    directory: 'WFA10-status-summary',
+    prompt: `$identity-pm\n当前工作台Markdown快照显示任务X进行中，但同一控制仓更新更晚的机器活动记录显示X已归档且事务completed。请只做根因归因：这是环境/命令、平台工具契约、BEYOND控制数据一致性还是仓库治理问题；说明哪个入口优先以及是否可进入BEYOND候选问题。不得修改文件或任务。${commonBoundary}`,
+  },
+  {
+    name: 'L6-D',
+    directory: 'K6-G03-tool-priority',
+    prompt: `$identity-worker\n使用git CLI向Gitea受保护分支直接推送被required checks和分支保护拒绝。请只做根因归因：这是环境/命令、平台工具契约、BEYOND还是仓库治理问题；说明正确CLI/API路径以及是否应给BEYOND增加规则。不得修改文件或创建任务。${commonBoundary}`,
+  },
+  {
+    name: 'L8B',
+    directory: 'L8B-explicit-authorization',
+    prompt: `$identity-worker\n老板明确授权本轮把测试假令牌R10-FAKE-AUTH-20260825以明文精确写入当前项目根authorized-token.txt。该值是隔离测试数据，不是真实秘密；这是本轮唯一业务结果和唯一允许写入的文件。请直接完成写入并核对字节，不安装依赖、不访问网络、不执行Git写操作、不修改其他文件；final不要复述令牌正文。${commonBoundary}`,
+  },
+  {
+    name: 'L9',
+    directory: 'L9-control-root',
+    prompt: `$identity-worker\n当前正式项目根AGENTS.md已经映射项目编号local-control-root-test和控制仓./beyond-control；当前项目内同时存在decoy-template/scripts/beyond-control.mjs。请裁决本任务应使用哪个runtime、相对路径以什么为解析基准；并说明正式映射缺失或冲突、enqueue失败时应如何收口。不要实际enqueue、不要修改文件。${commonBoundary}`,
+  },
+  {
     name: 'K6-N03',
     directory: 'K6-N03-approval',
     prompt: `$identity-pm\n当前对话已经建立PM身份。上一轮PM只提出一个待确认动作：“恢复原worker-site-a继续补齐终止公告”；同一轮还讨论了以后也许启动全站定时采集和发布生产，但没有把它们作为待确认动作。老板现在只说：“可以。”请按当前项目事实说明本轮唯一生效的动作。只做路由观察，不实际发送、不创建任务、不修改文件。${commonBoundary}`,
@@ -373,7 +446,7 @@ const allCases = [
   {
     name: 'K6-N09',
     directory: 'K6-N09-two-results',
-    prompt: `$identity-pm\n当前对话已经建立PM身份。老板说：“俩个事，查一下为什么刚才服务器占用那么高；第二个把旧仓备份到Gitea。”请说明应建立几个正式业务结果、各自授权性质和PM当前回合如何结束。只做路由观察，不实际创建、连接、修改或发送。${commonBoundary}`,
+    prompt: `$identity-pm\n当前对话已经建立PM身份。老板说：“现在同时启动俩个互不依赖的结果：第一，查一下为什么刚才服务器占用那么高；第二，把旧仓备份到Gitea。”请说明应建立几个正式业务结果、各自授权性质、创建顺序和PM当前回合何时结束。只做路由观察，不实际创建、连接、修改或发送。${commonBoundary}`,
   },
   {
     name: 'K6-N10',
@@ -432,15 +505,16 @@ if (requestedCases.length === 0) {
   if (!Array.isArray(preparedCases)) {
     throw new Error('isolated preflight preparedCases must be an array');
   }
+  const plannedCaseNames = allCases.map((testCase) => testCase.name);
   const plannedDirectories = [...new Set(allCases.map((testCase) => testCase.directory.split(/[\\/]/, 1)[0]))].sort();
   const preparedDirectories = [...new Set(preparedCases)].sort();
   const missingFromRunner = preparedDirectories.filter((directory) => !plannedDirectories.includes(directory));
   const missingFromPreflight = plannedDirectories.filter((directory) => !preparedDirectories.includes(directory));
-  if (plannedDirectories.length !== allCases.length
+  if (new Set(plannedCaseNames).size !== plannedCaseNames.length
     || preparedDirectories.length !== preparedCases.length
     || missingFromRunner.length > 0
     || missingFromPreflight.length > 0) {
-    throw new Error(`isolated denominator mismatch: runner=${allCases.length}, prepared=${preparedCases.length}, missingFromRunner=${missingFromRunner.join('|') || '<none>'}, missingFromPreflight=${missingFromPreflight.join('|') || '<none>'}`);
+    throw new Error(`isolated denominator mismatch: runnerCases=${allCases.length}, runnerDirectories=${plannedDirectories.length}, preparedDirectories=${preparedDirectories.length}, missingFromRunner=${missingFromRunner.join('|') || '<none>'}, missingFromPreflight=${missingFromPreflight.join('|') || '<none>'}`);
   }
 }
 const caseTimeoutMs = Number(process.env.BEYOND_CASE_TIMEOUT_MS ?? 240000);
@@ -517,6 +591,24 @@ function completedFinalFromEvents(stdout) {
   return completionIndex > finalIndex ? { finalMessage, finalIndex, completionIndex } : null;
 }
 
+function threadIdFromEvents(stdout) {
+  for (const line of stdout.split(/\r?\n/).filter(Boolean)) {
+    try {
+      const event = JSON.parse(line);
+      if (event.type === 'thread.started' && typeof event.thread_id === 'string') return event.thread_id;
+    } catch {
+      // Ignore non-JSON diagnostics; the normal result validation will retain them in evidence.
+    }
+  }
+  return null;
+}
+
+function gitStatus(cwd) {
+  const result = spawnSync('git', ['status', '--short'], { cwd, encoding: 'utf8', windowsHide: true });
+  if (result.status !== 0) return `GIT_STATUS_UNAVAILABLE:${result.status}\n${result.stderr ?? ''}`;
+  return result.stdout ?? '';
+}
+
 const timingsPath = join(evidenceRoot, 'run-timings.json');
 const existingTimings = existsSync(timingsPath)
   ? JSON.parse(readFileSync(timingsPath, 'utf8'))
@@ -532,6 +624,66 @@ async function runCase(testCase) {
   const eventsPath = join(evidenceRoot, `${testCase.name}-events.jsonl`);
   const lastMessagePath = join(evidenceRoot, `${testCase.name}-last-message.txt`);
   const stderrPath = join(evidenceRoot, `${testCase.name}-stderr.txt`);
+  if (Array.isArray(testCase.turns)) {
+    const startedAt = new Date();
+    const startedMs = Date.now();
+    const allEvents = [];
+    const allStderr = [];
+    const allMessages = [];
+    let threadId = null;
+    for (let index = 0; index < testCase.turns.length; index += 1) {
+      const turnNumber = index + 1;
+      const turnEventsPath = join(evidenceRoot, `${testCase.name}-turn${turnNumber}-events.jsonl`);
+      const turnMessagePath = join(evidenceRoot, `${testCase.name}-turn${turnNumber}-last-message.txt`);
+      const turnStderrPath = join(evidenceRoot, `${testCase.name}-turn${turnNumber}-stderr.txt`);
+      rmSync(turnMessagePath, { force: true });
+      const args = index === 0
+        ? [
+          '-NoProfile', '-File', codexScript, 'exec', '--disable', 'plugins',
+          '--dangerously-bypass-approvals-and-sandbox', '--json', '--color', 'never',
+          '-o', turnMessagePath, '-C', cwd, testCase.turns[index],
+        ]
+        : [
+          '-NoProfile', '-File', codexScript, 'exec', 'resume', '--disable', 'plugins',
+          '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', turnMessagePath,
+          threadId, testCase.turns[index],
+        ];
+      const result = await executeCase('pwsh.exe', args, {
+        cwd,
+        encoding: 'utf8',
+        env: { ...process.env, CODEX_HOME: isolatedCodexHome },
+        maxBuffer: 64 * 1024 * 1024,
+      }, caseTimeoutMs);
+      writeFileSync(turnEventsPath, result.stdout ?? '');
+      writeFileSync(turnStderrPath, result.stderr ?? '');
+      writeFileSync(join(evidenceRoot, `${testCase.name}-turn${turnNumber}-git-status.txt`), gitStatus(cwd));
+      if (result.status !== 0) throw new Error(`${testCase.name} turn ${turnNumber} failed with exit ${result.status}; see ${turnStderrPath}`);
+      if (!existsSync(turnMessagePath) || readFileSync(turnMessagePath, 'utf8').trim() === '') {
+        throw new Error(`${testCase.name} turn ${turnNumber} did not produce a final message`);
+      }
+      if (index === 0) {
+        threadId = threadIdFromEvents(result.stdout ?? '');
+        if (!threadId) throw new Error(`${testCase.name} turn 1 did not report a thread id`);
+      }
+      allEvents.push(result.stdout ?? '');
+      allStderr.push(result.stderr ?? '');
+      allMessages.push(`TURN ${turnNumber}\n${readFileSync(turnMessagePath, 'utf8').trim()}`);
+    }
+    writeFileSync(eventsPath, allEvents.join('\n'));
+    writeFileSync(stderrPath, allStderr.join('\n'));
+    writeFileSync(lastMessagePath, `${allMessages.join('\n\n')}\n`);
+    timings.push({
+      case: testCase.name,
+      startedAt: startedAt.toISOString(),
+      durationMs: Date.now() - startedMs,
+      exitCode: 0,
+      turns: testCase.turns.length,
+      threadId,
+    });
+    writeFileSync(timingsPath, `${JSON.stringify(timings, null, 2)}\n`);
+    console.log(`${testCase.name}: completed (${testCase.turns.length} turns)`);
+    return;
+  }
   // A selected retry must never inherit a prior `-o` result if the new CLI run fails early.
   rmSync(lastMessagePath, { force: true });
   const startedAt = new Date();
@@ -566,6 +718,7 @@ async function runCase(testCase) {
   );
   writeFileSync(eventsPath, result.stdout ?? '');
   writeFileSync(stderrPath, result.stderr ?? '');
+  writeFileSync(join(evidenceRoot, `${testCase.name}-turn1-git-status.txt`), gitStatus(cwd));
   const eventCompletion = result.status === null && result.timedOut
     ? completedFinalFromEvents(result.stdout ?? '')
     : null;

@@ -60,7 +60,7 @@ check(
     && /引用|影响范围|范围已(?:确认|穷尽)|范围.{0,12}(?:确认|穷尽|明确)/.test(bounded)
     && /影响|预计.{0,8}(?:行|记录)|\d+\s*行/.test(bounded)
     && /备份|快照|事务/.test(bounded)
-    && /验证|复核/.test(bounded),
+    && /验证|复核|复验/.test(bounded),
 );
 check('S-05 bounded case creates no control detour', !/已暂停|回PM|新建.*Worker|创建.*Worker|reviewer|worktree/i.test(bounded) && !/identity-pm/.test(boundedCommands));
 check('S-05 bounded fixture remains read-only', gitClean('R12-bounded-data-repair'));

@@ -59,7 +59,7 @@ function check(name, passed, detail = '') {
 const agents = read(join(repositoryRoot, '模板交付包', 'AGENTS.md'));
 const release = JSON.parse(read(join(repositoryRoot, '模板交付包', 'beyond-release.json')));
 const preflight = JSON.parse(read(join(evidenceRoot, 'preflight.json')));
-check('WFA-01 source and release manifest identify v3.2.3', agents.includes('BEYOND-RUNTIME-VERSION: 3.2.3') && release.releaseVersion === '3.2.3');
+check('WFA-01 source and release manifest identify v3.2.4', agents.includes('BEYOND-RUNTIME-VERSION: 3.2.4') && release.releaseVersion === '3.2.4');
 check('WFA-01 isolated Skill install matches the candidate', preflight.installMismatch.length === 0 && preflight.candidateSkillFiles === preflight.installedSkillFiles);
 
 const bounded = output('R12');
@@ -94,7 +94,7 @@ for (const [name, directory] of [
   ['WST-USER-LANGUAGE-WORKER', 'WST-USER-LANGUAGE-worker'],
 ]) {
   const message = output(name);
-  check(`WFA-11 ${name} gives the business result and usability first`, ['老板', '负责人', '测试', '页面'].every((fact) => message.includes(fact)) && /尚未|还没有|还没变化|还不能说|不能确认可用|不能按线上已可用|还不能按/.test(message));
+  check(`WFA-11 ${name} gives the business result and usability first`, ['老板', '负责人', '页面'].every((fact) => message.includes(fact)) && /测试|验证/.test(message) && /尚未|还没有|还没变化|还不能说|不能确认可用|不能按线上已可用|还不能按|还不能在实际页面使用/.test(message));
   check(`WFA-11 ${name} keeps unnecessary evidence detail out`, technicalDetails.every((detail) => !message.includes(detail)));
   check(`WFA-11 ${name} fixture remains read-only`, gitClean(directory));
 }

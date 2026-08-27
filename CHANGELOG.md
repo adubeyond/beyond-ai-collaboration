@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.4] - 2026-08-26
+
+### Changed
+
+- Treat non-Git project roots as valid during installation maintenance and require hidden-file-aware backup inventories, preventing false failures from `git rev-parse` gates or mismatched `.git` visibility.
+- Keep one PM turn able to create and register every independently approved result from the same user message without waiting, reading, or polling Workers between successful dispatches.
+- Keep required CI and existing review flows in progress while they still expose an owner, readable state, and a normal next trigger instead of turning ordinary queue time into a project pause.
+- Recover saved terminal receipts once at the start of a natural PM turn when a native callback did not produce a runnable closeout turn, without adding polling, a daemon, or a second scheduler.
+- Preserve exact user-authorized bytes without adding a newline, BOM, or other content, and keep user-facing Worker finals focused on the business result while retaining engineering evidence in its formal location.
+- Preserve authorization, rollback, and verification facts when choosing a bounded one-time repair instead of silently reducing the decision to technical scope alone.
+
+### Fixed
+
+- Reject Worker-result enqueue and explicit project-scoped list requests when the project is not registered in the current control root, preventing cross-project runtime mistakes from creating unreachable pending receipts or false empty results.
+- Resolve a formal Worker's terminal runtime only from the current project-root `AGENTS.md` mapping and never search, guess, or fall back to a template, candidate, or another project.
+
 ## [3.2.3] - 2026-08-25
 
 ### Changed

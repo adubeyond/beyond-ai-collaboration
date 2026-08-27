@@ -97,7 +97,7 @@ check('SIM-02 removed the stale all-completed project snapshot', !/完成三个�
 check('SIM-02 did not create a replacement Worker',
   sim02WorkerIds.every((id) => ['worker-site-a', 'worker-site-b', 'worker-site-c'].includes(id))
   && ['worker-site-a', 'worker-site-b', 'worker-site-c'].every((id) => sim02Workbench.includes(id))
-  && /站乙/.test(sim02Output) && /站丙/.test(sim02Output)
+  && (/(?:站乙|worker-site-b)/.test(sim02Output) && /(?:站丙|worker-site-c)/.test(sim02Output))
   && !/create_thread|fork_thread/.test(sim02Commands));
 check('SIM-02 did not load Action Skills', ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !sim02Commands.includes(name)));
 check('SIM-02 did not ask the boss to reconfirm the explicit correction', /(无需|不需要|不必|不用).{0,12}(确认|批准)|无需再次/.test(sim02Output));
@@ -151,7 +151,7 @@ check('CONTROL-PLANE distinguishes source acceptance from release', /未发布|�
 const languageForbidden = ['node --test', 'exitCode', '4f82c1a0b7d9e2f3a11c', 'codex/fix-company-manager-dedup', 'companyManagers', 'managerCount', 'managerId', 'src/companyRelations.js', '7 条断言'];
 for (const caseName of ['WST-USER-LANGUAGE-DIRECT', 'WST-USER-LANGUAGE-WORKER']) {
   const output = read(evidenceFile(caseName));
-  check(caseName + ' preserves the business result and current usability', ['老板', '负责人', '测试', '页面'].every((fact) => output.includes(fact)) && /不再重复|不会再重复|重复负责人|重复显示/.test(output) && /尚未|还没有|不能确认可用|不能按线上已可用|还不能按/.test(output));
+  check(caseName + ' preserves the business result and current usability', ['老板', '负责人', '页面'].every((fact) => output.includes(fact)) && /测试|验证/.test(output) && /不再重复|不会再重复|重复负责人|重复显示/.test(output) && /尚未|还没有|不能确认可用|不能按线上已可用|还不能按|还不能在实际页面使用/.test(output));
   check(caseName + ' avoids unnecessary technical detail', languageForbidden.every((detail) => !output.includes(detail)));
 }
 

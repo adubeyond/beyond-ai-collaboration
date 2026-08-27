@@ -9,6 +9,7 @@ import { WorkerResultReceiptStore } from '../模板交付包/scripts/runtime/wor
 
 function fixture(name) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), `beyond-worker-result-${name}-`));
+  registerProject(root);
   return {
     root,
     store: new WorkerResultReceiptStore({ runtimeRoot: path.join(root, 'worker-results') }),
@@ -31,6 +32,27 @@ function runtime(controlRoot, requestId, action, input) {
   return executeRuntimeRequest({ schemaVersion: 1, requestId, action, input }, { controlRoot });
 }
 
+function registerProject(controlRoot, projectId = 'local-project-a', options = {}) {
+  const local = options.local !== false;
+  const shared = options.shared !== false;
+  const projectRoot = path.join(path.dirname(controlRoot), `${projectId}-project`);
+  fs.mkdirSync(projectRoot, { recursive: true });
+  if (local) {
+    const directory = path.join(controlRoot, 'local', 'projects');
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, `${projectId}.md`), [
+      '---', `id: ${projectId}`, `path: ${projectRoot}`, '---', '',
+    ].join('\n'), 'utf8');
+  }
+  if (shared) {
+    const directory = path.join(controlRoot, 'shared', 'projects');
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, `${projectId}.md`), [
+      '---', `id: ${projectId}`, '---', '',
+    ].join('\n'), 'utf8');
+  }
+}
+
 test('worker-result actions derive requestId when the envelope omits it', () => {
   const f = fixture('derived-request-id');
   const created = executeRuntimeRequest({
@@ -45,6 +67,48 @@ test('worker-result actions derive requestId when the envelope omits it', () => 
     action: 'workbench.migrate',
     input: {},
   }, { controlRoot: f.root }), /requestId is required/);
+});
+
+test('runtime accepts a project registered in either local or shared records', () => {
+  for (const [name, options] of [
+    ['local-only', { shared: false }],
+    ['shared-only', { local: false }],
+  ]) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), `beyond-worker-result-${name}-`));
+    registerProject(root, 'local-project-a', options);
+    const created = runtime(root, `${name}-enqueue`, 'worker-result.enqueue', receipt()).result.record;
+    assert.equal(runtime(root, `${name}-list`, 'worker-result.list', { projectId: 'local-project-a' }).result.count, 1);
+    runtime(root, `${name}-ack`, 'worker-result.ack', { taskId: 'task-a', receiptId: created.receiptId });
+  }
+});
+
+test('runtime rejects a project not registered in this control root without writing pending data', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-wrong-root-'));
+  registerProject(root, 'local-project-b');
+  assert.throws(() => runtime(root, 'wrong-enqueue', 'worker-result.enqueue', receipt()), /not registered in this control root/);
+  assert.equal(fs.existsSync(path.join(root, 'local', 'runtime', 'worker-results', 'pending')), false);
+  assert.throws(() => runtime(root, 'wrong-list', 'worker-result.list', { projectId: 'local-project-a' }), /not registered in this control root/);
+  assert.equal(runtime(root, 'control-root-audit', 'worker-result.list', {}).result.count, 0);
+});
+
+test('registered project list distinguishes a legitimate empty result from a wrong-root query', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-empty-'));
+  registerProject(root);
+  assert.deepEqual(runtime(root, 'registered-empty', 'worker-result.list', { projectId: 'local-project-a' }).result, {
+    count: 0,
+    records: [],
+  });
+});
+
+test('ack remains able to remove an existing receipt after source registration disappears', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-cleanup-'));
+  registerProject(root);
+  const created = runtime(root, 'cleanup-enqueue', 'worker-result.enqueue', receipt()).result.record;
+  fs.rmSync(path.join(root, 'local', 'projects'), { recursive: true, force: true });
+  fs.rmSync(path.join(root, 'shared', 'projects'), { recursive: true, force: true });
+  assert.equal(runtime(root, 'cleanup-ack', 'worker-result.ack', {
+    taskId: 'task-a', receiptId: created.receiptId,
+  }).result.removed, true);
 });
 
 test('enqueue creates one project-local pending receipt with a final fingerprint', () => {
@@ -125,6 +189,7 @@ test('pending receipt survives process restart until acknowledgement', () => {
 
 test('a crash after workbench acceptance retries the same operation without duplicate history', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-crash-'));
+  registerProject(root);
   fs.mkdirSync(path.join(root, 'local'), { recursive: true });
   fs.writeFileSync(path.join(root, 'local', '当前工作台.md'), '# 当前工作台\n', 'utf8');
   runtime(root, 'register-crash', 'workbench.register', {
@@ -152,6 +217,7 @@ test('a crash after workbench acceptance retries the same operation without dupl
 
 test('runtime lifecycle keeps one task through pause, resume, completion and receipt deletion', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-runtime-'));
+  registerProject(root);
   fs.mkdirSync(path.join(root, 'local'), { recursive: true });
   fs.writeFileSync(path.join(root, 'local', '当前工作台.md'), '# 当前工作台\n', 'utf8');
   runtime(root, 'register-a', 'workbench.register', {
@@ -195,6 +261,7 @@ test('fixed beyond-control CLI enqueues, lists and acknowledges the same receipt
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-cli-'));
   const controlRoot = path.join(root, 'beyond-control');
   fs.mkdirSync(path.join(controlRoot, 'scripts'), { recursive: true });
+  registerProject(controlRoot);
   fs.cpSync(path.join(import.meta.dirname, '..', '模板交付包', 'scripts', 'runtime'), path.join(controlRoot, 'scripts', 'runtime'), { recursive: true });
   fs.copyFileSync(path.join(import.meta.dirname, '..', '模板交付包', 'scripts', 'beyond-control.mjs'), path.join(controlRoot, 'scripts', 'beyond-control.mjs'));
   const invoke = (name, action, input, includeRequestId = true) => {

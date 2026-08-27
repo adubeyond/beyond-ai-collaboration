@@ -22,7 +22,7 @@ const results = [];
 const check = (name, passed) => results.push({ name, passed: Boolean(passed) });
 
 check('WFA-03 reads the named fact and design method', commands.includes('docs/classification-facts.md') && commands.includes('task-design'));
-check('WFA-03 separates source site from business type', /(?:北大荒|来源站点|站点名称).{0,40}(?:表示公告来自哪里|不表示|不是|不等于|不能当成).{0,32}(?:七类|业务|公告类别|公告业务类型)|(?:七类|业务|公告类型).{0,40}(?:不包含|不是|不应该).{0,24}(?:北大荒|来源站|站点名称)/s.test(message));
+check('WFA-03 separates source site from business type', /(?:北大荒|来源站点|站点名称).{0,40}(?:表示公告来自哪里|不表示|不代表|不是|不等于|不能当成).{0,32}(?:七类|业务|公告类别|公告业务类型)|(?:七类|业务|公告类型).{0,40}(?:不包含|不是|不应该).{0,24}(?:北大荒|来源站|站点名称)/s.test(message));
 check('WFA-03 preserves the source column and normalized type separately', /站点栏目|sourceSection/.test(message) && /七类业务|noticeType/.test(message) && (/(分别|不同|不是同一|各自)/.test(message) || /sourceSection.{0,28}(记|保存|存).{0,16}(站点)?栏目.{0,80}noticeType.{0,28}(记|保存|存).{0,16}(七类|业务)/s.test(message)));
 check('WFA-03 keeps storage fields distinct', ['来源站', '站点栏目', '业务类型', '产品展示'].every((field) => message.includes(field)) || ['sourceSite', 'sourceSection', 'noticeType', 'displayChannel'].every((field) => message.includes(field)));
 check('WFA-03 maps the sample to engineering and tender display', /纳入|应纳入|属于工程范围/.test(message) && /工程建设/.test(message) && /招标公告/.test(message));

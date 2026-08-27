@@ -70,7 +70,7 @@ PM创建任务后登记；任务的暂停、恢复、跨任务影响和完成发
 2. 用固定`project.resolve`确认唯一正式项目；结果不是`verified`时按真实原因停止，不降级成projectless、临时目录或其他项目。
 3. 按主要工作性质在`ordinary-engineering / bulk-structured / complex-high-risk`中选择一类，再调用`worker-policy --action resolve`取得新Worker参数；项目没有已确认策略时保留平台默认，当前对话的明确临时选择只影响后续新Worker，不改变当前PM，也不写进业务任务包。
 4. 创建一个`environment.type=local`的全新用户可见项目任务，不使用fork、内部助手或worktree。初始提示首行只放`$identity-worker`，随后给完整短任务包；控制标识只写当前`projectId + taskId`，PM不预选Action Skill、不填写thread ID、不写“无需回传”，也不下传自己的上游来源。
-5. 只有平台返回`threadId + hostId`才登记唯一Worker；只返回排队句柄或创建失败时不伪装成功、不改走第二条路。返回成功即以该结果登记Worker并立即结束PM当前回合；不再调用`wait_threads`或读取Worker确认派发。
+5. 只有平台返回`threadId + hostId`才登记唯一Worker；只返回排队句柄或创建失败时不伪装成功、不改走第二条路。同一条老板消息已经批准多个互不依赖的结果时，逐个处理创建请求并在每次成功后分别登记；单个结果或本消息全部创建请求处理完后立即结束PM当前回合；不再调用`wait_threads`或读取Worker确认派发，也不轮询Worker。
 
 更复杂的拆分、模型分类、创建异常、首次接入和独立高风险授权进入派单reference，不扩写普通任务。用户可以直接在Worker任务内继续指令和纠偏；原结果范围内由Worker连续负责，影响主线、其他任务、共享对象或独立高风险边界时才回PM处理。
 

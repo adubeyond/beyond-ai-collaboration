@@ -304,9 +304,27 @@ export class ProjectIdentityProvider {
     this.runtimeRoot = path.resolve(runtimeRoot ?? path.join(controlRoot, 'local', 'runtime', 'project-identity'));
   }
 
+  registrations() {
+    return {
+      local: readRegistrationDirectory(path.join(this.controlRoot, 'local', 'projects'), 'local'),
+      shared: readRegistrationDirectory(path.join(this.controlRoot, 'shared', 'projects'), 'shared'),
+    };
+  }
+
+  requireRegisteredProject(projectId) {
+    const normalized = typeof projectId === 'string' ? projectId.trim() : '';
+    if (!normalized) throw new Error('projectId is required');
+    const { local, shared } = this.registrations();
+    const localRegistered = local.records.some((item) => item.beyondProjectId === normalized);
+    const sharedRegistered = shared.records.some((item) => item.beyondProjectId === normalized);
+    if (!localRegistered && !sharedRegistered) {
+      throw new Error(`projectId is not registered in this control root: ${normalized}`);
+    }
+    return { projectId: normalized, localRegistered, sharedRegistered };
+  }
+
   resolve(input) {
-    const local = readRegistrationDirectory(path.join(this.controlRoot, 'local', 'projects'), 'local');
-    const shared = readRegistrationDirectory(path.join(this.controlRoot, 'shared', 'projects'), 'shared');
+    const { local, shared } = this.registrations();
     const hostRoutes = readHostRoutes(input);
     const registrationIssues = [...local.issues, ...shared.issues, ...hostRoutes.issues];
     const decisionInput = {
