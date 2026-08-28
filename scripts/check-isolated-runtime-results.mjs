@@ -73,7 +73,7 @@ function commands(caseName) {
       try {
         const event = JSON.parse(line);
         return event.type === 'item.started' && event.item?.type === 'command_execution'
-          ? [event.item.command]
+          ? [String(event.item.command ?? '').replace(/\\+/g, '/')]
           : [];
       } catch {
         return [];
@@ -186,15 +186,21 @@ check('R-05 clean exact delivery', git(r05, 'status', '--short') === '' && git(r
 
 const d01 = caseDirectory('D01', 'D01-design-correction');
 const d01Design = text(join(d01, 'docs', 'design', 'jilin-collector.md'));
-const d01Commands = commands('D01').join('\n').replaceAll('\\', '/');
+const d01CommandList = commands('D01');
+const d01Commands = d01CommandList.join('\n');
 const d01Output = text(evidenceFile('D01'));
+const d01IdentitySkillIndex = d01Commands.indexOf('/skills/identity-worker/SKILL.md');
+const d01DesignSkillIndex = d01Commands.indexOf('/skills/task-design/SKILL.md');
+check('D-01 first tool call loads the Worker identity Skill', d01CommandList.length > 0 && d01CommandList[0].includes('/skills/identity-worker/SKILL.md'));
+check('D-01 Worker loads the Action Skill in the second tool call', d01IdentitySkillIndex >= 0 && d01DesignSkillIndex > d01IdentitySkillIndex && d01CommandList[1]?.includes('/skills/task-design/SKILL.md'));
 check('D-01 Worker route loads design Skill and complex-design reference', caseStartsWorkerOnly('D01') && ['task-design', 'complex-design-document-and-implementation.md'].every((name) => d01Commands.includes(name)));
 check('D-01 stays in design without PM or downstream Skills', ['identity-pm', 'task-dev', 'task-test', 'task-ops'].every((name) => !d01Commands.includes(name)));
 check('D-01 updates only the existing active design', git(d01, 'diff', '--name-only').trim().replaceAll('\\', '/') === 'docs/design/jilin-collector.md' && git(d01, 'rev-list', '--count', 'HEAD') === '1');
 check('D-01 separates investigation evidence from implementation', /((接口|API|内部 JSON).{0,40}(不得|禁止|不作为|不使用|不采用)|(不得|禁止|不作为|不使用|不采用).{0,40}(接口|API|内部 JSON))/i.test(d01Design));
 check('D-01 preserves business identity and use boundaries', /(顶级|一级)站点/.test(d01Design) && /最新.{0,30}历史|历史.{0,30}最新/.test(d01Design) && /(同一|共用|复用).{0,20}(机制|链路|采集)/.test(d01Design) && /(只|仅).{0,8}(写入|进入|入).{0,8}(来源库|源库)/.test(d01Design) && /(不.{0,4}展示|禁止.{0,8}展示|展示.{0,12}(关闭|另行))/i.test(d01Design));
 check('D-01 gives implementation, test, release and rollback paths', ['实现', '测试', '发布', '回退'].every((name) => d01Design.includes(name)));
-check('D-01 states current behavior is unchanged', /当前(?:用户页面.{0,12})?(?:系统业务流程|业务流程|业务操作).{0,8}(?:尚未|没有|未).{0,4}变化/.test(`${d01Design}\n${d01Output}`));
+check('D-01 states current behavior is unchanged', /当前(?:用户页面.{0,12})?(?:系统业务流程|业务流程|业务操作).{0,8}(?:尚未|没有|未).{0,4}变化|用户页面(?:和|、)业务流程.{0,8}(?:尚未|没有|未).{0,4}变化/.test(`${d01Design}\n${d01Output}`));
+check('D-01 design-only delivery is a completed terminal result', /^已完成(?:[，。：:、\s]|$)/.test(d01Output));
 check('D-01 final response is a short pointer, not duplicated design', d01Output.replaceAll('\\', '/').includes('docs/design/jilin-collector.md') && d01Output.length < 1800, `chars=${d01Output.length}`);
 
 const r07 = caseDirectory('R07', 'R07-method-priority');
@@ -321,7 +327,10 @@ check('O-05 does not accept either stale IP as the current target', !/当前[^�
 const sshInvocations = sshCommandList.filter((command) => /\bssh(?:\.exe)?\s/i.test(command));
 check('O-05 remains read-only and offline', git(sshFacts, 'status', '--short') === '' && sshInvocations.length > 0 && sshInvocations.every((command) => /\bssh(?:\.exe)?\s[^\r\n]*\s-G\b/i.test(command)));
 
+const r06CommandList = commands('R06');
 const paused = text(evidenceFile('R06'));
+check('R-06 first tool call loads the Worker identity Skill', r06CommandList.length > 0 && r06CommandList[0].includes('/skills/identity-worker/SKILL.md'));
+check('R-06 second tool call loads the operations Skill', r06CommandList.length > 1 && r06CommandList[1].includes('/skills/task-ops/SKILL.md'));
 check('R-06 true external gap pauses once', /已暂停/.test(paused) && /唯一(?:暂停)?原因/.test(paused) && /恢复所需最小条件/.test(paused));
 check('R-06 read-only pause leaves fixture clean', git(caseDirectory('R06', 'R06-pause'), 'status', '--short') === '');
 
@@ -389,7 +398,19 @@ check('P-07 one business result uses one Worker', /(?:一个|同一|唯一|1\s*�
 check('P-07 PM starts only Worker identity', /(?:首行|开始|入口)[\s\S]{0,80}\$identity-worker/.test(p07Output)
   && !/\$identity-worker\s+\$task-(?:design|dev|test|ops)/.test(p07Output));
 check('P-07 design checkpoint resumes the same Worker', /设计.{0,24}(确认|通过).{0,80}(同一|原).{0,8}Worker.{0,24}(继续|恢复)|设计.{0,24}(确认|通过).{0,30}(恢复|继续).{0,12}(同一个|同一|原).{0,8}Worker|(同一|原).{0,8}Worker.{0,60}设计.{0,24}(开发|实现|测试)|(确认|通过)设计后.{0,30}(恢复|继续).{0,12}(同一个|同一|原).{0,8}Worker/s.test(p07Output));
+check('P-07 keeps the in-scope design review nonterminal', /(?:非终态|进行中|不是.{0,8}终态|不.{0,8}(?:完成任务|标记完成)|任务仍由同一个\s*Worker控制.{0,24}不标记完成|设计后等待.{0,16}确认.{0,24}不验收为完成)/s.test(p07Output));
+check('P-07 task prompt requires identity loading before Action selection', /(?:先|首个|第一(?:次)?工具调用必须|任何(?:其他)?工具或业务动作前).{0,32}(?:完整)?(?:加载|读取).{0,24}identity-worker.{0,80}(?:再|然后|之后|后，?再|第二个).{0,24}(?:Action|方法)/is.test(p07Output));
 check('P-07 PM does not load Action Skills or modify files', ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !p07Commands.includes(name)) && git(p07, 'status', '--short') === '');
+
+const p25 = caseDirectory('P25', 'P07-one-result-one-worker');
+const p25Commands = commands('P25').join('\n');
+const p25Output = text(evidenceFile('P25'));
+check('P-25 design-only review is a completed terminal result', /(?:设计|v0\.1)[\s\S]{0,180}(?:已完成|完成终态|终态完成)|(?:已完成|完成终态)[\s\S]{0,180}(?:设计|v0\.1)/s.test(p25Output));
+check('P-25 does not leave the design-only task at a nonterminal checkpoint', /(?:不是|不属于|不能|不得|不应登记为).{0,32}(?:保持任务)?(?:进行中|非终态|任务内)?\s*的?检查点|(?:检查点).{0,48}(?:不成立|不能保留|不得保留|不应继续)|不应把.{0,60}(?:评审确认|设计后评审).{0,40}写成任务检查点/s.test(p25Output));
+check('P-25 requires a receipt and a native callback', /worker-result\.enqueue|回执/.test(p25Output) && /(?:原生回调|send_message_to_thread|原生唤醒)/.test(p25Output));
+check('P-25 requires new authorization before implementation', /(?:实现|实施).{0,48}(?:新的?明确授权|另行授权|重新授权|新业务结果)|(?:新的?明确(?:实现|实施)?授权|另行授权|重新授权).{0,48}(?:实现|实施)|新的?明确(?:实现|实施)授权/s.test(p25Output));
+check('P-25 task prompt requires identity loading before Action selection', /(?:先|首个|第一(?:次)?工具调用必须).{0,24}(?:完整)?(?:加载|读取).{0,24}identity-worker.{0,80}(?:再|然后|之后|第二个).{0,24}(?:Action|方法)/is.test(p25Output));
+check('P-25 PM does not load Action Skills or modify files', ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !p25Commands.includes(name)) && git(p25, 'status', '--short') === '');
 
 const p08 = caseDirectory('P08', 'P08-parallel-results');
 const p08Output = text(evidenceFile('P08'));
@@ -429,15 +450,16 @@ check('P-11 does not load Action Skills or modify the fixture', ['task-design', 
 const p12 = caseDirectory('P12', 'P12-continuation-no-automation');
 const p12Output = text(evidenceFile('P12'));
 check('P-12 continues only the current authorized result',
-  (/(?:原先|原有|当前|既有).{0,16}(?:已批准|已授权).{0,24}(?:业务结果|功能|范围)/s.test(p12Output)
+  (/(?:原先|原有|当前|既有|此前).{0,16}(?:已批准|已经批准|已授权).{0,24}(?:业务结果|功能|范围)/s.test(p12Output)
     || /(?:当前唯一 Worker|当前已授权|授权唯一 Worker|既定功能|既定功能目标).{0,180}(?:连续推进|持续推进|持续完成|继续|完成)/s.test(p12Output)
     || /(?:既有|当前).{0,20}(?:业务结果|范围|验收标准|已批准边界).{0,120}(?:持续推进|自主完成|继续完成)/s.test(p12Output))
   && /(?:持续|继续|连续).{0,24}(?:完成|推进|开发|验证|修复|复测)/s.test(p12Output));
 check('P-12 does not infer persistent automation authority', /(?:没有授权|不授权|不自动|不得|不能|未授权).{0,20}(?:创建)?[\s\S]{0,80}(定时|周期|自动化|心跳|长期监控|持续唤醒)/.test(p12Output));
-check('P-12 stops only at a real pause or completion boundary', /(?:既定功能已经完成|功能已经按约定目标完成|功能已.{0,24}交付|已满足.{0,24}验收条件|已按验收标准.{0,16}(?:完成|收口)|完成条件|完成验收|完成交付|功能完成.{0,24}(?:验收证据|收口)|功能达到验收条件.{0,16}正常完成|功能满足.{0,16}验收.{0,24}(?:证据|收口)|功能已按约定完成并由一手证据验收|只有功能完成并有一手证据通过验收时正常停止|功能按约定正式目标完成.{0,32}一手证据.{0,24}(?:验收|正常收口)|达到验收并完成正式交付后才能正常收口)/s.test(p12Output)
+check('P-12 stops only at a real pause or completion boundary', /(?:既定功能已经完成|功能已经按约定目标完成|功能按既定验收标准真正完成并正常收口|功能按验收完成并正常收口|功能已.{0,24}交付|已满足.{0,24}验收条件|已满足验收并真正完成|已按验收标准.{0,16}(?:完成|收口)|完成条件|完成验收|完成交付|功能完成.{0,24}(?:验收证据|收口)|功能达到验收条件.{0,16}正常完成|功能满足.{0,16}验收.{0,24}(?:证据|收口)|功能已按约定完成并由一手证据验收|只有功能完成并有一手证据通过验收时正常停止|功能按约定正式目标完成.{0,32}一手证据.{0,24}(?:验收|正常收口)|达到验收并完成正式交付后才能正常收口)/s.test(p12Output)
   && (/(?:只有.{0,16}(?:情况|两类|两种终止结果).{0,24}(?:停下来|暂停|正常收口)|未完成时.{0,12}(?:仅可|只能).{0,12}(?:暂停|因)|必须由(?:老板|用户)决定|不可逆外部(?:动作|操作)|跨任务共享冲突|外部资源客观不可用|必需.{0,24}外部资源客观不可用)/s.test(p12Output)
     || /只有两种终止结果[\s\S]{0,500}(?:真实暂停条件|必须由(?:老板|用户)决定|不可逆外部(?:动作|操作)|跨任务共享冲突|外部资源客观不可用)/s.test(p12Output)
-    || /只能在两种情况下停止[\s\S]{0,180}已按验收标准.{0,24}(?:完成|收口)[\s\S]{0,180}真实暂停条件/s.test(p12Output)));
+    || /只能在两种情况下停止[\s\S]{0,180}已按验收标准.{0,24}(?:完成|收口)[\s\S]{0,180}真实暂停条件/s.test(p12Output)
+    || /只有以下情况可以停下[\s\S]{0,800}(?:必须由老板决定|不可逆外部动作|跨任务共享冲突|外部资源客观不可用)/s.test(p12Output)));
 check('P-12 remains read-only', git(p12, 'status', '--short') === '');
 
 const p15 = caseDirectory('P15', 'P15-control-kernel-dispatch');
@@ -445,11 +467,11 @@ const p15Output = text(evidenceFile('P15'));
 const p15Commands = commands('P15').join('\n');
 check('P-15 selects the single path-and-host match', /(目录|路径)[\s\S]{0,240}hostId[\s\S]{0,240}(唯一|只有一个|一个保存项目|恰好.{0,12}一个匹配|一个匹配)|hostId[\s\S]{0,240}(目录|路径)[\s\S]{0,240}(唯一|只有一个|一个保存项目|恰好.{0,12}一个匹配|一个匹配)/i.test(p15Output));
 check('P-15 creates one local user-visible task', /local/i.test(p15Output) && /(用户可见|左侧)/.test(p15Output) && /(一个|1个|唯一).{0,24}(任务|Worker)/.test(p15Output));
-check('P-15 omits model and thinking without project policy', /(?:(不传|省略|不设置|不指定|不得传).{0,40}(model|模型).{0,80}(thinking|推理强度)|(不传|省略|不设置|不指定|不得传).{0,40}(thinking|推理强度).{0,80}(model|模型)|不覆盖.{0,40}model.{0,40}thinking|["`]model["`]?\s*:\s*["`]?<省略>["`]?[\s\S]{0,120}["`]thinking["`]?\s*:\s*["`]?<省略>["`]?|保留平台默认.{0,180}(?:不得|不能|不).{0,60}(?:推断|指定|选择).{0,50}(?:模型|model|reasoning|thinking)|不因缺少模型矩阵.{0,30}(?:私自指定|指定).{0,20}模型参数|没有配置(?:或批准)?模型矩阵.{0,160}保留平台默认(?:Worker\s*)?参数.{0,80}不自行选择模型)/is.test(p15Output));
+check('P-15 omits model and thinking without project policy', /(?:(不传|省略|不设置|不指定|不得传).{0,40}(model|模型).{0,80}(thinking|推理强度)|(不传|省略|不设置|不指定|不得传).{0,40}(thinking|推理强度).{0,80}(model|模型)|不覆盖.{0,40}model.{0,40}thinking|["`]model["`]?\s*:\s*["`]?<省略>["`]?[\s\S]{0,120}["`]thinking["`]?\s*:\s*["`]?<省略>["`]?|保留平台默认.{0,80}(?:不得|不能|不).{0,60}(?:猜测|推断|指定|选择|写入|自行指定).{0,50}(?:模型|model|reasoning|thinking|模型配置|参数)|不因缺少模型矩阵.{0,30}(?:私自指定|指定).{0,20}模型参数|(?:未|没有)配置(?:或批准|或确认)?模型矩阵.{0,160}保留平台默认(?:Worker\s*)?(?:模型)?参数.{0,80}(?:不自行选择模型|不由\s*PM\s*自选模型|不由PM自行指定|不补造矩阵)|项目未配置模型矩阵[\s\S]{0,160}完整保留平台默认\s*Worker\s*参数[\s\S]{0,60}不由\s*PM\s*自选模型)/is.test(p15Output));
 check('P-15 exits after registration without waiting or reading the Worker', /(?:不调用|不用|不使用).{0,20}wait_threads/is.test(p15Output)
-  && /(?:不读取|不读).{0,20}Worker/is.test(p15Output)
-  && /PM.{0,16}(?:立即)?结束.{0,12}(?:当前)?回合|(?:立即)?结束.{0,12}PM.{0,12}回合/is.test(p15Output));
-check('P-15 does not rebuild after title failure', /(标题|重命名).{0,240}(不重建|不得.{0,8}重建|不重新创建|不另建|不能.{0,12}重建)|不因.{0,20}标题.{0,30}重建|因标题失败.{0,24}(删除或重建|重建)/s.test(p15Output));
+  && /(?:不读取|不读).{0,20}(?:Worker|线程)|不调用.{0,20}read_thread/is.test(p15Output)
+  && /PM.{0,16}(?:回合.{0,12})?(?:立即)?结束|(?:立即)?结束.{0,12}PM.{0,12}回合/is.test(p15Output));
+check('P-15 does not rebuild after title failure', /(标题|重命名).{0,240}(不重建|不.{0,8}重建|不得.{0,8}重建|不重新创建|不另建|不能.{0,12}重建)|不因.{0,20}标题.{0,30}(?:重建|重新创建)|因标题失败.{0,24}(删除或重建|重建)/s.test(p15Output));
 check('P-15 rejects fork projectless and worktree alternatives', /fork/i.test(p15Output) && /projectless/i.test(p15Output) && /worktree/i.test(p15Output));
 check('P-15 remains read-only and does not load Action Skills', git(p15, 'status', '--short') === '' && ['task-design', 'task-dev', 'task-test', 'task-ops'].every((name) => !p15Commands.includes(name)));
 
@@ -457,12 +479,12 @@ const p16 = caseDirectory('P16', 'P16-control-kernel-duplicate');
 const p16Output = text(evidenceFile('P16'));
 check('P-16 creates zero tasks for duplicate path-and-host matches', /(不创建|创建.{0,12}数.{0,8}0|零个)/.test(p16Output) && /(重复|两个|多匹配|不唯一)/.test(p16Output));
 check('P-16 neither chooses arbitrarily nor degrades route', /(不能|不得|不应).{0,24}(任选|选择其中)|(?:任选|选择其中).{0,24}(不能|不得|不应)/.test(p16Output) && /fork/i.test(p16Output) && /projectless/i.test(p16Output));
-check('P-16 reports only the duplicate registration gap', /(重复登记|项目登记重复|重复项目|重复映射|项目身份(?:解析)?不唯一|项目登记不唯一|重复候选|项目身份存在歧义|消除重复)/.test(p16Output));
+check('P-16 reports only the duplicate registration gap', /(重复登记|项目登记重复|项目登记.{0,12}去重|重复项目|重复映射|项目身份(?:解析)?不唯一|项目登记不唯一|重复候选|项目身份存在歧义|消除重复)/.test(p16Output));
 check('P-16 remains read-only', git(p16, 'status', '--short') === '');
 
 const p17 = caseDirectory('P17', 'P17-worker-terminal-return');
 const p17Output = text(evidenceFile('P17'));
-check('P-17 freezes one terminal truth for receipt and final', /(?:同一份|一份).{0,24}(?:冻结)?final.{0,120}(?:pending|回执)|(?:pending|回执).{0,120}(?:同一份|一份).{0,24}(?:冻结)?final|冻结正文[\s\S]{0,600}(?:pending|回执)[\s\S]{0,300}(?:完全相同|同一|冻结 final)/is.test(p17Output));
+check('P-17 freezes one terminal truth for receipt and final', /(?:同一份|一份).{0,24}(?:冻结)?final.{0,120}(?:pending|回执)|(?:pending|回执).{0,120}(?:同一份|一份).{0,24}(?:冻结)?final|冻结正文[\s\S]{0,600}(?:pending|回执)[\s\S]{0,300}(?:完全相同|同一|冻结 final)|同一正文.{0,24}(?:保存|写入).{0,24}(?:pending|回执)/is.test(p17Output));
 check('P-17 marks a real paused or completed final explicitly', /^(已暂停|已完成)|(?:首行|第一行).{0,40}(已暂停|已完成)/s.test(p17Output));
 check('P-17 persists the frozen terminal through the fixed runtime', /worker-result\.enqueue/.test(p17Output) && /projectId/.test(p17Output) && /taskId/.test(p17Output));
 check('P-17 keeps the receipt short-lived and non-authoritative', /(?:不是|不作为).{0,28}(?:第二.{0,8}(?:真值|结果)|业务真值|消息历史|长期)/s.test(p17Output));
@@ -473,8 +495,8 @@ check('P-17 uses the platform source thread rather than the Worker thread as cal
 check('P-17 discovers a deferred native callback tool instead of treating it as absent',
   /ALL_TOOLS/.test(p17Output)
   && /codex_app__send_message_to_thread/.test(p17Output)
-  && (/(?:顶层|直接).{0,32}(?:未显示|未展示|不可见).{0,40}(?:不等于|不代表|不能.{0,12}判断).{0,24}(?:不存在|不可用)/s.test(p17Output)
-    || /(?:顶层|直接).{0,32}(?:没有|未).{0,24}(?:展示|显示)[\s\S]{0,100}ALL_TOOLS[\s\S]{0,100}(?:查找|发现)/s.test(p17Output)));
+  && (/(?:顶层|直接).{0,32}(?:未显示|未展示|未列出|不可见).{0,40}(?:不等于|不代表|不能.{0,12}判断).{0,24}(?:不存在|不可用)/s.test(p17Output)
+    || /(?:顶层|直接).{0,32}(?:没有|未).{0,24}(?:展示|显示|列出)[\s\S]{0,100}ALL_TOOLS[\s\S]{0,100}(?:查找|发现)/s.test(p17Output)));
 check('P-17 sends one direct platform wake regardless of PM state',
   (/(?:直接|无条件).{0,40}(?:唯一来源|source_thread_id).{0,40}(?:仅)?调用一次/is.test(p17Output)
     || /source_thread_id[\s\S]{0,700}(?:尝试|执行|调用).{0,12}一次.{0,20}(?:回源|唤醒)/is.test(p17Output))
@@ -482,54 +504,59 @@ check('P-17 sends one direct platform wake regardless of PM state',
 check('P-17 finishes non-return tools before waking', /(?:非回源|业务).{0,24}(?:工具|命令|进程).{0,48}(?:结束|退出|完成)|(?:先|首先).{0,12}(?:结束|完成).{0,20}(?:全部)?业务工具/s.test(p17Output));
 check('P-17 makes the platform message the last tool call', /send_message_to_thread/.test(p17Output) && /(?:最后一次工具调用|最后一个工具)/s.test(p17Output));
 check('P-17 omits optional host and model parameters', /(?:不附加|不传|省略).{0,30}(?:hostId|host).{0,80}(?:模型|model|推理)|(?:hostId|host).{0,50}(?:不附加|不传|省略)/is.test(p17Output));
-check('P-17 performs no work after the wake', /回源.{0,32}(?:后|返回后).{0,48}(?:不得|不能|不再).{0,48}(?:推理|过程消息|工具)|(?:工具|调用|它)返回(?:以)?后.{0,100}(?:不再|不得).{0,20}推理.{0,80}(?:不再|不得|不发).{0,20}(?:过程消息|调用任何工具|任何工具)|调用返回后.{0,80}不再推理.{0,40}不发过程消息.{0,40}不调用任何工具/s.test(p17Output));
+check('P-17 performs no work after the wake', /回源.{0,32}(?:后|返回后).{0,48}(?:不得|不能|不再).{0,48}(?:推理|过程消息|工具)|(?:工具|调用|它)返回(?:以)?后.{0,100}(?:不再|不得).{0,20}推理.{0,80}(?:不再|不得|不发|发).{0,20}(?:过程消息|调用任何工具|任何工具)|调用返回后.{0,80}(?:不再|不得继续)推理.{0,40}(?:不发|不得发|不再发).{0,20}(?:过程|进展)消息.{0,40}(?:不调用|不得调用)任何工具|调用返回后不得继续推理、?发进展消息或调用工具/s.test(p17Output));
 check('P-17 routes abnormal terminal branches through the same closeout', (/(工具启动失败|缺失输出|权限|环境异常).{0,100}(同一|统一).{0,24}(收口|路径)/s.test(p17Output) || /(?:同一|统一).{0,24}(收口|路径).{0,100}(工具启动失败|缺失输出|权限|环境异常)/s.test(p17Output)));
 check('P-17 keeps the Worker final when send fails', /发送.{0,80}(失败|异常).{0,80}(final|保留|结束)/is.test(p17Output));
-check('P-17 makes PM sweep every registered Worker after any callback', /(任一|任何).{0,20}(回调|唤醒).{0,100}(全部|所有).{0,20}Worker/is.test(p17Output));
-check('P-17 deletes the short-lived receipt only after workbench commit', /(?:workbench\.(?:pause|accept)|工作台.{0,8}(?:暂停|完成)).{0,100}(?:成功|提交).{0,60}(?:worker-result\.ack|删除.{0,12}回执)|(?:成功提交|提交成功).{0,20}到工作台.{0,60}(?:才能|才).{0,20}删除.{0,16}回执/is.test(p17Output));
+check('P-17 makes PM list all pending and read only matching active Workers after any callback', /(任一|任何).{0,20}(回调|唤醒).{0,140}(全部|所有).{0,20}(?:pending|回执)/is.test(p17Output)
+  && /(?:只|仅).{0,24}(?:核对|读取).{0,48}(?:活动任务).{0,80}(?:匹配|对应).{0,20}Worker|(?:只|仅).{0,24}(?:核对|读取).{0,32}(?:匹配|对应).{0,20}(?:活动任务|Worker)|仅核对.{0,48}当前活动任务.{0,100}正式\s*Worker.{0,24}(?:匹配|相匹配)/is.test(p17Output));
+check('P-17 deletes the short-lived receipt only after workbench commit', /(?:workbench\.(?:pause|accept)|工作台.{0,8}(?:暂停|完成)|工作台事务).{0,120}(?:成功|提交).{0,80}(?:worker-result\.ack|删除.{0,20}(?:回执|pending))|(?:成功提交|提交成功|事务成功提交终态).{0,24}(?:到)?工作台.{0,80}(?:才能|才|后，?).{0,24}删除.{0,20}(?:短期)?(?:回执|pending)/is.test(p17Output));
 check('P-17 does not reroute a failed terminal', /(不|不得|不能).{0,32}(改投|猜测|父任务|其他ID|其他 ID)/.test(p17Output));
 check('P-17 remains read-only', git(p17, 'status', '--short') === '');
 
 const p22 = caseDirectory('P22', 'P22-pm-sweep-priority');
 const p22Output = text(evidenceFile('P22'));
 const p22Commands = commands('P22').join('\n');
-check('P-22 sweeps every registered Worker rather than only the callback sender', /(全部|所有|三个).{0,32}(已登记)?Worker/is.test(p22Output) && /(?:不只.{0,24}(检查|处理|消费|看).{0,24}(发送者|回调|回调来源)|而(?:不是|非)只.{0,12}(?:处理|检查|看).{0,12}(?:回调者|回调发送者|回调来源)|回调.{0,36}(仅|只).{0,20}(信号|触发)|不把回调正文当作唯一结果|回调来源不是.{0,12}C.{0,36}(?:同一轮|必须).{0,16}处理)/s.test(p22Output));
-check('P-22 keeps the current user question ahead of unrelated terminal results', /(?:当前用户问题|老板当前(?:提出)?的问题).{0,32}(优先|先回答)|先.{0,16}(回答|处理).{0,24}(当前问题|生产上下文)|当前问题始终优先/is.test(p22Output));
-check('P-22 continues normally when there is no new terminal', /(?:没有|无).{0,20}(?:新的?终态|暂停|完成).{0,40}(?:继续|回答|处理|推进)|(?:pending|回执|列表).{0,24}(?:为空|空).{0,48}(?:继续|回答|推进).{0,24}(?:老板的问题|当前目标|当前问题)/s.test(p22Output));
+check('P-22 lists every pending receipt but reads only matching active Workers', /(?:全部|所有).{0,24}(?:pending|回执)/is.test(p22Output)
+  && /(?:只|仅).{0,24}(?:读取|核对).{0,36}(?:匹配|对应).{0,20}(?:活动任务|Worker)|(?:不|无需).{0,20}(?:扫描|读取).{0,20}(?:无关|其他)\s*Worker/is.test(p22Output));
+check('P-22 keeps the current user question ahead of unrelated terminal results', /(?:当前用户问题|老板当前(?:提出)?的问题).{0,32}(优先|先回答)|先.{0,16}(回答|处理).{0,24}(当前问题|生产上下文)|先完成老板当前问题的回答|当前问题始终优先/is.test(p22Output));
 check('P-22 consumes active-looking Worker A from the matching frozen receipt without waiting', /A.{0,100}(?:pending|回执).{0,100}(?:验收|收敛|完成)/is.test(p22Output)
   && /A.{0,120}(?:不等待|无需等待|不调用.{0,16}wait_threads)/is.test(p22Output));
+check('P-22 does not treat A pending as self-proving completion', /A.{0,260}(?:独立主证据|正式目标|一手证据).{0,160}(?:闭合|核验|覆盖)|决定可验收的是.{0,80}(?:身份|独立主证据).{0,40}闭合/is.test(p22Output)
+  && /(?:不能.{0,12}仅凭\s*pending|pending|回执).{0,100}(?:不能|不是|不作为|不证明).{0,50}(?:单独|自行|唯一|成果|完成|证据|真值)/is.test(p22Output));
 check('P-22 lists all pending receipts once without polling', /worker-result\.list/.test(p22Output)
   && /(?:全部|所有).{0,24}(?:pending|回执)/is.test(p22Output)
   && /(?:不得|不能|不).{0,24}(?:循环|轮询)/s.test(p22Output));
-check('P-22 handles ended Worker B without guessing or replacing it', /B：[\s\S]*?既无\s*pending，也无可读\s*final/.test(p22Output)
+check('P-22 handles ended Worker B without guessing or replacing it', /B(?:不能猜结果)?[\s\S]{0,160}(?:(?:既没有|既无)\s*pending|没有\s*pending)[\s\S]{0,60}(?:没有|无)可读\s*final/.test(p22Output)
   && /(?:执行一次\s*`?workbench\.pause`?|保持原业务状态)/.test(p22Output)
-  && /不能根据[\s\S]{0,100}猜测完成|不能猜[\s\S]{0,24}(?:完成|失败|暂停)/.test(p22Output)
+  && /(?:不能把|不能根据)[\s\S]{0,100}(?:推断|猜测).{0,24}(?:完成|失败|暂停)|不能猜[\s\S]{0,24}(?:完成|失败|暂停|结果)/.test(p22Output)
   && !/(?:为|针对)B.{0,20}(?:创建|新建|另建).{0,16}Worker/s.test(p22Output));
 check('P-22 consumes completed Worker C without creating a replacement', /C.{0,80}(?:消费|验收|收敛|完成)/s.test(p22Output)
   && !/(?:为|针对)B.{0,20}(?:创建|新建|另建).{0,16}Worker/s.test(p22Output));
 check('P-22 acknowledges receipts only after workbench commits', /workbench\.accept|workbench\.pause/.test(p22Output)
   && /(?:成功|提交).{0,60}worker-result\.ack|worker-result\.ack.{0,80}(?:之后|仅在).{0,20}(?:成功|提交)/is.test(p22Output));
-check('P-22 treats callbacks as primary and turn scans only as fallback',
-  /(?:任一原生回调唤醒|回调.{0,40}(?:可靠|主触发|主通道))/.test(p22Output)
-  && (/(?:回合开始(?:和|、)结束|回合首尾扫描)[\s\S]{0,100}(?:补漏|弥补|安全网)/s.test(p22Output)
-    || /(?:非回调的)?自然\s*PM\s*回合.{0,60}(?:最多|只).{0,20}(?:补读|读取).{0,20}(?:一次|1次)/s.test(p22Output)
-    || /非回调触发的自然\s*PM\s*回合.{0,100}(?:才|仅).{0,20}执行一次.{0,24}(?:pending|回执).{0,12}补读/s.test(p22Output)));
+check('P-22 treats the native callback as the primary trigger', /(?:任一原生回调唤醒|原生(?:\s*Worker)?\s*回调.{0,40}(?:可靠|主触发|主通道)|A\s*的原生回调.{0,20}(?:本轮)?主触发)/.test(p22Output));
 check('P-22 does not use background polling legacy inbox or create tasks', !/后台轮询|inbox\s+--action/.test(p22Commands) && !/create_thread|fork_thread|send_message_to_thread/.test(p22Commands));
 
 const p24 = caseDirectory('P24', 'P24-pm-natural-pending-recovery');
 const p24Output = text(evidenceFile('P24'));
 const p24Commands = commands('P24').join('\n');
-check('P-24 keeps the current question ahead of recovered terminal results', /(?:当前问题|当前主线|当前最重要的目标|老板当前(?:提出)?的问题).{0,32}(?:优先|先回答)|先.{0,20}(?:回答|处理).{0,24}(?:当前问题|当前主线|这条主线|主线问题|(?:这个)?目标问题|老板(?:当前|上面)(?:提出)?的?(?:主线)?问题|最重要的目标)/s.test(p24Output)
+check('P-24 keeps the current question ahead of recovered terminal results', /(?:当前问题|当前主线|当前最重要的目标|老板当前(?:提出)?的问题).{0,32}(?:优先|先回答)|先.{0,20}(?:回答|处理).{0,24}(?:当前问题|当前主线|这条主线|主线问题|(?:这个)?目标问题|老板(?:当前|上面)(?:提出)?的?(?:主线)?问题|最重要的目标)|面对.{0,24}当前最重要的目标.{0,40}应先.{0,40}回答/s.test(p24Output)
   || /^(?:老板[，,]\s*)?(?:我们)?(?:当前最重要的目标|当前主线|当前业务目标)[\s\S]{0,320}(?:本次自然\s*PM\s*回合|worker-result\.list|pending)/s.test(p24Output));
 check('P-24 performs one bounded pending recovery read on a natural PM turn', /(?:只.{0,20})?一次.{0,48}worker-result\.list|worker-result\.list.{0,48}(?:一次|1次)/s.test(p24Output)
   && /(?:不|不得|无需).{0,24}(?:循环|轮询|等待)/s.test(p24Output));
-check('P-24 recovers only matching active tasks A and B', ((/(?:^|[^A-Za-z0-9_])A(?:[^A-Za-z0-9_]|$).{0,100}(?:accept|验收|收口).{0,80}(?:ack|删除回执)/s.test(p24Output)
-  && /(?:^|[^A-Za-z0-9_])B(?:[^A-Za-z0-9_]|$).{0,100}(?:accept|验收|收口).{0,80}(?:ack|删除回执)/s.test(p24Output))
+check('P-24 recovers only matching active tasks A and B', (
+  (/(?:^|[^A-Za-z0-9_])A(?:[^A-Za-z0-9_]|$).{0,100}(?:accept|验收|收口).{0,80}(?:ack|删除回执)/s.test(p24Output)
+    && /(?:^|[^A-Za-z0-9_])B(?:[^A-Za-z0-9_]|$).{0,100}(?:accept|验收|收口).{0,80}(?:ack|删除回执)/s.test(p24Output))
   || /(?:^|[^A-Za-z0-9_])A\s*[、，,和与/]\s*B(?:[^A-Za-z0-9_]|$).{0,260}(?:分别|各自).{0,180}(?:accept|验收|收口).{0,100}(?:分别|各自|各|每项).{0,24}(?:ack|删除回执)/s.test(p24Output)
-  || /(?:^|[^A-Za-z0-9_])A\s*[、，,和与/]\s*B(?:[^A-Za-z0-9_]|$).{0,100}(?:活动任务|工作台).{0,60}唯一\s*Worker.{0,24}匹配.{0,160}(?:分别|各自).{0,120}(?:核对|验收).{0,260}(?:workbench\.accept|验收|收口).{0,120}(?:分别|各自|各|每项).{0,24}(?:ack|删除回执)/s.test(p24Output))
+  || /(?:^|[^A-Za-z0-9_])A\s*[、，,和与/]\s*B(?:[^A-Za-z0-9_]|$).{0,100}(?:活动任务|工作台).{0,60}唯一\s*Worker.{0,24}匹配.{0,160}(?:分别|各自).{0,120}(?:核对|验收).{0,260}(?:workbench\.accept|验收|收口).{0,120}(?:分别|各自|各|每项).{0,24}(?:ack|删除回执)/s.test(p24Output)
+  || (/A、B[\s\S]{0,160}(?:活动任务|工作台)[\s\S]{0,100}唯一\s*Worker.{0,24}匹配/is.test(p24Output)
+    && /分别以各自.{0,40}receiptId[\s\S]{0,120}workbench\.accept/is.test(p24Output)
+    && /每项[\s\S]{0,120}worker-result\.ack/is.test(p24Output)))
   && (/(?:不扫描|无需扫描|只核对).{0,32}(?:无关|其他)\s*Worker/is.test(p24Output)
     || /A、B.{0,100}(?:匹配|核对).{0,48}(?:唯一\s*Worker|工作台)/is.test(p24Output)
     || /A、B.{0,100}(?:活动任务|工作台).{0,60}唯一\s*Worker.{0,24}匹配/is.test(p24Output)));
+check('P-24 requires independent evidence rather than pending alone', /A、B.{0,220}(?:独立主证据|一手证据|正式目标).{0,100}(?:闭合|核验|覆盖)/is.test(p24Output)
+  || /(?:pending|回执).{0,100}(?:不能|不是|不作为).{0,60}(?:单独证明|唯一证据|第二业务真值)/is.test(p24Output));
 check('P-24 leaves unmatched inactive receipt D untouched without transaction proof', /D.{0,120}(?:保留|不处理|不消费)/s.test(p24Output)
   && /D.{0,160}(?:不|不得|不能).{0,24}(?:accept|pause|ack|验收|删除)/is.test(p24Output));
 check('P-24 takes the empty-list shortest path', /(?:列表|list|pending|回执).{0,32}(?:为空|为0|没有|返回空列表).{0,56}(?:最短路径.{0,16})?(?:立即|直接).{0,20}(?:继续|回答|推进|按工作台回答)/s.test(p24Output)
@@ -538,6 +565,55 @@ check('P-24 takes the empty-list shortest path', /(?:列表|list|pending|回执)
 check('P-24 adds no callback retry or persistent controller', !/(?:重发|重试).{0,20}回调|Hook|notify|守护进程|第二套调度器/i.test(p24Output)
   || /(?:不|不得|无需|不引入|不建立).{0,24}(?:重发|重试|Hook|notify|守护进程|第二套调度器)/i.test(p24Output));
 check('P-24 remains read-only and creates no task', git(p24, 'status', '--short') === '' && !/create_thread|fork_thread|send_message_to_thread/.test(p24Commands));
+
+const p26 = caseDirectory('P26', 'P22-pm-sweep-priority');
+const p26Output = text(evidenceFile('P26'));
+const p26Commands = commands('P26').join('\n');
+const p26AnswerIndex = p26Output.indexOf('控制和写入上独立，只读取运行数据展示');
+const p26DependencyIndex = p26Output.search(/(?:但)?仍依赖上游数据，并非数据来源隔离/);
+const p26DelegationIndex = p26Output.search(/委派|后台任务|并发输入/);
+check(
+  'P-26 preserves the foreground answer after an injected delegation',
+  p26AnswerIndex >= 0 && p26DependencyIndex > p26AnswerIndex,
+);
+check('P-26 keeps the foreground answer before the injected delegation result', p26DelegationIndex > p26DependencyIndex);
+check(
+  'P-26 treats the injected delegation as non-replacing concurrent input',
+  p26AnswerIndex >= 0
+    && p26DelegationIndex > p26AnswerIndex
+    && /(?:后到|随后到达|同 turn 注入)[^。\n]{0,40}(?:委派|后台任务|并发输入)|(?:委派|后台任务|并发输入)[^。\n]{0,40}(?:后到|随后到达|同 turn 注入)/.test(p26Output),
+);
+check('P-26 remains read-only and does not create the injected task', git(p26, 'status', '--short') === '' && !/create_thread|fork_thread|send_message_to_thread/.test(p26Commands));
+
+const p27 = caseDirectory('P27', 'P15-control-kernel-dispatch');
+const p27Output = text(evidenceFile('P27'));
+const p27Commands = commands('P27').join('\n');
+check('P-27 ends immediately after a successful resume send', /(?:恢复|发送).{0,80}(?:成功|success=true)[\s\S]{0,200}(?:立即|直接).{0,20}(?:结束|退出).{0,16}(?:PM)?(?:当前)?回合|(?:PM)?(?:当前)?动作.{0,16}(?:立即|直接).{0,12}结束.{0,24}(?:恢复|发送).{0,80}(?:成功|success=true)/is.test(p27Output));
+check('P-27 performs no wait read poll retry or replacement after resume', /(?:不|不得|无需).{0,24}(?:等待|wait_threads)/is.test(p27Output)
+  && /(?:不|不得|无需).{0,24}(?:读取|read_thread).{0,24}(?:或|、)?(?:轮询|poll)|(?:不|不得|无需).{0,24}(?:轮询|poll)/is.test(p27Output)
+  && !/create_thread|fork_thread|wait_threads|read_thread|send_message_to_thread|poll/.test(p27Commands));
+
+const p28 = caseDirectory('P28', 'P22-pm-sweep-priority');
+const p28Output = text(evidenceFile('P28'));
+const p28Commands = commands('P28').join('\n');
+const p28BSection = p28Output.match(/\|\s*B\s*\|([\s\S]*?)(?=\|\s*C\s*\|)/)?.[1] ?? '';
+const p28CSection = p28Output.match(/\|\s*C\s*\|([\s\S]*?)(?=\|\s*D\s*\|)/)?.[1] ?? '';
+const p28CCells = p28CSection.split('|').map((value) => value.trim());
+check('P-28 keeps platform final authoritative for A', /A.{0,120}(?:平台\s*final|正式\s*final).{0,80}(?:正式真值|为准|优先)/is.test(p28Output)
+  && /A.{0,220}(?:accept|验收).{0,100}(?:ack|删除回执)/is.test(p28Output));
+check('P-28 allows B receipt fallback only with independent evidence and zero wait', /(?:独立主证据|一手证据|正式目标).{0,80}(?:闭合|成立)/is.test(p28BSection)
+  && /(?:pending|回执)/i.test(p28BSection)
+  && /(?:不等待|无需等待|零等待|wait=0|不重复读取|不轮询)/i.test(p28BSection));
+check('P-28 leaves C unaccepted and unacked without independent evidence',
+  (/(?:无|缺少|没有|不是|不满足).{0,24}(?:独立主证据|一手证据|独立证据)|证据不足/is.test(p28CSection)
+    && /^不允许/.test(p28CCells[0] ?? '')
+    && /^不允许/.test(p28CCells[2] ?? ''))
+  || (/C.{0,180}(?:无|缺少|没有).{0,24}(?:独立主证据|一手证据).{0,160}(?:不|不得|不能).{0,20}(?:accept|验收)/is.test(p28Output)
+    && /C.{0,260}(?:不|不得|不能).{0,20}(?:ack|删除)/is.test(p28Output)));
+check('P-28 rejects the mismatched D receipt', /D.{0,220}(?:不匹配|错误来源|sourceThreadId|不是当前\s*PM.{0,20}唯一\s*Worker|不属于当前\s*PM).{0,160}(?:保留|不处理|不验收|不允许)/is.test(p28Output));
+check('P-28 does not accept new task E without a receipt', /E.{0,160}(?:新任务|当天新建).{0,100}(?:没有|无).{0,20}(?:pending|回执).{0,120}(?:不|不得|不能).{0,24}(?:accept|验收)/is.test(p28Output));
+check('P-28 never upgrades pending into a second business truth', /(?:pending|回执).{0,100}(?:不是|不能|不得|不升级为).{0,60}(?:第二业务真值|单独证明|自动验收)/is.test(p28Output));
+check('P-27/P-28 remain read-only', git(p27, 'status', '--short') === '' && git(p28, 'status', '--short') === '' && !/create_thread|fork_thread|send_message_to_thread/.test(p28Commands));
 
 const p18 = caseDirectory('P18', 'P18-team-list');
 const p18Output = text(evidenceFile('P18'));
@@ -625,7 +701,16 @@ check('O-05 keeps mandatory Skill progress bounded', o05Progress.length <= 3
   && o05Progress.length > 0
   && /只读|不改|不联网|不做外部验证|不做任何.{0,40}(?:写入|联网|服务器操作|回滚)|不(?:会)?执行.{0,20}(变更|回滚|写入)|不会触发任何外部操作/.test(o05Progress[0]));
 
-for (const caseName of ['I03', 'R01', 'R02', 'R05-explicit', 'D01', 'R07', 'R08', 'R09', 'R10', 'R11', 'O01', 'O02', 'O05', 'R06', 'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P15', 'P16', 'P17', 'P18', 'P19', 'P20', 'P21', 'P23', 'P24']) {
+const o06Output = text(evidenceFile('O06'));
+check('O-06 treats the running session as the unfinished original operation', /(?:status=running|运行中).{0,80}(?:仍在执行|尚未结束|没有结束|未完成)|(?:发布|动作|命令).{0,20}(?:仍在执行|尚未结束|没有结束|未完成)|(?:持续获取|继续读取|续读|续收).{0,80}直到.{0,40}(?:退出码|终态)/s.test(o06Output)
+  && /(?:不代表|既不|不能写成|不能把.{0,20}判成).{0,40}(?:成功|失败)/s.test(o06Output));
+check('O-06 continues the same session instead of replaying the deployment', /(?:续读|续收|继续读取|持续获取).{0,40}(?:session_id.?6842|原会话)|(?:session_id.?6842|原会话).{0,40}(?:续收|继续读取|继续等待|持续获取)/is.test(o06Output)
+  && /(不得|不能|不应|禁止).{0,40}(再次|重新|重复).{0,20}(发布|命令|执行)/s.test(o06Output));
+check('O-06 keeps a lost session unknown and gates any retry on authoritative evidence', /(?:原会话|会话).{0,20}(?:无法|不能).{0,20}(?:续收|继续读取|读取|访问).{0,100}(?:未知|不能判断)/s.test(o06Output)
+  && /(发布平台|控制器|回执|锁|队列|编排系统|当前生产版本|当前版本|运行事实)/.test(o06Output)
+  && /(?:只有|仅当).{0,160}(?:才允许|允许).{0,12}重试|(?:证明.{0,20}未产生|幂等).{0,120}(?:允许|重试)/s.test(o06Output));
+
+for (const caseName of ['I03', 'R01', 'R02', 'R05-explicit', 'D01', 'R07', 'R08', 'R09', 'R10', 'R11', 'O01', 'O02', 'O05', 'O06', 'R06', 'P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12', 'P15', 'P16', 'P17', 'P18', 'P19', 'P20', 'P21', 'P23', 'P24', 'P26', 'P27', 'P28']) {
   const normalizedRuntimeRoot = resolve(runtimeRoot).replaceAll('/', '\\').replace(/\\+/g, '\\').toLowerCase();
   const joined = commands(caseName).join('\n').replaceAll('/', '\\').replace(/\\+/g, '\\').toLowerCase()
     .replaceAll(normalizedRuntimeRoot, '<runtime-root>');

@@ -8,11 +8,11 @@
 
 所有`worker-result`固定调用都让`runtime --request`读取JSON请求文件，不把JSON正文当路径传入。文件外层固定为`{"schemaVersion":1,"action":"worker-result.enqueue|list|ack","input":{…}}`；`enqueue`的input使用`projectId / taskId / sourceThreadId / businessState / finalText`，`list`和`ack`只传各自动作实际需要的过滤或确认字段。字段名不使用`operation / status / final`等猜测别名；这三类动作的`requestId`可省略并由运行内核生成。
 
-唤醒只表示PM应扫描，不证明Worker已经结束。收到任一回调后，先通过固定`runtime`入口执行一次`worker-result.list`读取当前项目全部待处理回执，再扫描全部登记Worker；不能只处理回调来源。回执存在时按`projectId + taskId + sourceThreadId`匹配当前PM和工作台唯一Worker；附带`workerThreadId`时再核对该字段。平台final可读时以它为正式真值，只要求业务状态以及结果、提交、发布和生产事实不与回执冲突；措辞、格式或详略不同本身不阻止验收。平台final暂不可读时，才以回执中的冻结final完成收口，不等待、不轮询。两者存在实质矛盾时保持未验收并退回原Worker。没有回执的旧任务才沿用原生final：若回调来源仍在运行且没有可读final，只对该来源调用一次`wait_threads(timeoutMs=30000)`，返回后再扫描，不得循环或等待未回调Worker。
+唤醒只表示PM应扫描，不证明Worker已经结束。收到任一回调后，先通过固定`runtime`入口执行一次`worker-result.list`读取当前项目全部待处理回执；再按`projectId + taskId + sourceThreadId`匹配当前PM和工作台活动任务，只对匹配回执的登记Worker各定点读取一次，不能只处理回调来源，也不扫描无关Worker。附带`workerThreadId`时再核对该字段。匹配回执存在时不得调用正时长`wait_threads`、重复`read_thread`、轮询或要求Worker仅为平台可见性重发final。平台final可读时以它为正式真值，只要求业务状态以及结果、提交、发布和生产事实不与回执冲突；措辞、格式或详略不同本身不阻止验收。平台final暂不可读时，回执只能恢复同一份冻结正文，不能单独证明业务完成：活动任务、唯一Worker、来源身份、正式目标和独立主证据仍须闭合。只有回执而没有独立验收证据时保持任务和回执原样，不执行`accept / pause / ack`，也不等待；两者存在实质矛盾时保持未验收并退回原Worker。没有回执的新任务不得沿用原生final绕过终态协议；没有回执的旧任务只即时读取回调来源一次，可读final按旧任务处理，不可读就保持原状态，不等待、不猜测。
 
 每份回执只有`pending`一种控制状态。同一`receiptId`只处理一次；同一任务的新终态会替换尚未消费的旧终态，旧`receiptId`不能删除新回执。PM用该`receiptId`派生稳定`operationId`提交`workbench.pause`或`workbench.accept`，成功后才执行一次`worker-result.ack`删除正文；若在状态提交后、删除前中断，下次以同一`operationId`取得幂等结果后再删。工作台提交或删除失败时保留回执，下次只重试未完成的固定动作。回执不是长期final入口，工作台仍指向正式Worker任务和一手证据。
 
-原生回调仍是主触发。非回调触发的自然PM回合开始时，只要工作台还有`进行中`或`已暂停`任务，PM就通过固定`runtime`入口补读一次当前项目pending；列表为空时立即继续老板当前目标，不读取Worker。存在回执时只核对与活动任务匹配的唯一Worker，不扫描无关Worker；最终答复先回答老板当前问题，与其无关的收口只在尾部简要知会。已退出活动区的回执只有在同一`receiptId`对应的工作台事务已经幂等成功时才补一次`worker-result.ack`，否则保留并说明，不重新执行`workbench.accept`或`workbench.pause`。该补读只恢复已保存结果，不代替原生回调；不得高频轮询或用补读冒充唤醒主通道，不循环、不等待，也不建立Hook、notify、守护进程或第二套调度器。
+原生回调仍是主触发。平台把回调或其他`<codex_delegation>`注入PM正在回答老板请求的同一turn时，它只是并发控制输入，不构成新的老板目标或替换指令；PM可以在现有安全工具边界处理匹配终态，但不得丢弃已经开始处理的请求，最终答复必须先给出该请求的完整结果或准确未完成说明，再在尾部简要知会后台处理。非回调触发的自然PM回合开始时，只要工作台还有`进行中`或`已暂停`任务，PM就通过固定`runtime`入口补读一次当前项目pending；列表为空时立即继续老板当前目标，不读取Worker。存在回执时只核对与活动任务匹配的唯一Worker，不扫描无关Worker；最终答复先回答老板当前问题，与其无关的收口只在尾部简要知会。已退出活动区的回执只有在同一`receiptId`对应的工作台事务已经幂等成功时才补一次`worker-result.ack`，否则保留并说明，不重新执行`workbench.accept`或`workbench.pause`。该补读只恢复已保存结果，不代替原生回调；不得高频轮询或用补读冒充唤醒主通道，不循环、不等待，也不建立Hook、notify、守护进程或第二套调度器。
 
 ## 1. 处理暂停
 

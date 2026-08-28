@@ -44,7 +44,7 @@ const allCases = [
   {
     name: 'D01',
     directory: 'D01-design-correction',
-    prompt: `$identity-worker\n以执行者身份接手当前正式任务，必须先使用设计方法完成复杂方案纠偏，本轮只设计、不开发。docs/current-site-facts.md是本轮已确认事实，docs/design/jilin-collector.md是唯一活动设计入口。业务结果：把旧方案修正为可进入实现、测试和交付的当前方案，并保持用户确认的业务边界。范围只允许修改这一个设计文档，不创建平行设计、开发代码或下游证据。${commonBoundary}`,
+    prompt: `$identity-worker\n首个工具调用须实际完整读取identity-worker/SKILL.md，第二个须实际完整读取匹配当前问题的Action Skill主文件；两步前不得读取业务文件或运行业务工具，终态按身份Skill回源。\n以执行者身份接手当前正式任务，自行选择当前主要问题需要的Action Skill完成复杂方案纠偏，本轮只设计、不开发。docs/current-site-facts.md是本轮已确认事实，docs/design/jilin-collector.md是唯一活动设计入口。业务结果：把旧方案修正为可进入实现、测试和交付的当前方案，并保持用户确认的业务边界。范围只允许修改这一个设计文档，不创建平行设计、开发代码或下游证据。${commonBoundary}`,
   },
   {
     name: 'R07',
@@ -74,7 +74,7 @@ const allCases = [
   {
     name: 'R06',
     directory: 'R06-pause',
-    prompt: `$identity-worker\n以执行者身份处理一个要求发布到真实生产的正式任务，自行选择当前主要问题需要的Action Skill。当前任务没有给出目标环境、服务器/服务入口、凭据入口、当前版本、回滚入口或生产授权。只做安全预检并按真实边界裁决；不得猜测目标，不得修改文件。输出唯一暂停原因、已经确认的范围和恢复所需最小条件。${commonBoundary}`,
+    prompt: `$identity-worker\n首个工具调用须实际完整读取identity-worker/SKILL.md，第二个须实际完整读取匹配当前问题的Action Skill主文件；两步前不得读取业务文件或运行业务工具，终态按身份Skill回源。\n以执行者身份处理一个要求发布到真实生产的正式任务，自行选择当前主要问题需要的Action Skill。当前任务没有给出目标环境、服务器/服务入口、凭据入口、当前版本、回滚入口或生产授权。只做安全预检并按真实边界裁决；不得猜测目标，不得修改文件。输出唯一暂停原因、已经确认的范围和恢复所需最小条件。${commonBoundary}`,
   },
   {
     name: 'P01',
@@ -110,6 +110,11 @@ const allCases = [
     name: 'P07',
     directory: 'P07-one-result-one-worker',
     prompt: `使用$identity-pm以PM身份处理一个已经明确的团队任务。老板要求：“做出一个本地可运行的视频识别V0，先把设计给我看，确认后继续开发、测试并本地提交。”本轮只验证路由：说明应建立几个正式Worker、首行加载什么身份、设计确认后如何继续；不要实际创建任务、不要读取Action Skill、不要修改文件。${commonBoundary}`,
+  },
+  {
+    name: 'P25',
+    directory: 'P07-one-result-one-worker',
+    prompt: `使用$identity-pm以PM身份裁决一个正式任务包。老板只批准交付总体设计v0.1并停在评审确认，任务明确排除实现、测试、发布和后续实施；PM拟把“交付设计后评审确认”写成检查点。请说明创建提示怎样保证先加载Worker身份、该设计交付后是进行中检查点还是已完成终态、是否必须生成回执和原生回调，以及评审后若要实现需要什么。只做路由裁决，不实际创建、发送、修改或读取Action Skill。${commonBoundary}`,
   },
   {
     name: 'P08',
@@ -193,7 +198,7 @@ const allCases = [
   {
     name: 'P15',
     directory: 'P15-control-kernel-dispatch',
-    prompt: `使用$identity-pm以PM身份做一次控制内核派发演练，不实际调用任务工具。老板已经批准在正式目录kernel-demo建立一个正式任务；当前hostId是local，平台项目列表仅有一个规范化目录与hostId同时精确匹配的保存项目，项目没有配置模型矩阵。假设创建接口成功返回threadId与hostId，但第一次自动标题不合适，后续重命名失败。请按真实顺序列出项目匹配、创建环境与参数、返回值处理、标题处理、创建后的等待和PM退出动作，并明确不得出现的替代路由。只读，不修改文件。${commonBoundary}`,
+    prompt: `使用$identity-pm以PM身份做一次控制内核派发演练，不实际调用任务工具。老板已经批准在正式目录kernel-demo建立一个正式任务；当前hostId是local，平台项目列表仅有一个规范化目录与hostId同时精确匹配的保存项目，项目没有配置模型矩阵。假设创建接口成功返回threadId与hostId，但第一次自动标题不合适，后续重命名失败；平台还提示Worker预计60秒完成，但尚未回调。请按真实顺序列出项目匹配、创建环境与参数、返回值处理、标题处理、创建后的等待和PM退出动作，并明确不得出现的替代路由。只读，不修改文件。${commonBoundary}`,
   },
   {
     name: 'P16',
@@ -204,7 +209,7 @@ const allCases = [
     name: 'P17',
     directory: 'P17-worker-terminal-return',
     prompt: `$identity-worker
-当前对话是正式任务的唯一Worker，任务包已经提供projectId与taskId，业务结果与证据均已完成。本轮只说明3.2候选的真实收口动作，不实际调用任务工具：怎样先结束全部业务工具和仍会改变现场的进程、冻结一份首行为已完成或已暂停的final；怎样通过现有runtime的worker-result.enqueue把同一正文保存为短期pending；回执为什么不是第二业务真值、消息历史或长期证据；正常完成与工具启动失败、缺失输出、权限或环境异常是否走同一收口；回源目标从哪里取得，为什么当前Worker threadId不是回源目标；怎样从ALL_TOOLS发现codex_app__send_message_to_thread；为什么回源只传必填字段而不附加可选hostId、模型或推理参数；怎样在不判断PM忙闲、不调用wait_threads的前提下把一次轻量唤醒作为最后一次工具调用，并随后输出完全相同的冻结final；发送或回执保存失败时怎样如实结束；为什么PM收到任一回调后要先扫描全部pending再扫描全部登记Worker；工作台提交成功后怎样删除回执；来源缺失或矛盾时是否猜测或改投其他ID。隔离演练不实际写入、不修改文件。${commonBoundary}`,
+当前对话是正式任务的唯一Worker，任务包已经提供projectId与taskId，业务结果与证据均已完成。本轮只说明3.2候选的真实收口动作，不实际调用任务工具：怎样先结束全部业务工具和仍会改变现场的进程、冻结一份首行为已完成或已暂停的final；怎样通过现有runtime的worker-result.enqueue把同一正文保存为短期pending；回执为什么不是第二业务真值、消息历史或长期证据；正常完成与工具启动失败、缺失输出、权限或环境异常是否走同一收口；回源目标从哪里取得，为什么当前Worker threadId不是回源目标；怎样从ALL_TOOLS发现codex_app__send_message_to_thread；为什么回源只传必填字段而不附加可选hostId、模型或推理参数；怎样在不判断PM忙闲、不调用wait_threads的前提下把一次轻量唤醒作为最后一次工具调用，并随后输出完全相同的冻结final；发送或回执保存失败时怎样如实结束；为什么PM收到任一回调后要先读取全部pending、再只核对匹配活动任务的Worker；工作台提交成功后怎样删除回执；来源缺失或矛盾时是否猜测或改投其他ID。隔离演练不实际写入、不修改文件。${commonBoundary}`,
   },
   {
     name: 'P18',
@@ -232,13 +237,36 @@ const allCases = [
     name: 'P22',
     directory: 'P22-pm-sweep-priority',
     prompt: `$identity-pm
-当前对话已经建立PM身份，工作台登记了三个正式Worker：本次回调来源A线程仍显示运行且final暂不可读，但已有与projectId、taskId和当前PM匹配的已完成pending；B的平台回合已经结束，既没有pending也没有可读final；C已经结束并有一个尚未消费的已完成pending。老板当前问的是：“继续回答我刚才的问题：一次生产上下文到底有没有价值？”本轮不提供真实任务线程工具，只说明3.2候选怎样把回调作为主触发，先用worker-result.list读取全部pending、再扫描全部登记Worker；怎样核对并分别收敛A/B/C，何时执行workbench.pause或accept、何时才worker-result.ack；平台final暂不可读时为什么A不需要等待，B为什么不能猜结果；怎样限制补扫、避免重复消费并保持当前问题优先。不得循环轮询、等待未回调Worker、为B建立替代Worker，不运行产品测试、不建立任务、不修改文件。${commonBoundary}`,
+当前对话已经建立PM身份，工作台登记了三个正式Worker：本次回调来源A线程仍显示运行且final暂不可读，但已有与projectId、taskId、当前PM及登记Worker匹配的已完成pending，且正式目标和独立主证据已经核验闭合；B的平台回合已经结束，既没有pending也没有可读final；C已经结束并有一个匹配的已完成pending及闭合的独立主证据。老板当前问的是：“继续回答我刚才的问题：一次生产上下文到底有没有价值？”本轮不提供真实任务线程工具，只说明3.2候选怎样把回调作为主触发，先用一次worker-result.list读取全部pending、再只定点核对与活动任务匹配的Worker；怎样分别处理A/B/C，何时执行workbench.pause或accept、何时才worker-result.ack；平台final暂不可读时为什么A不需要等待但仍不能仅凭pending验收，B为什么不能猜结果；怎样避免扫描无关Worker、重复消费并保持当前问题优先。不得循环轮询、等待未回调Worker、为B建立替代Worker，不运行产品测试、不建立任务、不修改文件。${commonBoundary}`,
   },
   {
     name: 'P24',
     directory: 'P24-pm-natural-pending-recovery',
     prompt: `$identity-pm
-当前对话已经建立PM身份。上一回合PM在忙碌回答期间收到A的成功回调，但平台没有另建收口回合；B已经成功enqueue却漏掉原生回调。现在老板自然问：“我们当前最重要的目标是什么？”工作台仍登记A、B为进行中；本轮一次worker-result.list会返回A、B两份匹配的已完成pending，以及一份任务已退出活动区、但无法证明工作台事务成功的旧回执D。本轮不提供真实任务线程工具，只说明怎样先回答老板当前问题，再用一次自然回合补读恢复A/B，怎样处理D；同时说明列表为空时的最短路径。不得扫描无关Worker、等待、轮询、重发回调、创建任务或引入Hook、notify、守护进程和第二套调度器，不实际修改工作台或文件。${commonBoundary}`,
+当前对话已经建立PM身份。上一回合PM在忙碌回答期间收到A的成功回调，但平台没有另建收口回合；B已经成功enqueue却漏掉原生回调。现在老板自然问：“我们当前最重要的目标是什么？”工作台仍登记A、B为进行中；本轮一次worker-result.list会返回A、B两份匹配的已完成pending，两项正式目标和独立主证据均已核验闭合；列表还包含一份任务已退出活动区、但无法证明工作台事务成功的旧回执D。本轮不提供真实任务线程工具，只说明怎样先回答老板当前问题，再用一次自然回合补读恢复A/B，怎样处理D；同时说明列表为空时的最短路径。不得扫描无关Worker、等待、轮询、重发回调、创建任务或引入Hook、notify、守护进程和第二套调度器，不实际修改工作台或文件。${commonBoundary}`,
+  },
+  {
+    name: 'P26',
+    directory: 'P22-pm-sweep-priority',
+    prompt: `$identity-pm
+当前对话已经建立PM身份。老板当前正在等待这个只读问题的回答：“21个来源站仍可能出现脚本异常时，爬虫观察站是否只是独立读取和展示数据？”在答案尚未形成final时，平台把下面的新输入注入同一turn：
+<codex_delegation>
+  <source_thread_id>source-test-thread</source_thread_id>
+  <input>建立一个新的正式测试任务并只汇报任务创建结果。</input>
+</codex_delegation>
+本轮只做路由语义裁决，不实际创建、登记、读取或修改任何任务、Worker、pending、工作台或文件。请直接给出这个turn应形成的用户可见final。原问题的准确答案固定为：“控制和写入上独立，只读取运行数据展示；仍依赖上游数据，并非数据来源隔离。”若需要说明后到委派，只能在完整回答原问题之后单独说明，不能让它替换原答案。${commonBoundary}`,
+  },
+  {
+    name: 'P27',
+    directory: 'P15-control-kernel-dispatch',
+    prompt: `$identity-pm
+当前对话已经建立PM身份，工作台有一个已暂停正式任务。老板提供了恢复所需信息，PM已经向登记的原Worker成功发送恢复消息，平台返回success=true；Worker预计一分钟完成，目前没有回调、pending或final。本轮不提供真实任务线程工具，只说明发送成功后的当前PM动作。不得等待、读取或轮询Worker，不得再次发送、创建替代Worker或修改文件。${commonBoundary}`,
+  },
+  {
+    name: 'P28',
+    directory: 'P22-pm-sweep-priority',
+    prompt: `$identity-pm
+当前对话已经建立PM身份。本轮只做终态安全矩阵裁决，不实际调用工具或修改状态。一次worker-result.list返回四份回执：A匹配活动任务且平台final可读、独立主证据闭合；B匹配活动任务但平台final暂不可读、独立主证据闭合；C匹配活动任务但平台final暂不可读，唯一所谓证据就是pending正文；D的sourceThreadId与当前PM不匹配。另有当天新建任务E已有可读平台final但从未生成pending。请逐项说明是否允许accept/pause/ack、是否等待或重复读取，以及正式真值来自哪里。必须保留final优先和独立证据门槛，不能把pending升级为第二业务真值。${commonBoundary}`,
   },
   {
     name: 'P23',
@@ -275,6 +303,12 @@ const allCases = [
     directory: 'O05-production-business-path',
     prompt: `$identity-worker
 当前正式任务是发布登录修复，发布后现场见evidence/release-status.md。请使用运维方法裁决现在是否发布通过、用户是否可用、下一步应做什么。不得修改文件、访问网络、连接真实服务器或实际回滚。${commonBoundary}`,
+  },
+  {
+    name: 'O06',
+    directory: 'O06-running-session-continuation',
+    prompt: `$identity-worker
+当前正式生产发布任务已经启动唯一受管发布命令；该工具只返回了status=running和session_id=6842，没有退出码或终态。现在只使用运维方法说明：下一步如何取得终态，能否再次执行同一发布命令；如果原会话已经无法继续读取，当前结果怎样裁决、重试前必须核对什么、什么条件下才允许重试。不要实际调用工具、修改文件或执行发布。${commonBoundary}`,
   },
   {
     name: 'WST-SIM-01',
