@@ -255,6 +255,11 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
+    label: "PM preserves quantitative mainline boundaries across turns",
+    value: "保留会改变范围或完成裁决的定量分母与命名边界，不用泛称替代",
+  },
+  {
+    path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "a design checkpoint does not create an implementation Worker",
     value: "不得再建立一个实施Worker",
   },
@@ -345,8 +350,8 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
-    label: "PM sweeps every registered Worker after a wakeup",
-    value: "扫描工作台登记的全部Worker",
+    label: "PM reads all pending receipts and only matching active Workers after a wakeup",
+    value: "只读取匹配活动任务的登记Worker一次",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
@@ -682,6 +687,21 @@ const requiredSkillFacts = [
     path: "模板交付包/skills/task-ops/SKILL.md",
     label: "production runs continuously after one gate",
     value: "不逐步输出`可以继续`、不回PM、不等待用户重复放行",
+  },
+  {
+    path: "模板交付包/skills/task-ops/SKILL.md",
+    label: "running operations continue through the same session",
+    value: "只通过平台同会话续收工具（如`write_stdin`）继续该会话直到取得终态",
+  },
+  {
+    path: "模板交付包/skills/task-ops/SKILL.md",
+    label: "running operations are not replayed before terminal state",
+    value: "终态前不得再次启动同一部署、迁移、批量写入",
+  },
+  {
+    path: "模板交付包/skills/task-ops/references/production-release-and-convergence.md",
+    label: "lost production sessions remain unknown before evidence-gated retry",
+    value: "若原会话已经无法继续读取，动作结果保持`未知`",
   },
   {
     path: "模板交付包/skills/task-ops/references/production-release-and-convergence.md",
