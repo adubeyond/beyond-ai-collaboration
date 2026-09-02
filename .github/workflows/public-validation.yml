@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  validate:
+  validate_matrix:
     name: validate (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -49,3 +49,12 @@ jobs:
       - name: Run minimal example syntax check
         working-directory: examples/minimal-project
         run: npm run check
+
+  validate:
+    name: validate
+    if: ${{ always() }}
+    needs: validate_matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm all platform checks passed
+        run: test "${{ needs.validate_matrix.result }}" = "success"
