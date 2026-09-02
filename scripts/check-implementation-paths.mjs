@@ -540,7 +540,8 @@ requireText("PM跨回合保留主线定量边界", pm, "保留会改变范围或
 forbidText("PM主入口不复制正时长等待", pm, "wait_threads(timeoutMs=");
 forbidText("PM主入口不复制初始化状态机", pm, "initialization --action");
 forbidText("PM主入口不复制Git操作清单", pm, "merge / rebase");
-requireCondition("PM主入口保持控制面短核心", pm.replace(/\r\n/g, "\n").split("\n").length <= 120 && pm.length <= 6500, "identity-pm主入口超过R3短核心上限");
+const normalizedPm = pm.replace(/\r\n/g, "\n");
+requireCondition("PM主入口保持控制面短核心", normalizedPm.split("\n").length <= 120 && normalizedPm.length <= 6500, "identity-pm主入口超过R3短核心上限");
 requireText("设计Skill提供PM轻量模式", design, "PM轻量任务设计只回答五件事");
 requireText("PM设计不替Worker选技术路径", design, "不替Worker选择实现、测试或发布方法");
 requireText("PM轻量设计不形成文档", design, "PM轻量任务设计只进入任务包，不形成项目文档");
