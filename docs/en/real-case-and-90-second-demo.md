@@ -2,7 +2,9 @@
 
 **English** | [简体中文](../真实案例与90秒演示.md)
 
-This is not a concept animation or a test script presented as a customer story. The flow below comes from real BEYOND 3.2.2 validation on Windows, Codex Desktop, and a local Node.js fixture. Private project names, absolute paths, and thread IDs are omitted.
+This is not a concept animation or a test script presented as a customer story. The concrete business cases below were first validated with BEYOND 3.2.2 on Windows, Codex Desktop, and a local Node.js fixture. BEYOND 3.2.4 then revalidated a single terminal return, two independent terminal returns, same-Worker pause and resume, and rejection of an unregistered project ID before any pending receipt could be written. Private project names, absolute paths, and thread IDs are omitted.
+
+For public promotional content, use the [3.2.4 motion-graphic script](../promotion/90秒演示制作脚本.md) and do not present the historical function names below as new 3.2.4 features.
 
 ## 90-second recording plan
 
@@ -15,7 +17,7 @@ This is not a concept animation or a test script presented as a customer story. 
 | 65–80s | The PM wakes automatically and verifies the formal result | “Code written” is not silently upgraded to “released” |
 | 80–90s | The workbench shows one accepted and archived result, with no pending receipt | One result is accepted once and the main line can continue |
 
-Record a real Codex task with real command output. Do not use a prebuilt animation as proof of product behavior, and do not edit failures or genuine pauses out of the recording.
+When this page is used as behavioral evidence, retain the real Codex task, command output, failures, and genuine pauses. A promotional motion-graphic may simplify the visuals, but it must not be presented as behavioral test evidence.
 
 ## Case 1: normal completion and automatic closeout
 

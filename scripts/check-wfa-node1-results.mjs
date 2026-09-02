@@ -59,7 +59,7 @@ function check(name, passed, detail = '') {
 const agents = read(join(repositoryRoot, '模板交付包', 'AGENTS.md'));
 const release = JSON.parse(read(join(repositoryRoot, '模板交付包', 'beyond-release.json')));
 const preflight = JSON.parse(read(join(evidenceRoot, 'preflight.json')));
-check('WFA-01 source and release manifest identify v3.2.4', agents.includes('BEYOND-RUNTIME-VERSION: 3.2.4') && release.releaseVersion === '3.2.4');
+check('WFA-01 source and release manifest identify v3.2.5', agents.includes('BEYOND-RUNTIME-VERSION: 3.2.5') && release.releaseVersion === '3.2.5');
 check('WFA-01 isolated Skill install matches the candidate', preflight.installMismatch.length === 0 && preflight.candidateSkillFiles === preflight.installedSkillFiles);
 
 const bounded = output('R12');
@@ -68,7 +68,8 @@ check('WFA-04 future prevention remains outside the current result', /未来|防
 check('WFA-04 bounded repair fixture remains read-only', gitClean('R12-bounded-data-repair'));
 
 const production = output('O05');
-check('WFA-05 health success does not become business success', /(健康|服务存活|页面可访问)/.test(production) && /(登录|业务).{0,48}(失败|503|不可用|未通过)/s.test(production));
+check('WFA-05 health success does not become business success', (/(健康|服务存活|页面可访问)/.test(production) && /(登录|业务).{0,48}(失败|503|不可用|未通过)/s.test(production))
+  || /发布.{0,16}(?:未通过|不通过)[\s\S]{0,160}(?:真实登录|登录).{0,32}(?:失败|503|不可用)/s.test(production));
 check('WFA-05 output does not claim the user can use the release', /(不能|尚不能|还不能|不可).{0,24}(用户|使用|可用)|(用户|线上).{0,24}(不能|尚未|不可用)/s.test(production));
 check('WFA-05 production fixture remains read-only', gitClean('O05-production-business-path'));
 

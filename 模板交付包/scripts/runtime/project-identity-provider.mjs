@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -122,6 +123,9 @@ export function evaluateProjectIdentity(snapshot) {
   if (currentLocal.length > 1) reasons.push('duplicate_local_registration_for_path');
   if (localBeyondIds.length > 1) reasons.push('multiple_beyond_ids_for_local_path');
   if (localCodexIds.length > 1) reasons.push('multiple_codex_ids_for_local_path');
+  const currentHostLocalForProject = localMappings.filter((item) => (!item.hostId || item.hostId === hostId)
+    && localBeyondIds.length === 1 && item.beyondProjectId === localBeyondIds[0]);
+  if (currentHostLocalForProject.length > 1) reasons.push('duplicate_local_registration_for_project');
 
   const routes = Array.isArray(snapshot.hostRoutes) ? snapshot.hostRoutes : [];
   const routeAtPath = routes.filter((item) => samePath(item.path, projectRoot));
@@ -222,6 +226,81 @@ function parseFrontmatter(text) {
   return values;
 }
 
+function parseRepositories(value, fallbackPath, fallbackRemote = null) {
+  if (value === undefined || value === null) {
+    return fallbackPath ? [{ path: canonicalPath(fallbackPath), remote: normalizeRemote(fallbackRemote), role: 'project-root' }] : [];
+  }
+  let parsed;
+  try { parsed = JSON.parse(value); }
+  catch { throw new Error('repositories_json must be a JSON array'); }
+  if (!Array.isArray(parsed)) throw new Error('repositories_json must be a JSON array');
+  const repositories = parsed.map((item) => {
+    if (typeof item === 'string' && item.trim()) {
+      const repositoryPath = canonicalPath(item);
+      const role = samePath(repositoryPath, fallbackPath) ? 'project-root' : 'component';
+      return { path: repositoryPath, remote: null, role, kind: role === 'component' ? 'git' : null };
+    }
+    if (!item || typeof item !== 'object' || Array.isArray(item) || typeof item.path !== 'string' || !item.path.trim()) {
+      throw new Error('repositories_json entries require a path');
+    }
+    const repositoryPath = canonicalPath(item.path);
+    const role = samePath(repositoryPath, fallbackPath) ? 'project-root' : 'component';
+    if (item.role !== undefined && !['project-root', 'component'].includes(item.role)) {
+      throw new Error('repositories_json entry role must be project-root or component');
+    }
+    if (item.role !== undefined && item.role !== role) throw new Error('repositories_json entry role does not match its path');
+    if (item.kind !== undefined && item.kind !== 'git') throw new Error('repositories_json entry kind must be git');
+    return {
+      path: repositoryPath,
+      remote: normalizeRemote(item.remote),
+      role,
+      kind: item.kind === 'git' || role === 'component' ? 'git' : null,
+    };
+  });
+  const paths = repositories.map((item) => pathKey(item.path));
+  if (new Set(paths).size !== paths.length) throw new Error('repositories_json contains duplicate paths');
+  return repositories;
+}
+
+function runGit(repositoryRoot, args) {
+  const result = spawnSync('git', ['-C', repositoryRoot, ...args], {
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  return {
+    status: result.status ?? 1,
+    stdout: String(result.stdout ?? '').trim(),
+    stderr: String(result.stderr ?? '').trim(),
+  };
+}
+
+function gitRepositoryFacts(repositoryRoot) {
+  const topLevel = runGit(repositoryRoot, ['rev-parse', '--show-toplevel']);
+  const commonDirectory = runGit(repositoryRoot, ['rev-parse', '--git-common-dir']);
+  if (topLevel.status !== 0 || commonDirectory.status !== 0) return null;
+  const common = path.isAbsolute(commonDirectory.stdout)
+    ? commonDirectory.stdout
+    : path.resolve(repositoryRoot, commonDirectory.stdout);
+  return {
+    topLevel: canonicalPath(topLevel.stdout),
+    commonDirectory: canonicalPath(common),
+    remote: normalizeRemote(runGit(repositoryRoot, ['remote', 'get-url', 'origin']).stdout),
+  };
+}
+
+function registeredWorktrees(repositoryRoot) {
+  const result = runGit(repositoryRoot, ['worktree', 'list', '--porcelain']);
+  if (result.status !== 0) return [];
+  return result.stdout.split(/\r?\n/)
+    .filter((line) => line.startsWith('worktree '))
+    .map((line) => canonicalPath(line.slice('worktree '.length).trim()));
+}
+
+function markerValues(text, name) {
+  const expression = new RegExp(`<!-- ${name}: ([^\\n]+) -->`, 'g');
+  return [...text.matchAll(expression)].map((match) => match[1].trim());
+}
+
 function readRegistrationDirectory(directory, kind) {
   const records = [];
   const issues = [];
@@ -233,12 +312,19 @@ function readRegistrationDirectory(directory, kind) {
     const file = path.join(directory, entry.name);
     const facts = parseFrontmatter(fs.readFileSync(file, 'utf8'));
     if (kind === 'local') {
+      let repositories = [];
+      try { repositories = parseRepositories(facts.repositories_json ?? facts.repository_roots_json, facts.path, facts.remote); }
+      catch (error) {
+        issues.push({ kind, file, path: facts.path || null, reason: `invalid_repositories:${error.message}` });
+      }
       const record = {
         beyondProjectId: facts.id || null,
         codexProjectId: facts.codex_project_id || null,
         path: facts.path || null,
         hostId: facts.host_id || null,
         remote: normalizeRemote(facts.remote),
+        repositories,
+        repositoryRoots: repositories.map((item) => item.path),
         sourceFile: file,
       };
       if (!record.beyondProjectId || !record.path) {
@@ -323,6 +409,144 @@ export class ProjectIdentityProvider {
     return { projectId: normalized, localRegistered, sharedRegistered };
   }
 
+  localProjectRecord(projectId) {
+    const registration = this.requireRegisteredProject(projectId);
+    if (!registration.localRegistered) throw new Error('Worker result write requires a local project registration');
+    const { local } = this.registrations();
+    const matches = local.records.filter((item) => item.beyondProjectId === registration.projectId);
+    if (matches.length !== 1) throw new Error('Worker result write requires exactly one local project registration');
+    const record = matches[0];
+    const pathMatches = local.records.filter((item) => samePath(item.path, record.path));
+    if (pathMatches.length !== 1) throw new Error('Worker result write requires one project id for the canonical local path');
+    if (local.issues.some((issue) => samePath(issue.path, record.path))) {
+      throw new Error('local project registration is invalid');
+    }
+    return record;
+  }
+
+  validateCanonicalBinding(record, projectId) {
+    const canonicalProjectRoot = canonicalPath(record.path);
+    const agentsPath = path.join(canonicalProjectRoot, 'AGENTS.md');
+    if (!fs.existsSync(agentsPath) || !fs.statSync(agentsPath).isFile()) {
+      throw new Error('canonical project AGENTS.md is missing');
+    }
+    const agents = fs.readFileSync(agentsPath, 'utf8').replace(/\r\n/g, '\n');
+    const controlMarkers = markerValues(agents, 'BEYOND-CONTROL-ROOT');
+    const projectMarkers = markerValues(agents, 'BEYOND-PROJECT-ID');
+    if (controlMarkers.length !== 1 || projectMarkers.length !== 1) {
+      throw new Error('canonical project markers must be unique');
+    }
+    const mappedControlRoot = canonicalPath(path.resolve(canonicalProjectRoot, controlMarkers[0]));
+    if (!samePath(mappedControlRoot, this.controlRoot)) throw new Error('canonical project AGENTS controlRoot mismatch');
+    if (projectMarkers[0] !== projectId) throw new Error('canonical project AGENTS projectId mismatch');
+    return { canonicalProjectRoot, agentsPath };
+  }
+
+  validateControlProject(projectId) {
+    const record = this.localProjectRecord(projectId);
+    this.validateCanonicalBinding(record, record.beyondProjectId);
+    return record;
+  }
+
+  validateRegisteredRepository(record, repositoryRoot) {
+    const registeredRepository = record.repositories.find((candidate) => samePath(candidate.path, repositoryRoot));
+    if (!registeredRepository) throw new Error('projectRoute repositoryRoot is not registered for this project');
+    const repositoryFacts = gitRepositoryFacts(repositoryRoot);
+    const requiresGit = registeredRepository.kind === 'git' || registeredRepository.role === 'component'
+      || Boolean(registeredRepository.remote);
+    if (requiresGit && (!repositoryFacts || !samePath(repositoryFacts.topLevel, repositoryRoot))) {
+      throw new Error('projectRoute repositoryRoot is not an exact Git repository root');
+    }
+    if (registeredRepository.remote && repositoryFacts?.remote !== registeredRepository.remote) {
+      throw new Error('projectRoute repository remote does not match registration');
+    }
+    return { registeredRepository, repositoryFacts };
+  }
+
+  validateSameRootProject(projectId, context = {}) {
+    const record = this.localProjectRecord(projectId);
+    const binding = this.validateCanonicalBinding(record, record.beyondProjectId);
+    const executionRoot = canonicalPath(context.executionRoot);
+    if (!executionRoot || !samePath(executionRoot, binding.canonicalProjectRoot)) {
+      throw new Error('Worker result write outside canonical project root requires projectRoute');
+    }
+    const canonicalRepository = gitRepositoryFacts(binding.canonicalProjectRoot);
+    if (canonicalRepository && samePath(canonicalRepository.topLevel, binding.canonicalProjectRoot)) {
+      try { this.validateRegisteredRepository(record, binding.canonicalProjectRoot); }
+      catch (error) { throw new Error(`canonical Git project root is not an allowed execution repository: ${error.message}`); }
+    }
+    return {
+      projectId: record.beyondProjectId,
+      canonicalProjectRoot: binding.canonicalProjectRoot,
+      controlRoot: canonicalPath(this.controlRoot),
+      executionRoot,
+      relation: 'same-root',
+    };
+  }
+
+  validateWorkerRoute(projectId, rawRoute, context = {}) {
+    if (!rawRoute || typeof rawRoute !== 'object' || Array.isArray(rawRoute)) {
+      throw new Error('projectRoute must be an object');
+    }
+    const record = this.localProjectRecord(projectId);
+    const registration = { projectId: record.beyondProjectId };
+    const routeProjectId = String(rawRoute.projectId ?? '').trim();
+    if (routeProjectId !== registration.projectId) throw new Error('projectRoute projectId mismatch');
+    const canonicalProjectRoot = canonicalPath(rawRoute.canonicalProjectRoot);
+    const controlRoot = canonicalPath(rawRoute.controlRoot);
+    const repositoryRoot = canonicalPath(rawRoute.repositoryRoot);
+    const executionRoot = canonicalPath(rawRoute.executionRoot);
+    if (!canonicalProjectRoot || !controlRoot || !repositoryRoot || !executionRoot) {
+      throw new Error('projectRoute requires canonicalProjectRoot, controlRoot, repositoryRoot and executionRoot');
+    }
+    for (const [label, value] of [
+      ['canonicalProjectRoot', canonicalProjectRoot], ['controlRoot', controlRoot],
+      ['repositoryRoot', repositoryRoot], ['executionRoot', executionRoot],
+    ]) {
+      if (!fs.existsSync(value) || !fs.statSync(value).isDirectory()) throw new Error(`projectRoute ${label} is not a directory`);
+    }
+    if (!samePath(canonicalProjectRoot, record.path)) throw new Error('projectRoute canonicalProjectRoot mismatch');
+    if (!samePath(controlRoot, this.controlRoot)) throw new Error('projectRoute controlRoot mismatch');
+    const hostId = String(rawRoute.hostId ?? '').trim();
+    const codexProjectId = String(rawRoute.codexProjectId ?? '').trim();
+    if (!hostId || !codexProjectId) throw new Error('projectRoute requires hostId and codexProjectId');
+    if (!record.hostId || hostId !== record.hostId) throw new Error('projectRoute hostId mismatch');
+    if (!record.codexProjectId || codexProjectId !== record.codexProjectId) throw new Error('projectRoute codexProjectId mismatch');
+
+    try { this.validateCanonicalBinding(record, registration.projectId); }
+    catch (error) { throw new Error(`projectRoute ${error.message}`); }
+
+    const repositoryValidation = this.validateRegisteredRepository(record, repositoryRoot);
+    const callerRoot = canonicalPath(context.executionRoot);
+    if (!callerRoot || !samePath(callerRoot, executionRoot)) {
+      throw new Error('projectRoute executionRoot does not match runtime working directory');
+    }
+
+    let relation = 'canonical';
+    if (!samePath(executionRoot, repositoryRoot)) {
+      const canonicalRepository = repositoryValidation.repositoryFacts;
+      const executionRepository = gitRepositoryFacts(executionRoot);
+      if (!canonicalRepository || !executionRepository
+        || !samePath(canonicalRepository.topLevel, repositoryRoot)
+        || !samePath(executionRepository.topLevel, executionRoot)
+        || !samePath(canonicalRepository.commonDirectory, executionRepository.commonDirectory)
+        || !registeredWorktrees(repositoryRoot).some((candidate) => samePath(candidate, executionRoot))) {
+        throw new Error('projectRoute executionRoot is not a registered worktree of repositoryRoot');
+      }
+      relation = 'worktree';
+    }
+    return {
+      projectId: registration.projectId,
+      canonicalProjectRoot,
+      controlRoot,
+      repositoryRoot,
+      executionRoot,
+      hostId,
+      codexProjectId,
+      relation,
+    };
+  }
+
   resolve(input) {
     const { local, shared } = this.registrations();
     const hostRoutes = readHostRoutes(input);
@@ -335,6 +559,25 @@ export class ProjectIdentityProvider {
       registrationIssues,
     };
     const decision = evaluateProjectIdentity(decisionInput);
+    const matchingLocal = local.records.filter((item) => item.beyondProjectId === decision.identities.beyondProjectId
+      && samePath(item.path, decision.normalized.projectRoot)
+      && (!item.hostId || item.hostId === decision.normalized.hostId));
+    const requestedRepositoryRoot = canonicalPath(input.repositoryRoot ?? decision.normalized.projectRoot);
+    const allowedRepositoryRoots = matchingLocal.length === 1
+      ? unique(matchingLocal[0].repositoryRoots.map(canonicalPath))
+      : [];
+    const routingIssues = [];
+    if (decision.status === 'verified' && matchingLocal.length === 1) {
+      try { this.validateCanonicalBinding(matchingLocal[0], decision.identities.beyondProjectId); }
+      catch (error) { routingIssues.push({ reason: 'canonical_project_binding_invalid', detail: error.message }); }
+      if (allowedRepositoryRoots.some((candidate) => samePath(candidate, requestedRepositoryRoot))) {
+        try { this.validateRegisteredRepository(matchingLocal[0], requestedRepositoryRoot); }
+        catch (error) { routingIssues.push({ reason: 'registered_repository_invalid', detail: error.message }); }
+      }
+    }
+    const effectiveDecision = routingIssues.length > 0
+      ? result('conflict', [...decision.reasons, ...routingIssues.map((issue) => issue.reason)], decision.normalized, decision.identities)
+      : decision;
     const safeSnapshot = {
       cwd: decision.normalized.cwd,
       projectRoot: decision.normalized.projectRoot,
@@ -368,7 +611,7 @@ export class ProjectIdentityProvider {
     const cacheFile = path.join(this.runtimeRoot, `resolution-${cacheKey}.json`);
     const evidence = {
       fingerprint,
-      issues: safeSnapshot.registrationIssues,
+      issues: [...safeSnapshot.registrationIssues, ...routingIssues],
       resolvedAt: new Date().toISOString(),
     };
     safeWriteJson(cacheFile, {
@@ -384,10 +627,27 @@ export class ProjectIdentityProvider {
         hostRouteFilesRead: hostRoutes.filesRead,
       },
       snapshot: safeSnapshot,
-      result: decision,
+      result: effectiveDecision,
     });
+    const routeHostId = matchingLocal[0]?.hostId ?? null;
+    const routeCodexProjectId = matchingLocal[0]?.codexProjectId ?? null;
+    const projectRoute = effectiveDecision.status === 'verified' && matchingLocal.length === 1
+      && routeHostId === effectiveDecision.normalized.hostId
+      && routeCodexProjectId === effectiveDecision.identities.codexProjectId
+      && allowedRepositoryRoots.some((candidate) => samePath(candidate, requestedRepositoryRoot))
+      ? {
+          projectId: effectiveDecision.identities.beyondProjectId,
+          canonicalProjectRoot: canonicalPath(matchingLocal[0].path),
+          controlRoot: canonicalPath(this.controlRoot),
+          repositoryRoot: requestedRepositoryRoot,
+          hostId: routeHostId,
+          codexProjectId: routeCodexProjectId,
+        }
+      : null;
     return {
-      ...decision,
+      ...effectiveDecision,
+      projectRoute,
+      registeredRepositoryRoots: allowedRepositoryRoots,
       evidence,
       sourceCounts: {
         localMappings: local.records.length,
@@ -403,8 +663,11 @@ export class ProjectIdentityProvider {
 
 export const projectIdentityInternals = {
   canonicalPath,
+  gitRepositoryFacts,
   insideOrEqual,
   normalizeRemote,
   parseFrontmatter,
+  parseRepositories,
+  registeredWorktrees,
   samePath,
 };

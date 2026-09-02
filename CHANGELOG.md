@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.5] - 2026-09-02
+
+### Changed
+
+- Formalize project routing as `canonicalProjectRoot`, `repositoryRoot`, `executionRoot`, and `controlRoot`, allowing one BEYOND project to govern multiple explicitly registered repositories, external roots, and existing worktrees without creating a second workspace.
+- Make a new PM read the current project overview, workbench, fact index, all current primary fact owners, and repository/module map once before judging the mainline or dispatching work; established PMs refresh only changed current facts.
+- Let the PM use a lightweight `task-design` mode to turn nontrivial short requests into compact business task contracts while keeping technical design and execution with the unique Worker and avoiding routine design artifacts.
+- Treat the external `.sha256` sidecar as optional verification material instead of an installation prerequisite; a supplied mismatch still stops installation, while in-package and installed-content verification remain mandatory.
+
+### Fixed
+
+- Scope short-lived Worker-result receipts by both project ID and task ID, migrate legacy task-only pending receipts with concurrency-safe handoff, and preserve registered repository roots plus host/Codex bindings across upgrades while rejecting route or remote drift.
+- Prevent short prompts from being completed by inference before the PM has read the project's current facts, and prevent compact task design from expanding into copied runbooks, implementation checklists, or extra documents.
+
 ## [3.2.4] - 2026-08-26
 
 ### Changed

@@ -60,9 +60,9 @@ PM不会代替Worker写代码，也不会为了“掌控进度”持续读取和
 ### 1. 下载正式版本
 
 - [BEYOND-3.2.4.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip)
-- [BEYOND-3.2.4.zip.sha256](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip.sha256)
+- [BEYOND-3.2.4.zip.sha256（可选校验文件）](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip.sha256)
 
-先核对校验文件，再解压。完整命令见[安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md)。
+ZIP即可安装；`.sha256`缺失或下载失败不阻断安装。若提供了校验文件而哈希不一致，则必须停止。完整命令见[安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md)。
 
 ### 2. 让 Codex 完成安装
 

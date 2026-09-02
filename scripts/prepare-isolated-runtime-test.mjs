@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -500,6 +501,38 @@ function setHealthyWorkbench(root) {
   );
 }
 
+function setFullTakeoverFixture(root) {
+  setHealthyWorkbench(root);
+  writeFixture(root, "local/projects/local-p01-full.md", `# 本机项目登记
+
+- 项目编号：local-p01-full
+- 正式项目根：当前隔离目录
+- 控制根：当前隔离目录
+- 当前路由：本地项目根
+`);
+  writeFixture(root, "projects/local-p01-full/项目总览.md", `# 计算器示例项目总览
+
+- 稳定目标：维护一个零第三方依赖、可直接验证的本地计算器示例。
+- 业务边界：只提供小型算术能力，不引入网络、数据库或发布流程。
+- 模块地图：src负责实现，test负责Node内置测试，README说明用户入口。
+- 长期事实索引：projects/local-p01-full/项目事实/README.md
+`);
+  writeFixture(root, "projects/local-p01-full/项目事实/README.md", `# 当前项目事实索引
+
+| 事实领域 | 项目实际入口 | 只负责 |
+| --- | --- | --- |
+| 产品边界 | README.md | 项目目标、使用入口和示例边界 |
+| 工程与测试 | project-facts/engineering.md | 运行时、源码模块和测试入口 |
+`);
+  writeFixture(root, "project-facts/engineering.md", `# 当前工程与测试事实
+
+- Runtime：Node.js 18或更高版本。
+- 源码入口：src/calc.js。
+- 测试入口：npm test与npm run check。
+- 当前不使用第三方依赖。
+`);
+}
+
 function setPausedTakeoverWorkbench(root) {
   setWorkbench(
     root,
@@ -746,7 +779,7 @@ if (!existsSync(sourceAuth)) {
 }
 cpSync(sourceAuth, join(isolatedCodexHome, "auth.json"));
 
-for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "O06-running-session-continuation", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return", "P18-team-list", "P19-team-from-business", "P20-new-init-cold", "P21-existing-init-cold", "P22-pm-sweep-priority", "P23-post-fusion-initialization", "P24-pm-natural-pending-recovery", "WFA02-workbench-convergence", "WFA03-semantic-layers", "WFA06-audit-retest", "WFA08-shared-test-coupling", "WFA09-evidence-granularity", "WFA10-status-summary", "WFA12-fact-over-summary", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration", "K6-N03-approval", "K6-N05-discussion", "K6-N06-answer-only", "K6-N08-outage", "K6-N09-two-results", "K6-N10-temporary-model", "K6-W02-stage-progress", "K6-W04-background-job", "K6-W07-completion-question", "K6-G01-git-parallel", "K6-G03-tool-priority", "K6-B01-user-path", "L5-file-hygiene", "L8B-explicit-authorization", "L9-control-root"]) {
+for (const caseName of ["I03-discovery", "R01-direct", "R02-worker", "R05-explicit-design", "D01-design-correction", "R06-pause", "R07-method-priority", "R08-production-baseline", "R09-test-denominator", "R10-user-flow-acceptance", "R11-git-hook-boundary", "R12-bounded-data-repair", "R13-unbounded-data-repair", "O01-ops", "O02-ssh-facts", "O05-production-business-path", "O06-running-session-continuation", "P01-pm-healthy", "P02-pm-empty", "P03-pm-delegation", "P04-document-migration", "P05-checkpoint-resume", "P06-candidate-isolation", "P07-one-result-one-worker", "P08-parallel-results", "P09-runtime-stop-scope", "P10-fresh-project-task", "P11-inherited-context-isolation", "P12-continuation-no-automation", "P13-model-selection", "P14-takeover-paused", "P15-control-kernel-dispatch", "P16-control-kernel-duplicate", "P17-worker-terminal-return", "P18-team-list", "P19-team-from-business", "P20-new-init-cold", "P21-existing-init-cold", "P22-pm-sweep-priority", "P23-post-fusion-initialization", "P24-pm-natural-pending-recovery", "P29-workbench-close", "WFA02-workbench-convergence", "WFA03-semantic-layers", "WFA06-audit-retest", "WFA08-shared-test-coupling", "WFA09-evidence-granularity", "WFA10-status-summary", "WFA12-fact-over-summary", "WST-SIM-01-fail-closed-continuation", "WST-SIM-02-acceptance-correction", "WST-PM-Q1-design", "WST-PM-Q2-develop", "WST-PM-Q3-release", "WST-PM-Q4-bugfix", "WST-AB-Q1-design", "WST-AB-Q2-develop", "WST-AB-Q3-release", "WST-AB-Q4-bugfix", "WST-AB-PACKET-review", "WST-PM-COMMS-status", "WST-WORKER-CALLBACK-result", "WST-USER-LANGUAGE-direct", "WST-USER-LANGUAGE-worker", "WST-CONTROL-PLANE-integration", "K6-N03-approval", "K6-N05-discussion", "K6-N06-answer-only", "K6-N08-outage", "K6-N09-two-results", "K6-N10-temporary-model", "K6-W02-stage-progress", "K6-W04-background-job", "K6-W07-completion-question", "K6-G01-git-parallel", "K6-G03-tool-priority", "K6-B01-user-path", "L5-file-hygiene", "L8B-explicit-authorization", "L9-control-root"]) {
   copyProjectFixture(join(casesRoot, caseName));
 }
 
@@ -894,11 +927,13 @@ writeFixture(productionBusinessPath, "evidence/release-status.md", `# 发布后�
 `);
 initializeGit(productionBusinessPath, "fixture: health green but login path failed");
 
-for (const caseName of ["P01-pm-healthy", "P03-pm-delegation"]) {
-  const root = join(casesRoot, caseName);
-  setHealthyWorkbench(root);
-  initializeGit(root, `fixture: ${caseName}`);
-}
+const p01 = join(casesRoot, "P01-pm-healthy");
+setFullTakeoverFixture(p01);
+initializeGit(p01, "fixture: new PM full project takeover");
+
+const p03 = join(casesRoot, "P03-pm-delegation");
+setHealthyWorkbench(p03);
+initializeGit(p03, "fixture: P03-pm-delegation");
 initializeGit(join(casesRoot, "P02-pm-empty"), "fixture: empty workbench");
 
 const p05 = join(casesRoot, "P05-checkpoint-resume");
@@ -942,6 +977,52 @@ setWorkbench(
   "| 完成任务A | worker-a | 进行中 | 已保存完成pending，忙碌回调未形成后续PM回合 | 无 | 无 | 2026-08-26 |\n| 完成任务B | worker-b | 进行中 | 已保存完成pending，原生回调遗漏 | 无 | 无 | 2026-08-26 |",
 );
 initializeGit(p24, "fixture: natural PM turn recovers matching pending results once");
+
+const p29 = join(casesRoot, "P29-workbench-close");
+writeFileSync(
+  join(p29, "AGENTS.md"),
+  readFileSync(join(p29, "AGENTS.md"), "utf8").replace(
+    /^(<!-- BEYOND-RUNTIME-VERSION: [^\r\n]+ -->)/,
+    `$1\n<!-- BEYOND-CONTROL-ROOT: . -->\n<!-- BEYOND-PROJECT-ID: local-p29-close -->`,
+  ),
+);
+writeFixture(p29, "local/projects/local-p29-close.md", `---
+id: local-p29-close
+path: ${p29.replaceAll("\\", "/")}
+repositories_json: [{"path":${JSON.stringify(p29.replaceAll("\\", "/"))},"remote":null,"role":"project-root"}]
+---
+`);
+writeFixture(p29, "shared/projects/local-p29-close.md", `---
+id: local-p29-close
+---
+`);
+setWorkbench(
+  p29,
+  "| 2026-08-31 | 等待老板决定关闭旧验证任务 | 进行中 | 尚未登记测试任务 | 当前工作台 | 通过固定入口登记后再验证关闭 | 无 |",
+  "| 当前无活动正式任务 | 无 | 已完成 | 等待固定入口登记关闭测试任务 | 无 | 当前工作台 | 2026-08-31 |",
+);
+const p29RegisterRequest = join(p29, ".prepare-register-close.json");
+writeFileSync(p29RegisterRequest, `${JSON.stringify({
+  schemaVersion: 1,
+  requestId: "prepare-register-p29-close",
+  action: "workbench.register",
+  input: {
+    taskId: "p29-close-me",
+    task: "关闭旧验证任务",
+    worker: "worker-close-p29",
+    status: "已暂停",
+    progress: "原Worker已停止，等待老板决定",
+    pause: "老板决定是否继续",
+    result: "thread://worker-close-p29",
+    updatedAt: "2026-08-31T10:00:00+08:00",
+  },
+}, null, 2)}\n`);
+execFileSync(process.execPath, [join(p29, "scripts", "beyond-control.mjs"), "runtime", "--request", p29RegisterRequest], {
+  cwd: p29,
+  encoding: "utf8",
+});
+rmSync(p29RegisterRequest, { force: true });
+initializeGit(p29, "fixture: owner-authorized task closure");
 
 const p13 = join(casesRoot, "P13-model-selection");
 setHealthyWorkbench(p13);

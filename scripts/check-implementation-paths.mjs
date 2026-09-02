@@ -62,6 +62,11 @@ const documentEntry = read("模板交付包/docs/AI编程协同机制/00-模板�
 const projectOverview = read("模板交付包/docs/AI编程协同机制/项目总览.md");
 const projectFacts = read("模板交付包/docs/AI编程协同机制/项目事实/README.md");
 const architecture = read("docs/系统架构与运行机制.md");
+const architectureEn = read("docs/en/architecture.md");
+const terminalReturnHistory = read("docs/PM结果回传中断修复记录.md");
+const changelog = read("CHANGELOG.md");
+const release325Zh = read("docs/releases/v3.2.5.md");
+const release325En = read("docs/en/releases/v3.2.5.md");
 const collaboration = read("模板交付包/docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md");
 const workerCollaboration = read("模板交付包/skills/identity-worker/references/collaboration-and-rework.md");
 const workerCapability = read("模板交付包/skills/identity-worker/references/capability-correction-and-cost.md");
@@ -106,8 +111,19 @@ forbidText("英文快速开始不宣称安装身份护栏", quickStartEn, "proje
 requireText("架构明确Hook不是安装前提", architecture, "BEYOND不把平台Hook作为身份或安装前提");
 requireText("中文安装不要求Git项目", installGuideZh, "不得把`git rev-parse`成功作为项目根前提");
 requireText("中文备份对账包含隐藏文件", installGuideZh, "Get-ChildItem -Force -Recurse -File");
+requireText("中文安装备份只覆盖实际覆盖对象", installGuideZh, "回滚前像只覆盖本轮实际会替换或融合的对象");
+requireText("中文安装保留区不进入权限门禁", installGuideZh, "不进入覆盖清单和备份权限门禁");
+requireText("中文安装不可读缓存不阻断", installGuideZh, "保留区内不可读的缓存不构成安装阻断");
+requireText("中文外置SHA缺失不阻断安装", installGuideZh, "缺失或下载失败不阻断安装");
+requireText("中文外置SHA不一致仍停止", installGuideZh, "文件存在但哈希不一致时必须停止");
+forbidText("中文安装不再要求备份整个控制仓资料", installGuideZh, "先备份已有项目入口和控制仓本机资料");
 requireText("英文安装不要求Git项目", installGuideEn, "never make a successful `git rev-parse` a prerequisite");
 requireText("英文备份对账包含隐藏文件", installGuideEn, "Get-ChildItem -Force -Recurse -File");
+requireText("英文安装备份只覆盖实际覆盖对象", installGuideEn, "rollback preimage covers only objects that this run will actually replace or fuse");
+requireText("英文安装保留区不进入权限门禁", installGuideEn, "outside both the overwrite set and the backup-permission gate");
+requireText("英文安装不可读缓存不阻断", installGuideEn, "do not treat an unreadable cache inside them as an installation blocker");
+requireText("英文外置SHA缺失不阻断安装", installGuideEn, "A missing or unavailable checksum file does not block installation");
+requireText("英文外置SHA不一致仍停止", installGuideEn, "a supplied checksum that does not match must stop it");
 
 // S1：普通局部 BUG。
 requireText("S1清晰请求不制造任务", agents, "清晰请求不输出接手仪式，不凭空制造正式任务");
@@ -165,7 +181,7 @@ requireText("内部子智能体不冒充正式Worker", pm, "内部子智能体�
 requireText("安排其他人包含建任务意图", pm, "要求团队完成已明确或已批准的独立业务结果");
 requireText("明确团队任务不二次确认", pm, "不重复询问已经给出的目标和授权");
 requireText("任务包不是执行手册", pm, "任务包是业务契约，不是PM替Worker编写的执行手册");
-requireText("任务包不是固定表单", pm, "普通任务包不是表单，通常只有两到四个短段");
+requireText("任务包不是固定表单", pm, "任务包通常只有两到四个短段");
 requireText("任务包不重复系统通则", pm, "系统通则已经生效时不在每个任务中重述");
 requireText("普通任务包保持两到四个短段", pm, "通常只有两到四个短段");
 requireText("任务包不复制通用禁止项", pm, "不要展开调查步骤、实现方法、测试组合、证据目录或通用禁止项");
@@ -201,24 +217,44 @@ requireText("正式任务只显式启动Worker", pm, "初始提示首行只放`$
 requireText("PM不预选Action Skill", pm, "PM不预选Action Skill");
 requireText("正式任务必须是全新项目任务", pm, "全新用户可见项目任务");
 requireText("项目身份走确定性入口", pm, "`project.resolve`");
-requireText("项目身份非绿不降级", pm, "结果不是`verified`时按真实原因停止，不降级成projectless");
+requireText("项目身份非绿不降级", pm, "否则停止，不降级成projectless");
 requireText("项目身份实现四级裁决", projectIdentityRuntime, "verified: {");
 requireText("项目身份冲突阻止建任务", projectIdentityRuntime, "createWorker: false");
 requireText("正式Worker固定local环境", pm, "`environment.type=local`");
-requireText("创建时不请求worktree", pm, "不使用fork、内部助手或worktree");
-requireText("PM按工作性质形成确定类别", pm, "ordinary-engineering");
+requireText("创建时不请求worktree", pm, "不使用fork、内部助手，也不创建或推荐worktree");
+requireText("PM按工作性质形成确定类别", pmDispatch, "ordinary-engineering");
 requireText("PM通过唯一固定动作解析Worker策略", pm, "worker-policy --action resolve");
 requireText("PM不按风险名词升级模型", pmDispatch, "不按任务包中出现的风险名词升级");
 requireText("PM拿不准时使用常规工程类别", pmDispatch, "拿不准时先用`ordinary-engineering`");
-requireText("PM保留用户明确的当轮临时Worker模型选择", pmDispatch, "当前PM对话中老板明确指定的临时参数");
-requireText("未批准项目策略保留平台默认", pmDispatch, "才覆盖平台默认");
-requireText("项目策略只影响新建正式Worker", pmDispatch, "仅适用于新建正式Worker");
-requireText("PM模型不受Worker策略影响", pmDispatch, "当前PM本身不变");
-requireText("模型参数不进入业务任务包", pmDispatch, "模型参数不写进业务任务包");
+requireText("PM保留用户明确的当轮临时Worker模型选择", pm, "老板当轮明确指定的临时参数");
+requireText("未批准项目策略保留平台默认", pm, "无值省略并保留平台默认");
+requireText("项目策略只影响后续新建正式Worker", pm, "可覆盖后续新Worker");
+requireText("PM模型不受Worker策略影响", pm, "不得读取或继承当前PM参数");
+requireText("模型参数不进入业务任务包", pm, "不进入业务任务包");
+requireText("派单reference不复制模型参数算法", pmDispatch, "不保存模型参数表，也不复制创建算法");
+requireCondition(
+  "Worker模型参数表只有固定脚本一个所有者",
+  !/gpt-5\.6-(?:terra|luna|sol)/.test(`${projectOverview}\n${pm}\n${pmDispatch}`),
+  "项目总览或PM规则仍复制具体模型参数",
+);
 requireText("Worker回调只负责唤醒扫描", pm, "Worker回调只表示需要扫描");
 requireText("Worker冻结同一份正式结果", worker, "同一份final作为本轮最后一个动作输出并结束");
-requireText("正式任务包携带回执控制标识", pm, "控制标识：projectId=<当前正式项目编号>；taskId=<本结果唯一任务编号>");
+requireText("正式任务包携带回执控制标识", pm, "控制标识：projectId=<当前正式项目编号>；taskId=<控制仓唯一任务编号>");
+requireText("跨根任务包携带验证路由", pm, "原样放入project.resolve返回的projectRoute");
+requireText("同根任务不被路由误阻断", pm, "跨根、多仓或既有worktree把本次`projectRoute`原样写入`create_thread.prompt`");
+requireText("PM不手写控制路由", pm, "不手写、猜测或沿用旧route");
+requireText("PM先按当前任务选择工作落点", pm, "先按当前任务的`结果与验收 + 对象与边界`确定本Worker的实际工作落点");
+requireText("PM同根任务不借用组件路由", pm, "项目存在组件仓不等于当前任务属于组件仓");
+requireText("PM复核解析结果仍属本任务", pm, "核对返回的`repositoryRoot`仍是刚确定的本次工作落点");
+requireText("路由解析不替代业务归属判断", pmDispatch, "`project.resolve`负责验证PM请求的项目与仓库关系是否已经正式登记，不替PM判断当前业务结果应该在哪个仓库执行");
+requireText("合法路由不等于任务语义正确", pmDispatch, "`verified`只说明所请求的route合法，不说明它与本任务语义相符");
+requireText("多仓结果不新增路由任务", pmDispatch, "不新增“路由任务”或强拆业务结果");
+requireText("既有worktree不授权主checkout写入", pm, "不授权Worker跨回主checkout修改业务对象");
 requireText("Worker先保存短期终态回执", worker, "执行一次`worker-result.enqueue`");
+requireText("Worker区分四类根路径", worker, "`canonicalProjectRoot`是BEYOND正式项目根");
+requireText("Worker跨根只用验证路由", worker, "只调用其中精确`controlRoot`下的固定runtime");
+requireText("Worker从执行根调用跨根runtime", worker, "调用工作目录必须是当前`executionRoot`");
+requireText("runtime复核worktree关系", worker, "复核本机项目登记、canonical根入口以及Git/worktree关系");
 requireText("回执不是第二业务真值", worker, "不是第二种业务真值、消息历史或长期证据");
 requireText("Worker回源目标取平台来源编号", worker, "回源目标只取当前平台任务包装提供的`source_thread_id`");
 requireText("Worker不把自身编号当回源目标", worker, "当前Worker `threadId`不是回源目标");
@@ -250,7 +286,7 @@ requireText("可复现命令入口优先于网页操作", agents, "Git 优先使
 requireText("网页操作只在必要时进入", agents, "不把本可自动完成的操作转成网页登录和人工点击");
 requireText("未完成阶段final不是终态", pm, "明确未完成的阶段final不是终态");
 requireText("PM只恢复未完成阶段", pm, "PM只恢复原Worker继续");
-requireText("原验收缺启动发布不拆任务", pm, "补齐验收继续使用原Worker");
+requireText("原验收缺启动发布不拆任务", pm, "同一结果的检查点、返工和补验收沿用原Worker");
 requireText("创建成功必须返回正式线程", pm, "返回`threadId + hostId`才登记唯一Worker");
 requireText("排队句柄不冒充Worker", pmDispatch, "只返回`clientThreadId`表示仍在排队");
 requireText("创建错误不换路由补建", pmDispatch, "创建失败只报告一次，不改用fork、projectless、内部助手或其他目录补建");
@@ -261,7 +297,7 @@ requireText("PM恢复成功后立即退出", pm, "恢复消息发送成功后同
 requireText("PM不等待和轮询", pmDispatch, "不等待或转播过程");
 requireText("根入口或Skills替换后重启验真", pmDispatch, "重启Codex并从新进程验真");
 requireText("新回执不恢复旧投递栈", pmLifecycle, "不引入Hook、notify适配器、额外Codex CLI或后台进程");
-requireText("正式任务禁止fork承载", pm, "不使用fork、内部助手或worktree");
+requireText("正式任务禁止fork承载", pm, "不使用fork、内部助手，也不创建或推荐worktree");
 requireText("正式任务禁止projectless降级", pm, "不降级成projectless");
 requireText("错误项目任务先停止再纠正", worker, "在任何业务读取、网络、写入或运行操作前停止错误路由");
 requireText("Worker以final作为最后动作", worker, "只把已冻结的同一份final作为本轮最后一个动作输出并结束");
@@ -287,23 +323,53 @@ requireText("PM自然回合空列表走最短路径", pmLifecycle, "列表为空
 requireText("PM自然回合不扫描无关Worker", pmLifecycle, "不扫描无关Worker");
 requireText("PM遗留回执只做幂等补ack", pmLifecycle, "工作台事务已经幂等成功时才补一次`worker-result.ack`");
 requireText("PM当前用户问题优先", pm, "当前用户问题始终优先");
+requireText("PM并发回调不得打断前台回答", pm, "任何回调都不得打断前台回答");
+requireText("PM多回调不得覆盖遗漏", pm, "多条回调不得覆盖或遗漏");
+requireText("PM尾部汇总全部已处理结果", pm, "尾部合并列出本回合实际处理的每个后台结果");
+requireText("PM执行期督导只处理全局裁决", pm, "需要项目全貌裁决主线、其他任务或共享对象时");
+requireText("PM执行期督导不转换终态", pm, "任务保持`进行中`，不使用终态回执、`pause`或`accept`");
 requireText("PM沿正式final与证据核验", pm, "final指向的一手证据是否直接覆盖验收");
 requireText("PM不以逐字一致制造重复终态", pm, "不要求措辞逐字一致");
 requireText("PM只在实质矛盾时退回原Worker", pmLifecycle, "两者存在实质矛盾时保持未验收并退回原Worker");
 requireText("Worker回源固定使用prompt字段", worker, '"prompt":"当前Worker正在提交终态');
+requireText("Worker完成后必须报告来源PM", worker, "Worker把正式任务做完后必须向唯一来源PM报告一次");
+requireText("Worker不因PM忙碌跳过回调", worker, "来源PM正在回答老板、暂时忙碌或可能延后处理，都不能成为跳过终态回执或原生回调的理由");
+requireText("Worker非终态督导不生成回执", worker, "这种说明不执行`worker-result.enqueue`");
 requireText("Worker回源明确禁止message字段", worker, "不得写成`message`");
 forbidText("PM不再要求正文指纹逐字一致", pmLifecycle, "正文指纹一致");
 forbidText("Worker主入口不再要求写收件箱", worker, "inbox --action enqueue");
 forbidText("PM主入口不再每回合读取收件箱", pm, "每个用户发起的 PM 新回合都先调用一次固定脚本`inbox");
 forbidText("固定脚本不再提供结果收件箱", controlScript, "function inbox()");
 forbidText("固定脚本不再复制终态到local inbox", controlScript, 'join(controlRoot, "local", "inbox", "pending", projectId)');
-requireText("统一机器入口接入总脚本", controlScript, 'executeRuntimeRequest(request, { controlRoot })');
+requireText("统一机器入口接入总脚本", controlScript, 'executeRuntimeRequest(request, { controlRoot, executionRoot: process.cwd() })');
 requireText("统一机器入口使用版本化请求", controlRuntime, "request.schemaVersion !== 1");
 requireText("统一机器入口支持老工作台迁移", controlRuntime, "'workbench.migrate'");
 requireText("统一机器入口支持终态回执入队", controlRuntime, "'worker-result.enqueue'");
 requireText("统一机器入口支持终态回执扫描", controlRuntime, "'worker-result.list'");
 requireText("统一机器入口支持终态回执删除", controlRuntime, "'worker-result.ack'");
+requireText("统一机器入口支持老板主动关闭", controlRuntime, "'workbench.close'");
+requireText("PM主动关闭公开最小请求契约", pmLifecycle, '"ownerDirective": "explicit-owner-instruction"');
+requireText("PM主动关闭分离授权哨兵原因和入口", pmLifecycle, "三者不得互换");
+requireCondition(
+  "PM主动关闭使用稳定幂等编号",
+  pmLifecycle.includes("普通任务的`requestId`与`operationId`都固定为`close-<taskId>`")
+    && pmLifecycle.includes('"requestId": "close-<taskId>"')
+    && pmLifecycle.includes('"operationId": "close-<taskId>"'),
+  "关闭合同未把requestId与operationId绑定到同一个安全稳定编号",
+);
+requireText("PM主动关闭不读取runtime实现源码", pmLifecycle, "PM不得为构造关闭请求读取`control-runtime.mjs`");
+requireText("runtime拒绝把登记Worker冒充来源线程", controlRuntime, "sourceThreadId cannot equal the registered Worker");
+requireText("runtime仅在提供Worker编号时核对登记Worker", controlRuntime, "workerThreadId does not match the registered Worker");
+requireText("runtime在机器状态缺少工作台视图时失败关闭", controlRuntime, "workbench view is missing beside machine state");
+requireText("PM消费回执时匹配当前来源PM", pmLifecycle, "按`projectId + taskId + sourceThreadId`匹配当前PM");
 requireText("终态回执正文消费后物理删除", workerResultRuntime, "fs.unlinkSync(target)");
+requireText("终态回执按项目和任务隔离", workerResultRuntime, "receiptPath(projectId, taskId)");
+requireText("终态回执ack核对项目", workerResultRuntime, "Worker result receipt project mismatch");
+requireText("终态回执迁移旧任务命名空间", workerResultRuntime, "migratePendingLayout()");
+requireText("runtime验证既有worktree控制路由", projectIdentityRuntime, "validateWorkerRoute(projectId, rawRoute");
+requireText("runtime限制无路由请求只能从正式项目根执行", projectIdentityRuntime, "validateSameRootProject(projectId, context = {})");
+requireText("回执扫描强制绑定本机项目与规范入口", controlRuntime, "validateControlProject(nonEmpty(input.projectId, 'projectId'))");
+requireText("项目登记保存机器可读仓路径", controlScript, "repositories_json:");
 requireText("Worker运行请求明确只接收文件路径", worker, "不能传JSON正文");
 requireText("Worker结果请求字段固定", worker, '"action":"worker-result.enqueue"');
 requireText("Worker结果请求可省略无效requestId负担", worker, "`requestId`和`createdAt`对`worker-result`可省略");
@@ -319,7 +385,8 @@ requireText("老工作台完成记录退出高频状态", workbenchRuntime, "com
 forbidText("候选不交付终态宿主适配器", releaseManifest, "terminal-host-adapter.mjs");
 forbidText("候选不交付notify调度器", releaseManifest, "host-notify-dispatcher.mjs");
 requireText("Worker终态使用最小明确标记", worker, "首行必须以`已完成`或`已暂停`开头");
-requireText("正式任务先加载Worker身份Skill", agents, "Worker首个工具调用须实际完整读取`identity-worker/SKILL.md`");
+requireText("根入口不复制冷启动逐字协议", agents, "根入口不复制逐字协议");
+forbidText("根入口不保存Worker冷启动逐字要求", agents, "首个工具调用须实际完整读取");
 requireText("Worker按结果范围判断检查点", worker, "检查点先按任务的`结果与验收 + 对象与边界`判断");
 requireText("独立设计交付形成终态", worker, "成果进入正式目标并验收后就是本任务`已完成`终态");
 requireText("同任务后续才是非终态检查点", worker, "只有确认后的动作仍属于同一个已授权业务结果");
@@ -327,6 +394,8 @@ requireText("PM不把设计独立结果留在进行中", pm, "Worker交付后必
 requireText("PM创建提示强制身份与方法顺序", pm, "首个工具调用须实际完整读取identity-worker/SKILL.md，第二个须实际完整读取匹配当前问题的Action Skill主文件；两步前不得读取业务文件或运行业务工具，终态按身份Skill回源");
 requireText("复杂派单按授权范围区分设计终态", pmDispatch, "交付评审就是该独立任务的完成边界");
 requireText("工作台验收使用事务意图", workbenchRuntime, "phase: 'intent'");
+requireText("工作台关闭与验收分离", workbenchRuntime, "kind === 'closed'");
+requireText("工作台关闭不进入近期主线", workbenchRuntime, "kind === 'accepted' && input.affectsMainline === true");
 forbidText("候选不交付安装notify迁移", releaseManifest, "installation-migration.mjs");
 forbidText("候选不交付CLI恢复Provider", releaseManifest, "codex-thread-delivery-provider.mjs");
 forbidText("PM禁止事项不残留起始Skill例外", pm, "除首行起始 Skill外");
@@ -343,11 +412,55 @@ requireText("局部助手不启动Worker身份", workerCollaboration, "也不得
 requireText("子智能体只协助原Worker", worker, "子智能体不是新的正式任务或Worker");
 requireText("未触及权限不检查", worker, "未触及的维度不检查、不补字段，也不形成暂停");
 requireText("默认不用worktree", worker, "BEYOND 不创建或推荐 worktree");
-requireText("同目录不等于冲突", pmCoordination, "目录相同本身不是冲突");
+requireText("同目录不等于冲突", collaboration, "同一仓库或目录也不能单独证明冲突");
 requireText("同目录边界不重叠可并行", worker, "共享对象不重叠且测试或运行副作用隔离时可以并行编辑和验证");
 requireText("共享Git动作串行", worker, "共享 Git工作区的索引、HEAD或历史动作串行");
-requireText("只读核对不建正式任务", pm, "只读核对、状态查询和PM能够当轮回答的问题不建立正式任务");
+requireText("只读核对不建正式任务", pm, "只读核对、状态查询和PM能当轮回答的问题不建任务");
 requireText("环境缺口暂停前查正式事实", worker, "相关运行手册和配置，并尝试不扩大风险的既有路径");
+
+// 规则所有者唯一：入口、说明文档和角色reference只保留路由，不复制执行算法。
+requireCondition(
+  "Worker冷启动逐字协议只有PM主入口一份",
+  [agents, pm, pmDispatch].reduce(
+    (count, text) => count + text.split("首个工具调用须实际完整读取identity-worker/SKILL.md").length - 1,
+    0,
+  ) === 1,
+  "冷启动逐字协议不是唯一一份",
+);
+requireText("工作台路由到PM收口唯一所有者", workbench, "[暂停、恢复与收口]");
+forbidText("工作台不复制全Worker扫描", workbench, "扫描全部已登记Worker");
+requireText("跨任务机制不复制收口算法", collaboration, "不复制pending扫描、Worker读取、工作台事务或回执消费算法");
+requireText("PM协调reference不复制公共判定", pmCoordination, "不复制公共判定、冲突算法或接力模板");
+requireText("Worker协作reference不复制冲突算法", workerCollaboration, "不复制第二套算法");
+forbidText("安装指南不保留全Worker扫描", installGuideZh, "扫描全部已登记Worker");
+requireText("安装指南路由Worker终态唯一所有者", installGuideZh, "[Worker身份规则]");
+requireText("安装指南路由PM收口唯一所有者", installGuideZh, "[PM暂停、恢复与收口]");
+forbidText("架构文档不保留全Worker扫描", architecture, "扫描自己登记的全部Worker");
+requireText("架构文档不复制终态算法", architecture, "本架构文档只说明构件关系，不复制pending扫描、Worker读取或工作台事务算法");
+requireText("历史回传文档明确不是运行规则", terminalReturnHistory, "本文件只保存历史证据，不是当前运行规则");
+requireText("历史回传文档路由Worker唯一所有者", terminalReturnHistory, "[Worker身份规则]");
+requireText("历史回传文档路由PM唯一所有者", terminalReturnHistory, "[PM暂停、恢复与收口]");
+forbidText("历史回传文档不冒充当前裁决", terminalReturnHistory, "## 3. 当前裁决");
+forbidText("历史回传文档不保留全Worker扫描算法", terminalReturnHistory, "再扫描全部已登记Worker");
+forbidText("历史回传文档不保留旧全Worker读法", terminalReturnHistory, "扫描自己登记的全部Worker");
+requireText("英文架构路由Worker唯一所有者", architectureEn, "[Worker identity rule]");
+requireText("英文架构路由PM唯一所有者", architectureEn, "[PM pause, resume, and closeout]");
+requireText("英文架构不复制终态算法", architectureEn, "This architecture explains component relationships only; it does not duplicate the pending scan, Worker-read, or workbench-transaction algorithm.");
+for (const rootName of ["canonicalProjectRoot", "repositoryRoot", "executionRoot", "controlRoot"]) {
+  requireText(`英文架构登记${rootName}`, architectureEn, `\`${rootName}\``);
+}
+requireText("英文架构允许项目多仓", architectureEn, "One BEYOND project and control root may also cover multiple explicitly registered repositories");
+requireText("英文架构只兼容既有worktree", architectureEn, "A platform- or user-provided existing worktree is validated");
+requireText("变更日志登记四根项目路由", changelog, "Formalize project routing as `canonicalProjectRoot`, `repositoryRoot`, `executionRoot`, and `controlRoot`");
+requireText("变更日志登记项目级回执隔离", changelog, "Scope short-lived Worker-result receipts by both project ID and task ID");
+requireText("中文325说明登记四根路由", release325Zh, "`canonicalProjectRoot`负责BEYOND正式项目身份");
+requireText("中文325说明登记回执命名空间", release325Zh, "短期终态回执改为`projectId + taskId`命名空间");
+requireText("中文325说明保留登记与平台绑定", release325Zh, "安装和升级保留已登记仓库根、remote、host和Codex项目绑定");
+requireText("英文325说明登记四根路由", release325En, "`canonicalProjectRoot` owns the formal BEYOND project identity");
+requireText("英文325说明登记回执命名空间", release325En, "Short-lived terminal receipts use the `projectId + taskId` namespace");
+requireText("英文325说明保留登记与平台绑定", release325En, "Installation and upgrade preserve registered repository roots, remotes, host bindings, and Codex project bindings");
+requireText("内容验真明确发行模板模式", installVerifier, "模式：发行模板，不是已初始化业务项目");
+requireText("安装验真明确业务项目模式", installVerifier, "模式：已初始化业务项目");
 
 // 目标优先：方法按需，独立性和助手只显式/有收益触发，worktree只兼容既有现场。
 requireText("根入口任务目标高于流程", agents, "任务目标高于方法流程");
@@ -355,6 +468,35 @@ requireText("最新用户目标压过旧临时策略", agents, "用户最新明�
 requireText("老板当前指令高于BEYOND默认规则", agents, "不得拿BEYOND自己设计的规则反过来拒绝项目所有者");
 requireText("旧硬性措辞不覆盖当前指令", agents, "即使旧规则写成`禁止`或`不得`");
 requireText("一次指令不自动改写长期规则", agents, "本次指令只授权点名对象与动作，不自动改写长期规则");
+requireText("老板决定目标但不能代替事实核验", agents, "老板决定目标、取舍和是否要一个独立成立的结果；对当前事实的核验仍按下一条执行");
+requireText("解释诊断和方案理由先作为待核验判断", agents, "用户或助手提出的解释、诊断、假设和方案理由先作为待核验判断");
+requireText("根入口区分事实判断和未知", agents, "明确区分已验证事实、当前判断和未知信息");
+requireText("结论只随新证据或更强推理改变", agents, "只有出现新证据或更强推理时才修改已有结论");
+requireText("具体质疑触发定点复核", agents, "指向具体遗漏、反例或证据缺口时，应进行必要的定点复核");
+requireText("错误前提中的动作不算知情确认", agents, "同一条指令若把错误或未核验事实当成理由，由该理由推出的动作不算已经知晓冲突后的再次确认");
+requireText("事实冲突先核验并用人话说明", agents, "先定点核验并用人话说明真实情况");
+requireText("错误理由不能改写成独立升级目标", agents, "不得把该手段自行改写成“统一”“升级”或独立目标继续执行");
+requireText("替换工程路径前先核对现有入口", agents, "替换框架、依赖、协议、发布路径或长期机制前先运行或核对现有入口");
+requireText("现有入口可用时不替换", agents, "现有入口可用时不替换");
+requireText("每个动作直接服务业务结果", agents, "每个动作必须直接服务当前业务结果，说不清直接贡献就不做");
+requireText("现有路径足够时不增加工程对象", agents, "现有路径已经足够时，不新增框架、依赖、文档、任务、审查或长期机制，也不把简单请求扩成工程项目");
+requireText("重大判断检查反例但普通任务不增流程", agents, "普通低风险、可逆且范围明确的任务不因此增加审查、文档、子智能体、新对话或等待点");
+requireText("老板答复先说业务结论", agents, "面向老板先用一到三句话说业务结论");
+requireText("内部技术细节不进入第一层答复", agents, "Skill、工具名、命令、字段名、哈希、英文缩写和内部流程不进入第一层答复");
+requireText("必要技术细节解释业务影响", agents, "必要技术细节放在业务结论之后，并说明它为什么影响结果");
+requireText("事实未闭合不展开猜测性技术方案", agents, "或用架构方案和技术清单填满回答");
+requireText("事实未闭合不列可能原因", agents, "不得列举未经证实的可能原因、给猜测排序");
+requireText("因果前提先做一次定点核验", agents, "先在用户点名对象内做一次最有区分度的只读核验");
+requireText("缺证据不扩大搜索", agents, "不转而遍历用户目录、全局配置、已安装规则、记忆、无关项目或其他系统");
+requireText("缺证据不加载文档或联网", agents, "也不加载产品文档、联网求证或提前设计替代机制");
+requireText("未验证原因不触发实现路径", agents, "在证据闭合前仍是只读判断，不触发开发、运维或平台排障路径");
+requireText("自行判断不授权创造工程目标", agents, "这不授权自行创造性能、发布、重构、标准化或新增功能目标");
+requireText("模糊优化仅修可证实问题", agents, "只有发现可复现缺陷、与现有明确契约直接冲突，或无需改变公开行为的显然缺口时");
+requireText("模糊优化一次只选一个问题", agents, "只选一个对当前使用影响最大且可独立验证的问题");
+requireText("模糊优化不捆绑多个工程维度", agents, "不把代码样式、打包、测试覆盖和未来能力捆成一轮");
+requireText("无真实负载微优化不算必须修改", agents, "没有真实热点与现有负载证据的微小性能调整不算必须修改");
+requireText("不制造合成基准证明微优化", agents, "不得为了把微优化变成目标而自行制造极端循环、合成基准、假想发布或未来负载");
+requireText("现有入口可用且无现实缺口时不改", agents, "当前入口可用且没有现实失败、用户可见缺陷或现有契约缺口时，保持不改");
 requireText("指定凭据路径构成精确写入授权", agents, "该指令构成本次精确写入授权");
 requireText("PM保留老板特殊授权", pm, "PM必须在任务包的`特殊授权`中保留其业务含义");
 requireText("PM不让老板重复授权", pm, "要求老板向Worker重复授权");
@@ -364,7 +506,7 @@ requireText("Worker不让老板手工代写凭据", worker, "Worker不得要求�
 requireText("运维不以CLI优先否决指定方法", ops, "不能用CLI优先或默认凭据建议否决老板当前指定的方法");
 requireText("根入口事实冲突先停止派生动作", agents, "先停止由该判断推导的写入、依赖安装和外部动作");
 requireText("根入口恢复事实反驳", agents, "明确指出冲突、说明依据并给出可执行替代");
-requireText("根入口事实冲突知情后再继续", agents, "只有用户知晓冲突后仍明确要求一个独立成立的结果时才继续");
+requireText("根入口事实冲突知情后再继续", agents, "只有老板知情后仍明确选择替换本身或另一个独立成立的结果才继续");
 requireText("只问一个改变结果的问题", agents, "才问一个关键问题");
 requireText("根入口禁止无主文件和文档", agents, "没有明确消费者、长期用途、唯一入口和回收方式时");
 requireText("工作区顶层禁止任务产物扩散", agents, "不在工作区根目录或正式项目父目录随手建立测试项目、临时clone、候选、备份、证据或安装验证目录");
@@ -376,26 +518,38 @@ forbidText("根入口不复制PM等待算法", agents, "wait_threads");
 forbidText("根入口不复制初始化脚本步骤", agents, "inspect-project");
 requireCondition("根入口保持轻量", agents.replace(/\r\n/g, "\n").split("\n").length <= 105, "AGENTS.md超过105行");
 
-// R2：PM主入口守住目标和任务边界，低频算法由对应reference拥有。
+// R3：新PM先建立完整项目理解，短提示先收敛业务任务契约；执行方法仍归Worker。
 requireText("PM继承老板最新目标", pm, "老板最新明确的目标、边界、检查点和不做事项决定当前方向");
-requireText("PM短提示继承项目上下文", pm, "短提示词继续继承当前项目事实和最近已经确认的目标");
+requireText("PM短提示只能基于已读事实继承上下文", pm, "短提示词只能在PM已经读懂当前项目事实和最近确认目标后继承上下文");
+requireText("新PM完整读取当前项目主事实", pm, "索引登记的全部当前主事实正文");
+requireText("新PM不要求固定接手话术", pm, "不要求老板用固定接手话术重讲项目");
+requireText("老PM只做增量刷新", pm, "只刷新工作台、项目路由和本轮受影响的事实所有者");
 requireText("PM不把完整目标缩成易交付局部", pm, "把完整目标缩成更容易交付的局部结果");
 requireText("PM区分现场调查和老板取舍", pm, "Worker能从项目事实和现场调查的细节");
 requireText("PM只问一个方向问题", pm, "一次只问一个会改变方向的问题");
 requireText("PM首问不捆绑项目调查", pm, "环境、复现、日志和实现细节随后从项目事实调查，不捆成首轮问卷");
+requireText("PM短提示进入轻量任务设计", pm, "PM在派单前完整读取`task-design/SKILL.md`");
+requireText("PM轻量设计不新建过程产物", pm, "不新建设计文档、计划、报告或检查点");
+requireText("PM轻量设计不读取控制实现", pm, "不为取得控制编号或路由读取runtime源码");
+requireText("PM任务包只链接精确当前事实", pm, "只指向与本结果直接相关的精确当前所有者");
 requireText("PM任务标题和方法不得缩窄验收", pm, "任务标题、模型类别、Action Skill名称和PM的实现猜测都不能覆盖或缩窄结果与验收");
 requireText("PM任务包每段保持短句", pm, "每段通常一到两句");
-requireText("PM同一结果检查点返工复用原Worker", pm, "同一结果的检查点、返工和补齐验收继续使用原Worker");
+requireText("PM同一结果检查点返工复用原Worker", pm, "同一结果的检查点、返工和补验收沿用原Worker");
 requireText("PM主线不是单任务队列", pm, "当前主线表示项目最重要的方向，不表示一次只能运行一个任务");
 requireText("PM跨回合保留主线定量边界", pm, "保留会改变范围或完成裁决的定量分母与命名边界，不用泛称替代");
 forbidText("PM主入口不复制正时长等待", pm, "wait_threads(timeoutMs=");
 forbidText("PM主入口不复制初始化状态机", pm, "initialization --action");
 forbidText("PM主入口不复制Git操作清单", pm, "merge / rebase");
-requireCondition("PM主入口保持控制面短核心", pm.replace(/\r\n/g, "\n").split("\n").length <= 115 && pm.length <= 5500, "identity-pm主入口超过R2短核心上限");
+const normalizedPm = pm.replace(/\r\n/g, "\n");
+requireCondition("PM主入口保持控制面短核心", normalizedPm.split("\n").length <= 120 && normalizedPm.length <= 6500, "identity-pm主入口超过R3短核心上限");
+requireText("设计Skill提供PM轻量模式", design, "PM轻量任务设计只回答五件事");
+requireText("PM设计不替Worker选技术路径", design, "不替Worker选择实现、测试或发布方法");
+requireText("PM轻量设计不形成文档", design, "PM轻量任务设计只进入任务包，不形成项目文档");
+requireText("设计Skill禁止PM读取控制实现", design, "不读取控制runtime实现");
 requireText("Worker不按方法拆任务", worker, "不按 Skill、步骤或文件数量机械拆任务");
 requireText("Worker首个专业动作加载方法", worker, "进入第一个专业动作前必须完整读取一个与主要问题匹配的 Action Skill");
 requireText("Worker不用身份说明替代方法", worker, "不能用 Worker 通用说明代替专业方法，也不一次性预读全部 Skill");
-requireText("正式任务第二步加载起始方法", agents, "第二个须实际完整读取一个匹配当前主要问题的Action Skill主文件");
+requireText("正式任务第二步加载起始方法", pm, "第二个须实际完整读取匹配当前问题的Action Skill主文件");
 requireText("局部开发不并读测试方法", dev, "清晰局部改动可以由开发方法直接运行现有测试并交付");
 requireText("真实测试专业问题才切方法", dev, "需要测试专业判断、复杂覆盖、跨层联调或明确独立性时");
 requireText("局部开发附带现有测试不触发测试方法", test, "清晰局部开发任务附带运行现有测试时由 task-dev 直接完成，不单独触发本 Skill");
@@ -414,8 +568,8 @@ requireText("内部checkpoint不向用户输出", agents, "上下文压缩、恢
 requireText("PM单行工作台更新只开工和最终", pm, "只读取并更新工作台中一处已授权事实时，只发开工说明和最终结果");
 requireText("Worker终态只放一个主证据", worker, "一个主证据或正式落点");
 requireText("Worker终态保留裁决主事实", worker, "一个决定裁决的业务主事实");
-requireText("根入口用户答复先说业务", agents, "面向用户先用业务语言说明结果、现在能否使用、影响和下一步");
-requireText("根入口技术细节按判断需要展开", agents, "技术细节只在会改变判断或用户明确要求时展开");
+requireText("根入口用户答复首层不列内部记录", agents, "除非老板明确要求审计、原始证据或技术细节");
+requireText("根入口技术细节后置并解释影响", agents, "必要技术细节放在业务结论之后，并说明它为什么影响结果");
 requireText("Worker继承用户沟通边界", worker, "面向用户的最终交付遵循根入口的用户沟通边界");
 requireText("PM收口继承用户沟通边界", pmLifecycle, "按根入口的用户沟通边界收口");
 requireText("开发输出不覆盖用户沟通边界", dev, "不覆盖根入口的用户沟通边界");
@@ -440,6 +594,18 @@ requireText("设计分开历史修复与未来机制", design, "有限且归属�
 requireText("设计分开判断不强制拆任务", design, "分别判断不等于强制拆任务");
 requireText("开发复用服从当前结果", dev, "复用不是目标");
 requireText("通用扩展只在当前结果内", dev, "只有通用能力本身属于当前结果时才扩展");
+requireText("开发手段服从业务结果", dev, "手段服从结果");
+requireText("开发现有路径满足时不迁移", dev, "问题不成立或现有路径已经满足验收时，不实施该手段");
+requireText("开发迁移本身需知情后成为结果", dev, "只有老板知情后明确把迁移或统一本身定为业务结果");
+requireText("开发模糊优化不造目标", dev, "模糊优化不造目标");
+requireText("开发不为产出修改", dev, "不为显得有产出而改代码、包元数据或测试");
+requireText("开发模糊优化一次一项", dev, "多个候选只选一个对当前使用影响最大且可独立验证的问题");
+requireText("开发不制造微优化证据", dev, "不得为了证明它值得修改而自行制造极端循环、合成基准、假想发布或未来负载");
+requireText("开发无现实缺口保持不改", dev, "当前入口可用且没有现实失败、用户可见缺陷或现有契约缺口时，保持不改并说明判断");
+requireText("开发证据缺失即停扩张", dev, "证据缺失即停扩张");
+requireText("开发缺证据不遍历外部", dev, "不遍历用户目录、全局配置、已安装规则、记忆、无关项目或其他系统");
+requireText("开发缺证据不加载文档联网", dev, "不加载产品文档或联网求证");
+requireText("开发未验证原因保持只读", dev, "证据闭合前该请求仍是只读判断");
 requireText("清晰局部修复不强制切测试Skill", dev, "清晰局部改动可以由开发方法直接运行现有测试并交付");
 requireText("热修基线必须匹配正式目标", dev, "或从目标到当前包含未授权的其他变化时，不把当前整包冒充可发布候选");
 requireText("共享改动核对直接消费者", dev, "定点核对直接调用方、共同制品和必要迁移");
@@ -468,17 +634,20 @@ forbidText("PM协调不按风险自动审查", pmCoordination, "核心链路、�
 requireText("既有worktree仅兼容", gitCloseout, "只有用户或平台已经提供 worktree时才处理这个现场");
 forbidText("不再提供worktree创建清单", gitCloseout, "创建前必须明确并核对");
 
-// 冷启动与定位压缩不能改变实际责任。
-requireText("健康工作台优先于文档治理入口", agents, "先读取`local/当前工作台.md`恢复当前主线、正式任务和下一步");
-requireText("文档治理入口只在真实命中时读取", agents, "工作台缺失、为空、冲突，或当前确实需要处理事实归位、文档创建更新、入口纠偏和历史回收时");
-requireText("00入口承接异常文档治理", documentEntry, "只有项目初始化、项目接手发现工作台缺失/冲突或需要处理事实归位、文档创建更新与历史回收");
+// 新PM全量接手与老PM增量刷新不能改变实际责任。
+requireText("新PM接手读取完整当前事实链", agents, "项目事实索引，以及索引登记的全部当前主事实正文");
+requireText("新PM接手排除历史与原始证据", agents, "不展开历史、归档、候选、全部Worker聊天、全仓源码或原始证据");
+requireText("老PM不重复全量接手", agents, "不每回合重做全量接手");
+requireText("00入口承接新PM全量接手", documentEntry, "新PM首次全量接手");
+requireText("00入口读取项目身份与路由", documentEntry, "确认当前项目身份、控制根、正式目录和路由");
+requireText("00入口读取全部当前主事实", documentEntry, "登记的全部当前主事实正文");
 requireText("初始化不进入普通任务热路径", agents, "不进入普通任务热路径");
 requireText("升级先核对当前直接事实", agents, "初始化优先复用现有`AGENTS.md`、代码、Git和Markdown事实");
-requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.2.4");
+requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.2.5");
 requireText("项目覆盖有专用边界", agents, "BEGIN BEYOND PROJECT OVERRIDES");
 requireText("安装逐文件对账六个Skill", installVerifier, "安装Skill内容不一致");
 requireText("安装核对项目完整运行内核", installVerifier, "项目入口的BEYOND运行内核与控制仓候选不一致");
-requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.2.4"');
+requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.2.5"');
 requireText("个人路径不读取团队共享区", agents, "普通项目接手、正式Worker任务、Action Skill切换和个人任务不读取共享区");
 requireText("团队协同不替代正式Worker", agents, "不替代当前成员自己的正式Worker");
 requireText("PM初始化与协同权限严格限域", pmDispatch, "两者都不扩张到业务源码、测试、仓库配置、成员权限、环境、数据或发布");
@@ -503,6 +672,9 @@ requireText("旧工作台激活门禁退出项目入口", documentEntry, "不得
 requireText("普通任务不重做文档迁移", documentEntry, "普通任务直接使用任务点名的项目入口，不重复审查整套文档体系");
 requireText("项目总览不复制Skill规则", projectOverview, "本文件不得复制这些机制规则");
 requireText("项目事实不是第二套规则", projectFacts, "本索引只组织项目特有事实，不成为第二套运行规则");
+requireText("项目总览是新PM接手材料", projectOverview, "新PM首次接手必须读取当前项目的正式总览");
+requireText("事实索引是新PM接手材料", projectFacts, "它是新PM首次全量接手的默认索引");
+requireText("事实索引区分老PM增量刷新", projectFacts, "不重复全量接手");
 requireText("产品架构明确Skill文档组合", architecture, "BEYOND的实际能力来自组合而不是纯Skill");
 requireText("设计方法仍回原Worker", design, "正式结果回到同一个 Worker");
 requireText("开发方法仍回原Worker", dev, "正式结果回到同一个 Worker");

@@ -80,7 +80,16 @@ function canonicalPath(value) {
 }
 
 function samePath(left, right) {
-  return canonicalPath(left).toLowerCase() === canonicalPath(right).toLowerCase();
+  const canonicalLeft = canonicalPath(left);
+  const canonicalRight = canonicalPath(right);
+  return process.platform === "win32"
+    ? canonicalLeft.toLowerCase() === canonicalRight.toLowerCase()
+    : canonicalLeft === canonicalRight;
+}
+
+function pathKey(value) {
+  const canonical = canonicalPath(value);
+  return process.platform === "win32" ? canonical.toLowerCase() : canonical;
 }
 
 function isInside(parent, child) {
@@ -174,7 +183,7 @@ function registeredProjectId(projectRoot, remote) {
     for (const entry of readdirSync(localDirectory, { withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".md")) continue;
       const facts = frontmatter(readUtf8(join(localDirectory, entry.name)));
-      if (facts.id && facts.path && resolve(facts.path).toLowerCase() === projectRoot.toLowerCase()) matches.add(facts.id);
+      if (facts.id && facts.path && samePath(facts.path, projectRoot)) matches.add(facts.id);
     }
   }
   const sharedDirectory = join(controlRoot, "shared", "projects");
@@ -189,13 +198,74 @@ function registeredProjectId(projectRoot, remote) {
   return [...matches][0] ?? null;
 }
 
+function existingLocalRegistration(projectId, projectRoot) {
+  const directory = join(controlRoot, "local", "projects");
+  if (!existsSync(directory)) return null;
+  const records = readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".md"))
+    .map((entry) => ({ file: join(directory, entry.name), facts: frontmatter(readUtf8(join(directory, entry.name))) }));
+  const byId = records.filter((record) => record.facts.id === projectId);
+  const byPath = records.filter((record) => record.facts.path && samePath(record.facts.path, projectRoot));
+  if (byId.length > 1 || byPath.length > 1) fail("本机项目登记重复；停止覆盖并请先消除冲突", 2);
+  if (byId.length === 1 && (!byId[0].facts.path || !samePath(byId[0].facts.path, projectRoot))) {
+    fail(`本机项目登记${projectId}已经绑定其他路径：${byId[0].facts.path || "未登记"}`, 2);
+  }
+  if (byPath.length === 1 && byPath[0].facts.id !== projectId) {
+    fail(`当前项目路径已经绑定其他项目编号：${byPath[0].facts.id || "未登记"}`, 2);
+  }
+  return byId[0]?.facts ?? byPath[0]?.facts ?? null;
+}
+
+function existingRegisteredRepositoryRoots(registration, projectRoot) {
+  if (!registration || registration.repositories_json === undefined) return [];
+  let parsed;
+  try { parsed = JSON.parse(registration.repositories_json); }
+  catch { fail("已有本机登记的repositories_json无效；停止覆盖", 2); }
+  if (!Array.isArray(parsed)) fail("已有本机登记的repositories_json不是数组；停止覆盖", 2);
+  const roots = [];
+  for (const item of parsed) {
+    const objectItem = item && typeof item === "object" && !Array.isArray(item) ? item : null;
+    const value = typeof item === "string" ? item : objectItem?.path;
+    if (typeof value !== "string" || !value.trim()) fail("已有本机登记包含无效仓库路径；停止覆盖", 2);
+    const candidate = canonicalPath(value);
+    const expectedRole = samePath(candidate, projectRoot) ? "project-root" : "component";
+    if (objectItem?.role !== undefined && objectItem.role !== expectedRole) {
+      fail(`已有本机登记的仓库role与路径不一致：${display(candidate)}`, 2);
+    }
+    if (objectItem?.kind !== undefined && objectItem.kind !== "git") {
+      fail(`已有本机登记的仓库kind无效：${display(candidate)}`, 2);
+    }
+    const facts = existsSync(candidate) && lstatSync(candidate).isDirectory() ? repositoryFacts(candidate) : null;
+    if (!facts) {
+      fail(`已有本机登记的组件仓已缺失或不再是精确Git根：${display(candidate)}`, 2);
+    }
+    if (objectItem?.remote && (!facts.remote
+      || normalizedRemote(objectItem.remote) !== facts.normalizedRemote)) {
+      fail(`已有本机登记的组件仓remote已经漂移；必须显式裁决后再更新：${display(candidate)}`, 2);
+    }
+    if (samePath(candidate, projectRoot)) continue;
+    if (!roots.some((current) => samePath(current, candidate))) roots.push(candidate);
+  }
+  return roots;
+}
+
 const ignoredDiscoveryDirectories = new Set([
   ".git", ".next", ".pytest_cache", ".pytest-tmp", ".codex-pytest", ".beyond-local-backups", ".tmp", ".codex_build", ".codex_exports",
   ".codex_release", ".codex-artifacts", ".codex-out", "node_modules", "dist",
   "build", "coverage", "vendor", "artifacts", "logs", "tmp", "_publish", ".tmp_publish",
 ]);
 
+function ignoredDiscoveryDirectory(name) {
+  const normalized = name.toLowerCase();
+  return ignoredDiscoveryDirectories.has(normalized)
+    || normalized.startsWith(".tmp-")
+    || normalized.startsWith("tmp-")
+    || normalized.includes("backup");
+}
+
 function repositoryFacts(repositoryRoot) {
+  const topLevelResult = runGit(["rev-parse", "--show-toplevel"], repositoryRoot, true);
+  if (topLevelResult.status !== 0 || !samePath(topLevelResult.stdout, repositoryRoot)) return null;
   const remoteResult = runGit(["remote", "get-url", "origin"], repositoryRoot, true);
   const branchResult = runGit(["branch", "--show-current"], repositoryRoot, true);
   const statusResult = runGit(["status", "--porcelain=v1", "--untracked-files=all"], repositoryRoot, true);
@@ -211,16 +281,39 @@ function repositoryFacts(repositoryRoot) {
   };
 }
 
-function discoverRepositories(projectRoot, rootGit) {
+function explicitRepositoryRoots(projectRoot) {
+  const requested = (arg("--repository-roots") ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => canonicalPath(isAbsolute(value) ? value : resolve(projectRoot, value)));
+  const roots = [];
+  for (const candidate of requested) {
+    if (!existsSync(candidate) || !lstatSync(candidate).isDirectory()) {
+      fail(`显式仓库路径不存在或不是目录：${display(candidate)}`, 2);
+    }
+    if (samePath(candidate, controlRoot)) fail(`控制仓不能登记为业务执行仓：${display(candidate)}`, 2);
+    const facts = repositoryFacts(candidate);
+    if (!facts) fail(`显式仓库路径不是精确Git根：${display(candidate)}`, 2);
+    if (!roots.some((item) => samePath(item, candidate))) roots.push(candidate);
+  }
+  return roots;
+}
+
+function discoverRepositories(projectRoot, rootGit, explicitRoots = []) {
   const roots = new Set();
   if (rootGit) roots.add(rootGit);
   for (const entry of readdirSync(projectRoot, { withFileTypes: true })) {
-    if (!entry.isDirectory() || entry.isSymbolicLink() || ignoredDiscoveryDirectories.has(entry.name)) continue;
+    if (!entry.isDirectory() || entry.isSymbolicLink() || ignoredDiscoveryDirectory(entry.name)) continue;
     const candidate = join(projectRoot, entry.name);
     if (samePath(candidate, controlRoot)) continue;
-    if (existsSync(join(candidate, ".git"))) roots.add(candidate);
+    if (existsSync(join(candidate, ".git")) && repositoryFacts(candidate)) roots.add(canonicalPath(candidate));
   }
-  const repositories = [...roots].sort((left, right) => left.localeCompare(right)).map(repositoryFacts);
+  for (const candidate of explicitRoots) roots.add(canonicalPath(candidate));
+  const repositories = [...roots]
+    .sort((left, right) => left.localeCompare(right))
+    .map(repositoryFacts)
+    .filter(Boolean);
   const byRemote = new Map();
   for (const repository of repositories) {
     if (!repository.normalizedRemote) continue;
@@ -354,15 +447,20 @@ function inspectProject(projectRootValue) {
     fail(`业务项目目录不存在：${display(projectRoot)}`);
   }
   const topLevel = runGit(["rev-parse", "--show-toplevel"], projectRoot, true);
-  const gitRoot = topLevel.status === 0 ? resolve(topLevel.stdout) : null;
+  const detectedGitRoot = topLevel.status === 0 ? resolve(topLevel.stdout) : null;
+  const gitRoot = detectedGitRoot && samePath(detectedGitRoot, projectRoot) ? detectedGitRoot : null;
   const remoteResult = gitRoot
     ? runGit(["remote", "get-url", "origin"], gitRoot, true)
     : { status: 1, stdout: "" };
   const remote = remoteResult.status === 0 ? safeRemote(remoteResult.stdout) : null;
-  const identity = remote ? normalizedRemote(remote) : projectRoot.toLowerCase();
+  const identity = remote ? normalizedRemote(remote) : pathKey(projectRoot);
   const projectId = registeredProjectId(projectRoot, remote) ?? stableId(remote ? "project" : "local", identity);
+  const existingRegistration = existingLocalRegistration(projectId, projectRoot);
   const discovery = discoverMarkdown(projectRoot);
-  const repositoryDiscovery = discoverRepositories(projectRoot, gitRoot);
+  const repositoryDiscovery = discoverRepositories(projectRoot, gitRoot, [
+    ...explicitRepositoryRoots(projectRoot),
+    ...existingRegisteredRepositoryRoots(existingRegistration, projectRoot),
+  ]);
   const existingAgents = existsSync(join(projectRoot, "AGENTS.md")) ? readUtf8(join(projectRoot, "AGENTS.md"), "项目AGENTS.md") : "";
   const detectedLegacyWorkbench = legacyWorkbenchFacts(projectRoot);
   const legacyWorkbench = detectedLegacyWorkbench
@@ -386,8 +484,8 @@ function inspectProject(projectRootValue) {
     projectRoot: display(projectRoot),
     gitRoot: gitRoot ? display(gitRoot) : null,
     remote,
-    hostId: arg("--host-id"),
-    codexProjectId: arg("--codex-project-id"),
+    hostId: arg("--host-id") ?? existingRegistration?.host_id ?? null,
+    codexProjectId: arg("--codex-project-id") ?? existingRegistration?.codex_project_id ?? null,
     agentsPath: existsSync(join(projectRoot, "AGENTS.md")) ? display(join(projectRoot, "AGENTS.md")) : null,
     ...discovery,
     repositories: repositoryDiscovery.repositories,
@@ -1416,10 +1514,24 @@ ${workerPolicySection(defaultWorkerPolicy())}
 - [返回项目总览](../项目总览.md)
 `);
   }
+  const registeredRepositories = Array.isArray(project.registeredRepositories)
+    ? project.registeredRepositories
+    : [];
+  const repositoriesJson = JSON.stringify(registeredRepositories.map((item) => ({
+    path: display(canonicalPath(item.path)),
+    remote: item.remote ?? null,
+    role: item.role === "project-root" ? "project-root" : "component",
+    kind: "git",
+  })));
+  const repositoryList = registeredRepositories.length
+    ? registeredRepositories
+      .map((item) => `- ${item.role === "project-root" ? "项目根Git仓" : "组件Git仓"}：${item.remote ? `${item.remote} → ` : ""}${item.path}`)
+      .join("\n")
+    : "- 无登记Git执行仓；仅允许从规范项目根执行非Git任务。";
   const canonicalRepositories = project.canonicalRepositories?.length
     ? project.canonicalRepositories.map((item) => `- ${item.remote} → ${item.path}`).join("\n")
     : "- 无重复remote需要选择。";
-  writeUtf8(localPath, `---\nid: ${project.projectId}\nname: ${name}\npath: ${project.projectRoot}\nremote: ${project.remote ?? ""}\nhost_id: ${project.hostId ?? ""}\ncodex_project_id: ${project.codexProjectId ?? ""}\nupdated_at: ${new Date().toISOString()}\n---\n\n# ${name} 本机登记\n\n- 本机项目路径：${project.projectRoot}\n- 根入口：${project.agentsPath ?? "尚未建立"}\n- Codex主机：${project.hostId ?? "待登记"}\n- Codex项目：${project.codexProjectId ?? "待登记"}\n\n## 重复remote的本机正式路径\n\n${canonicalRepositories}\n`);
+  writeUtf8(localPath, `---\nid: ${project.projectId}\nname: ${name}\npath: ${project.projectRoot}\nremote: ${project.remote ?? ""}\nhost_id: ${project.hostId ?? ""}\ncodex_project_id: ${project.codexProjectId ?? ""}\nrepositories_json: ${repositoriesJson}\nupdated_at: ${new Date().toISOString()}\n---\n\n# ${name} 本机登记\n\n- 本机项目路径：${project.projectRoot}\n- 根入口：${project.agentsPath ?? "尚未建立"}\n- Codex主机：${project.hostId ?? "待登记"}\n- Codex项目：${project.codexProjectId ?? "待登记"}\n\n## 正式执行仓路径\n\n${repositoryList}\n\n## 重复remote的本机正式路径\n\n${canonicalRepositories}\n`);
   return { sharedPath, overviewPath, factsPath, localPath, localBackup };
 }
 
@@ -1473,10 +1585,10 @@ function selectCanonicalRepositories(project) {
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean)
-    .map((value) => resolve(value).toLowerCase());
+    .map((value) => pathKey(value));
   const selected = [];
   for (const conflict of project.remoteConflicts) {
-    const matches = conflict.paths.filter((path) => requested.includes(resolve(path).toLowerCase()));
+    const matches = conflict.paths.filter((path) => requested.includes(pathKey(path)));
     if (matches.length !== 1) {
       fail(`同一remote对应多个本地仓库，必须用 --canonical-repositories 为每组准确选择一个正式路径：\n${conflict.remote}: ${conflict.paths.join(", ")}`, 2);
     }
@@ -1484,6 +1596,29 @@ function selectCanonicalRepositories(project) {
   }
   if (requested.length !== selected.length) fail("--canonical-repositories包含不属于重复remote组或重复的路径", 2);
   return selected;
+}
+
+function selectRegisteredRepositories(project) {
+  const selectedByRemote = new Map((project.canonicalRepositories ?? []).map((item) => [item.remote, canonicalPath(item.path)]));
+  const conflictRemotes = new Set(project.remoteConflicts.map((item) => item.remote));
+  const repositories = [];
+  const add = (item) => {
+    const canonical = canonicalPath(item.path);
+    if (repositories.some((current) => samePath(current.path, canonical))) return;
+    repositories.push({
+      path: display(canonical),
+      remote: item.remote ?? null,
+      normalizedRemote: item.normalizedRemote ?? (item.remote ? normalizedRemote(item.remote) : null),
+      role: samePath(canonical, project.projectRoot) ? "project-root" : "component",
+    });
+  };
+  for (const repository of project.repositories) {
+    const selected = repository.normalizedRemote ? selectedByRemote.get(repository.normalizedRemote) : null;
+    if (repository.normalizedRemote && conflictRemotes.has(repository.normalizedRemote)
+      && (!selected || !samePath(repository.path, selected))) continue;
+    add(repository);
+  }
+  return repositories;
 }
 
 function adoptLegacyWorkbench(project) {
@@ -1542,6 +1677,7 @@ function installProjectEntry(project) {
     fail("写入项目AGENTS.md前必须由用户确认融合，并传入 --confirm-fusion yes", 2);
   }
   project.canonicalRepositories = selectCanonicalRepositories(project);
+  project.registeredRepositories = selectRegisteredRepositories(project);
   if (project.legacyWorkbench && !project.legacyWorkbench.historical
     && !project.legacyWorkbench.parseable && arg("--confirm-legacy-skip") !== "yes") {
     fail(`发现旧工作台但无法安全解析：${project.legacyWorkbench.path}（${project.legacyWorkbench.reason}）。请人工核对后传入 --confirm-legacy-skip yes，不能静默建立空工作台。`, 2);
@@ -1792,9 +1928,9 @@ function restoreLocal() {
 function printHelp() {
   console.log(`BEYOND控制仓固定动作\n\n` +
     `  init-control [--project-root <当前项目根>]  # 默认项目内模式传入项目根；外置模式省略\n` +
-    `  inspect-project --project-root <目录> [--host-id <主机>] [--codex-project-id <项目>]\n` +
-    `  register-project --project-root <目录> [--name <名称>] [--host-id <主机>] [--codex-project-id <项目>]\n` +
-    `  install-project-entry --project-root <目录> --confirm-fusion yes [--worker-policy-mode platform-default|beyond-worker-matrix-v1 --worker-policy-approved-by <用户明确批准依据>] [--adopt-legacy-workbench yes] [--canonical-repositories <每组重复remote选择一个正式路径>] [--confirm-legacy-skip yes] [--host-id <主机>] [--codex-project-id <项目>]\n` +
+    `  inspect-project --project-root <目录> [--repository-roots <额外正式Git根>] [--host-id <主机>] [--codex-project-id <项目>]\n` +
+    `  register-project --project-root <目录> [--name <名称>] [--repository-roots <额外正式Git根>] [--canonical-repositories <每组重复remote选择一个正式路径>] [--host-id <主机>] [--codex-project-id <项目>]\n` +
+    `  install-project-entry --project-root <目录> --confirm-fusion yes [--worker-policy-mode platform-default|beyond-worker-matrix-v1 --worker-policy-approved-by <用户明确批准依据>] [--adopt-legacy-workbench yes] [--repository-roots <额外正式Git根>] [--canonical-repositories <每组重复remote选择一个正式路径>] [--confirm-legacy-skip yes] [--host-id <主机>] [--codex-project-id <项目>]\n` +
     `  initialization --action show --project-id <项目编号>\n` +
     `  initialization --action choose --project-id <项目编号> --mode full|on-demand --approved-by <用户明确批准依据>\n` +
     `  initialization --action record --project-id <项目编号> --group overview|architecture|development|testing|operations|security|other --decision migrate|register|defer [--entry <正式入口>]\n` +
@@ -1838,6 +1974,8 @@ else if (command === "init-control") {
   console.log(JSON.stringify(inspectProject(arg("--project-root")), null, 2));
 } else if (command === "register-project") {
   const project = inspectProject(arg("--project-root"));
+  project.canonicalRepositories = selectCanonicalRepositories(project);
+  project.registeredRepositories = selectRegisteredRepositories(project);
   const result = registerProject(project, arg("--name"));
   const state = parseInitialization(readUtf8(result.overviewPath, "项目总览")).state;
   console.log(JSON.stringify({
@@ -1901,7 +2039,7 @@ else if (command === "runtime") {
     fail(`runtime请求无效：${error.message}`, 2);
   }
   try {
-    const response = executeRuntimeRequest(request, { controlRoot });
+    const response = executeRuntimeRequest(request, { controlRoot, executionRoot: process.cwd() });
     console.log(JSON.stringify(response, null, 2));
     if (response.ok !== true) process.exitCode = 1;
   } catch (error) {

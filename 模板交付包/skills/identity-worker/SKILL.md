@@ -69,13 +69,15 @@ PM不为正式任务预选 Action Skill。旧任务包附带的方法只作为�
 
 ## 4. 正式目标、工作区与事实
 
-用户指定的正式项目是默认工作区。BEYOND 不创建或推荐 worktree。
+用户指定的正式项目是默认工作区。BEYOND 不创建或推荐 worktree。`canonicalProjectRoot`是BEYOND正式项目根，`repositoryRoot`是本任务对应的已登记仓库或交付根，`executionRoot`是Worker当前实际执行根，`controlRoot`是唯一控制仓；存在Git时仓库和执行根分别取对应精确checkout顶层，非Git同根任务则使用正式执行根。四者在单仓本地任务中可以相同，在多仓或既有worktree中可以不同，但不能互相替代。
 
 写入前核对实际路径、任务拥有的文件/模块边界和 Git现场，只修改本任务拥有的对象，不覆盖、回退、清理或混入用户与其他任务的改动。
 
 任务需要本地代码交付且没有明确禁止 Git时，任务自有本地提交属于连续交付；远端推送、非约定分支合流、强制 Git、历史改写和删除分支不自动授权。
 
-平台或用户已经把任务放入既有 worktree时只核对当前目录、来源和正式目标，不再创建、切换或建议第二个worktree。当前目录不是正式交付目标时，由原Worker在同一任务内完成可追溯交付，不把责任交给PM或另一个任务。
+平台或用户已经把任务放入既有 worktree时只核对当前目录、来源和正式目标，不再创建、切换或建议第二个worktree。任务包带有`projectRoute`时保持其中`projectId / canonicalProjectRoot / repositoryRoot / controlRoot / hostId / codexProjectId`不变，只把当前精确Git顶层作为`executionRoot`交给固定runtime复核；不得搜索、猜测或改投其他控制仓。当前目录不是正式交付目标时，由原Worker在同一任务内完成可追溯交付，不把责任交给PM或另一个任务。
+
+任务目标明确位于跨根、多仓或既有worktree，而任务包没有完整`projectRoute`时，首轮身份与Action Skill读取后、读取业务文件或调用业务工具前即停止业务动作。只向包装中的来源PM发送一次派单纠正，说明缺少`projectRoute`并要求把当前verified route补给同一Worker；随后输出普通进展并结束本turn，不使用`已完成`或`已暂停`，不执行`worker-result.enqueue`，不搜索控制仓、不猜测路径、不创建替代任务。收到精确route后由同一Worker继续原任务；这不是业务暂停。
 
 同一正式目录内，边界明确、共享对象不重叠且测试或运行副作用隔离时可以并行编辑和验证。实际重叠时只停止受影响动作并读取协作reference。共享 Git工作区的索引、HEAD或历史动作串行；执行前刷新现场，精确暂存任务路径并核对diff。
 
@@ -108,11 +110,17 @@ PM 或用户一次授权业务结果、范围和当前放行边界。范围内�
 
 只有任务实际影响其他正式任务、共享对象或项目主线时才进入跨任务机制；能够继续的普通影响不主动注入PM对话。
 
+任务尚未形成终态时，只有任务包明确设置的PM检查点，或新事实确实需要PM使用项目全貌裁决其他正式任务、共享对象或主线取舍，才向来源PM提交非终态说明；这种说明不执行`worker-result.enqueue`，不使用`已完成 / 已暂停`开头，也不触发验收。只停止等待该裁决的受影响动作，不受影响的安全工作继续。普通里程碑、方法选择和可自行闭环的问题留在当前Worker，不把PM变成陪跑者。
+
 ## 7. 回源与完成
+
+Worker把正式任务做完后必须向唯一来源PM报告一次；来源PM正在回答老板、暂时忙碌或可能延后处理，都不能成为跳过终态回执或原生回调的理由。PM忙碌只影响PM何时处理，不改变Worker下面固定的终态顺序。
 
 正式任务的正常完成、工具启动失败、缺失输出、权限或环境异常等所有真实终态都进入同一个收口，不得从异常分支直接跳到final。先稳定业务动作、文件、Git与运行现场，确认最后一次业务工具调用已经结束、没有仍会改变现场的命令或进程，再形成完整自包含final草稿但不输出；首行必须以`已完成`或`已暂停`开头。
 
-正式任务在回源前通过固定`runtime`入口执行一次`worker-result.enqueue`，把任务包中的`projectId + taskId`、当前包装的`source_thread_id`、业务状态和完整final草稿保存为待处理终态；只有平台明确提供当前Worker threadId时才附带，不为取得它增加扫描。这个`runtime`只取当前正式项目根`AGENTS.md`映射的项目身份与工作台事务入口，相对路径从该项目根解析；不得搜索、猜测或替换为其他项目、源码仓、模板或候选包的入口，映射缺失或冲突时如实报告保存失败且不跨根回退。`runtime --request`后必须传JSON请求文件路径，不能传JSON正文；请求固定为`{"schemaVersion":1,"action":"worker-result.enqueue","input":{"projectId":"…","taskId":"…","sourceThreadId":"…","businessState":"已完成或已暂停","finalText":"…"}}`，字段名不得自行改写，`requestId`和`createdAt`对`worker-result`可省略。回执是同一份冻结final的短期控制快照，不是第二种业务真值、消息历史或长期证据。保存成功后不得再改变final草稿；保存失败时在final中如实说明，但不循环重试或建设旁路。
+正式任务在回源前通过固定`runtime`入口执行一次`worker-result.enqueue`，把任务包中的`projectId + taskId`、当前包装的`source_thread_id`、业务状态和完整final草稿保存为待处理终态；只有平台明确提供当前Worker threadId时才附带，不为取得它增加扫描。没有`projectRoute`的同根任务仍只取当前正式项目根`AGENTS.md`映射的runtime。任务包带有`projectRoute`时只调用其中精确`controlRoot`下的固定runtime，调用工作目录必须是当前`executionRoot`；请求保持其他route字段不变并写入该`executionRoot`，由runtime复核本机项目登记、canonical根入口以及Git/worktree关系后才允许写入。两条路径都不得搜索、猜测或替换为其他项目、源码仓、模板或候选包入口，缺失或冲突时如实报告保存失败且不跨根回退。
+
+`runtime --request`后必须传JSON请求文件路径，不能传JSON正文；基础请求为`{"schemaVersion":1,"action":"worker-result.enqueue","input":{"projectId":"…","taskId":"…","sourceThreadId":"…","businessState":"已完成或已暂停","finalText":"…"}}`；存在route时在`input`增加`{"projectRoute":{"projectId":"…","canonicalProjectRoot":"…","repositoryRoot":"…","executionRoot":"…","controlRoot":"…","hostId":"…","codexProjectId":"…"}}`。字段名不得自行改写，`requestId`和`createdAt`对`worker-result`可省略。回执是同一份冻结final的短期控制快照，不是第二种业务真值、消息历史或长期证据。保存成功后不得再改变final草稿；保存失败时在final中如实说明，但不循环重试或建设旁路。
 
 随后不读取或判断来源PM忙闲，不调用`wait_threads`。回源目标只取当前平台任务包装提供的`source_thread_id`；创建接口返回的当前Worker `threadId`不是回源目标，来源缺失或矛盾时不得猜测。`send_message_to_thread`未在顶层直接显示时，必须从`ALL_TOOLS`发现规范工具`codex_app__send_message_to_thread`并通过承载它的工具编排入口调用；顶层未显示不等于工具不存在。当前标准调用固定只传`threadId + prompt`：`{"threadId":"<source_thread_id>","prompt":"当前Worker正在提交终态；请扫描待处理终态并在任务线程结束后核对final"}`；字段名必须是`prompt`，不得写成`message`，也不附加可选`hostId`、模型或推理参数。直接向唯一来源调用一次，且回源工具必须是本轮最后一次工具调用。无论发送成功或失败都不循环、不重试、不改投其他ID；回源工具返回后不得继续推理、发送过程消息或调用任何工具，只把已冻结的同一份final作为本轮最后一个动作输出并结束。用户检查点、普通进展和仍在继续的阶段结果不使用终态开头。
 

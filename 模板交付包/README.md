@@ -52,7 +52,7 @@ Skill 无法识别时优先检查 UTF-8 无 BOM、文件头、frontmatter、安�
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | 第一入口、请求分流、最小读取和全局边界 |
 | [00-模板入口](docs/AI编程协同机制/00-模板入口.md) | 项目文档链、缺失与冲突、事实归位和历史回收 |
-| `local/当前工作台.md` | 当前成员自己的 PM主线、正式任务、三态、进度和按需协调，不进入 Git |
+| `local/当前工作台.md` | 当前成员自己的 PM主线、正式任务、任务状态、进度和按需协调，不进入 Git |
 | `projects/<project-id>/项目总览.md` | 对应项目稳定定位、业务边界、项目结构和长期事实入口 |
 | `projects/<project-id>/项目事实/README.md` | 对应项目技术栈、测试、服务器、发布、安全等实际长期事实入口 |
 | [跨任务协同与共享对象机制](docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md) | 正式任务之间的依赖、共享对象、接力和冲突 |
@@ -103,6 +103,10 @@ node beyond-control/scripts/beyond-control.mjs inspect-project --project-root "<
 node beyond-control/scripts/beyond-control.mjs install-project-entry --project-root "<业务项目目录>" --confirm-fusion yes
 ```
 
+多仓项目仍只保留一个BEYOND项目根和一个`controlRoot`。固定入口只自动调查项目根自身及其一级子目录中的精确Git根；未被自动发现、但确属同一业务项目的正式组件仓（包括更深层嵌套仓和项目根外仓），统一用`--repository-roots "<仓A>,<仓B>"`显式登记。重复remote继续用`--canonical-repositories`选择唯一正式路径。BEYOND不把`beyond-control`复制进每个业务仓，也不创建worktree；平台或用户已有worktree时，由已验证项目路由把当前执行根绑定回登记仓和唯一控制仓。
+
+跨根、多仓或既有worktree场景首次登记时，同时传入当前Codex项目真实返回的`--host-id`和`--codex-project-id`；不能猜测或留空后宣称路由可用。单根同目录任务不以这两个字段为额外门禁。升级会自动保留既有外部仓路径和平台绑定；已登记路径缺失、不再是精确Git根或origin remote漂移时停止覆盖，必须显式裁决。
+
 本地融合不自动推送。固定脚本会建立共享项目登记、最小项目总览和最小事实索引，保证融合入口立即可达；需要让其他成员取得这些基础时，用户另行授权远端Git后，再用`project-registration`范围精确推送同一项目的这三份文件。该范围不能提交后续事实正文、其他项目文档或业务代码。
 
 团队模式下所有内部成员克隆同一个控制仓。用户说“拉取一下任务和协同”时，由 PM调用固定脚本同步并按当前 Git身份汇总；普通个人任务不读取`shared/`。
@@ -113,4 +117,4 @@ node beyond-control/scripts/beyond-control.mjs install-project-entry --project-r
 node scripts/beyond-control.mjs runtime --request "<由BEYOND生成的JSON请求文件>"
 ```
 
-`--request`接收文件路径，不接收JSON正文。`worker-result.enqueue/list/ack`请求固定使用`schemaVersion + action + input`外层；这三类动作可省略`requestId`，由运行内核自动生成。
+`--request`接收文件路径，不接收JSON正文。`worker-result.enqueue/list/ack`请求固定使用`schemaVersion + action + input`外层；`list`至少带当前`projectId`，`ack`带`projectId + taskId + receiptId`。这三类动作可省略`requestId`，由运行内核自动生成。

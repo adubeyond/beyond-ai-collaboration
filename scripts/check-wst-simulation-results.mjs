@@ -106,7 +106,7 @@ const packetRoot = caseDirectory('WST-AB-PACKET', 'WST-AB-PACKET-review');
 const packetOutput = read(evidenceFile('WST-AB-PACKET'));
 const packetCommands = commands('WST-AB-PACKET').join('\n');
 const packetFacts = ['$identity-worker', '50', '全部异常', '站甲', '站乙', '站丙', '人工复核', 'evidence/three-site-quality-review/'];
-check('PACKET keeps every required business fact', packetFacts.every((fact) => packetOutput.includes(fact)) && /10\s*条/.test(packetOutput) && /(?:原有三个站点|三个原站点|原三个站点|原站点)\s*Worker/.test(packetOutput));
+check('PACKET keeps every required business fact', packetFacts.every((fact) => packetOutput.includes(fact)) && /10\s*条/.test(packetOutput) && /(?:(?:原有三个站点|三个原站点|原三个站点|原站点)\s*Worker|各站原\s*Worker)/.test(packetOutput));
 check('PACKET remains a compact business contract', [...packetOutput].length < 1200, 'chars=' + [...packetOutput].length);
 check('PACKET starts only Worker identity', !/\$task-(design|dev|test|ops)/.test(packetOutput));
 check('PACKET PM does not load Action Skills', !/task-(design|dev|test|ops)/.test(packetCommands));

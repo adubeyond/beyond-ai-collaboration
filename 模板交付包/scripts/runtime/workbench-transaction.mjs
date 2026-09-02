@@ -425,10 +425,15 @@ export class WorkbenchTransactionStore {
 
   consumeAcceptedResult(input, { faultAt = null } = {}) {
     this.#assertWritable();
-    return this.#withLock(() => this.#consumeLocked(input, faultAt));
+    return this.#withLock(() => this.#consumeLocked(input, faultAt, 'accepted'));
   }
 
-  #consumeLocked(input, faultAt) {
+  closeTask(input, { faultAt = null } = {}) {
+    this.#assertWritable();
+    return this.#withLock(() => this.#consumeLocked(input, faultAt, 'closed'));
+  }
+
+  #consumeLocked(input, faultAt, kind) {
     if (!validId(input.operationId)) throw new Error('invalid operation id');
     if (!validId(input.taskId) || !validId(input.worker)) {
       throw new Error('invalid task or worker id');
@@ -438,12 +443,13 @@ export class WorkbenchTransactionStore {
     let transaction = readJson(transactionFile, null);
     if (transaction) {
       if (transaction.inputDigest !== inputDigest) throw new Error('operation id reused with different input');
+      if ((transaction.kind ?? 'accepted') !== kind) throw new Error('operation id reused for another terminal action');
       if (transaction.phase === 'completed') return clone(transaction.output);
     }
 
     let state = this.#readState();
     if (!transaction) {
-      this.#validateCompletionInput(state, input);
+      this.#validateTerminalInput(state, input, kind);
       const backupFile = path.join(this.backupRoot, `${input.operationId}.json`);
       if (!fs.existsSync(backupFile)) {
         writeAtomic(backupFile, { operationId: input.operationId, stateFingerprint: digest(state), state });
@@ -453,6 +459,7 @@ export class WorkbenchTransactionStore {
         operationId: input.operationId,
         inputDigest,
         input: clone(input),
+        kind,
         phase: 'intent',
         output: null,
         historyRecord: null,
@@ -475,20 +482,35 @@ export class WorkbenchTransactionStore {
           throw new Error('task changed after transaction intent');
         }
         state.revision += 1;
-        const historyRecord = {
+        const terminalStatus = kind === 'closed' ? '已关闭' : '已完成';
+        const terminalAt = kind === 'closed' ? input.closedAt : input.completedAt;
+        const historyRecord = kind === 'closed' ? {
           operationId: input.operationId,
           taskId: input.taskId,
           task: task.task,
           worker: input.worker,
+          status: terminalStatus,
+          result: input.taskLocator,
+          evidence: input.authorizationLocator,
+          conclusion: input.closureReason,
+          completedAt: terminalAt,
+          affectsMainline: false,
+          pendingDependencies: [],
+        } : {
+          operationId: input.operationId,
+          taskId: input.taskId,
+          task: task.task,
+          worker: input.worker,
+          status: terminalStatus,
           result: input.finalLocator,
           evidence: input.evidenceLocator,
           conclusion: input.conclusion,
-          completedAt: input.completedAt,
+          completedAt: terminalAt,
           affectsMainline: input.affectsMainline === true,
           pendingDependencies: [...new Set(input.pendingDependencies ?? [])],
         };
         delete state.tasks[input.taskId];
-        if (input.affectsMainline === true) {
+        if (kind === 'accepted' && input.affectsMainline === true) {
           state.recentMainlineResults.push({
             taskId: input.taskId,
             task: task.task,
@@ -502,7 +524,7 @@ export class WorkbenchTransactionStore {
           operationId: input.operationId,
           taskId: input.taskId,
           worker: input.worker,
-          status: '已完成',
+          status: terminalStatus,
           stateRevision: state.revision,
           archived: true,
         };
@@ -535,9 +557,10 @@ export class WorkbenchTransactionStore {
         schemaVersion: 1,
         operationId: input.operationId,
         inputDigest,
+        kind,
         phase: 'completed',
         output: transaction.output,
-        completedAt: input.completedAt,
+        completedAt: kind === 'closed' ? input.closedAt : input.completedAt,
       };
       writeAtomic(transactionFile, transaction);
       this.#trimBackups();
@@ -545,11 +568,27 @@ export class WorkbenchTransactionStore {
     return clone(transaction.output);
   }
 
-  #validateCompletionInput(state, input) {
+  #validateTerminalInput(state, input, kind) {
     const task = state.tasks[input.taskId];
     if (!task || task.worker !== input.worker) throw new Error('unique active task is missing');
     if (task.status !== input.expectedStatus || !ACTIVE_STATES.has(task.status)) {
       throw new Error(`unexpected task state: ${task.status}`);
+    }
+    if (kind === 'closed') {
+      if (input.businessState !== '已关闭'
+        || input.ownerDirective !== 'explicit-owner-instruction'
+        || input.workerStopped !== true
+        || !validId(input.closedBy)
+        || !validTimestamp(input.closedAt)) {
+        throw new Error('explicit owner-authorized task closure is required');
+      }
+      if (!String(input.closureReason ?? '').trim()
+        || !String(input.taskLocator ?? '').trim()
+        || !String(input.authorizationLocator ?? '').trim()) {
+        throw new Error('closure reason or traceable locator is missing');
+      }
+      monthOf(input.closedAt);
+      return;
     }
     if (input.acceptance !== 'accepted' || !validId(input.acceptedBy)
       || !validTimestamp(input.acceptedAt) || !validTimestamp(input.completedAt)) {
@@ -571,7 +610,8 @@ export class WorkbenchTransactionStore {
       const file = path.join(this.transactionRoot, entry.name);
       const transaction = readJson(file, null);
       if (!transaction || transaction.phase === 'completed' || !transaction.input) continue;
-      this.consumeAcceptedResult(transaction.input);
+      if ((transaction.kind ?? 'accepted') === 'closed') this.closeTask(transaction.input);
+      else this.consumeAcceptedResult(transaction.input);
       recoveredOperations.push(transaction.operationId);
     }
     this.#withLock(() => {
@@ -630,12 +670,12 @@ export class WorkbenchTransactionStore {
       writeAtomic(jsonFile, history);
     }
     const rows = history.records.map((item) => (
-      `| ${markdown(item.taskId)} | ${markdown(item.task)} | ${markdown(item.worker)} | ${markdown(item.result)} | ${markdown(item.completedAt)} |`
+      `| ${markdown(item.taskId)} | ${markdown(item.task)} | ${markdown(item.worker)} | ${markdown(item.status ?? '已完成')} | ${markdown(item.result)} | ${markdown(item.conclusion)} | ${markdown(item.completedAt)} |`
     ));
     writeAtomic(path.join(this.historyRoot, `${month}.md`), [
-      `# ${month} 工作台完成历史`, '',
-      '| 任务编号 | 业务结果 | Worker | 正式结果 | 完成时间 |',
-      '| --- | --- | --- | --- | --- |',
+      `# ${month} 工作台历史`, '',
+      '| 任务编号 | 业务结果 | Worker | 状态 | 正式结果 / 任务入口 | 结论 / 关闭原因 | 终态时间 |',
+      '| --- | --- | --- | --- | --- | --- | --- |',
       ...rows, '',
     ].join('\n'));
   }

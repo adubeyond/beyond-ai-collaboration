@@ -1,4 +1,5 @@
 import os from 'node:os';
+import fs from 'node:fs';
 import path from 'node:path';
 import { ProjectIdentityProvider } from './project-identity-provider.mjs';
 import { WorkerResultReceiptStore } from './worker-result-receipts.mjs';
@@ -12,6 +13,7 @@ const ACTIONS = new Set([
   'workbench.pause',
   'workbench.snapshot',
   'workbench.accept',
+  'workbench.close',
   'workbench.recover',
   'worker-result.enqueue',
   'worker-result.list',
@@ -28,11 +30,12 @@ function nonEmpty(value, label) {
   return value;
 }
 
-function roots(controlRoot, request) {
+function roots(controlRoot, request, executionRoot) {
   const localRuntime = path.join(controlRoot, 'local', 'runtime');
   const codexHome = path.resolve(request.codexHome ?? process.env.CODEX_HOME ?? path.join(os.homedir(), '.codex'));
   return {
     controlRoot,
+    executionRoot: executionRoot ? path.resolve(executionRoot) : null,
     codexHome,
     projectIdentityRoot: path.join(localRuntime, 'project-identity'),
     workbenchRoot: path.join(localRuntime, 'workbench'),
@@ -50,6 +53,32 @@ function workbench(config) {
   });
 }
 
+function activeWorkbenchTask(config, taskId) {
+  const stateFile = path.join(config.workbenchRoot, 'workbench-state.json');
+  if (!fs.existsSync(stateFile)) return null;
+  if (!fs.existsSync(config.viewPath)) {
+    throw new Error('workbench view is missing beside machine state');
+  }
+  const state = new WorkbenchTransactionStore({
+    runtimeRoot: config.workbenchRoot,
+    viewPath: config.viewPath,
+    historyRoot: config.historyRoot,
+    readOnly: true,
+  }).snapshot();
+  return state.tasks?.[taskId] ?? null;
+}
+
+function validateReceiptTaskIdentity(config, input) {
+  const task = activeWorkbenchTask(config, input.taskId);
+  if (!task) return;
+  if (input.sourceThreadId === task.worker) {
+    throw new Error('sourceThreadId cannot equal the registered Worker');
+  }
+  if (input.workerThreadId !== undefined && input.workerThreadId !== task.worker) {
+    throw new Error('workerThreadId does not match the registered Worker');
+  }
+}
+
 function workerResults(config) {
   return new WorkerResultReceiptStore({ runtimeRoot: config.workerResultRoot });
 }
@@ -63,19 +92,32 @@ function projectIdentity(config) {
 
 function execute(action, request, config) {
   if (action === 'project.resolve') {
-    return projectIdentity(config).resolve(object(request.input, 'project identity input'));
+    const input = object(request.input, 'project identity input');
+    const executionRoot = nonEmpty(config.executionRoot, 'runtime executionRoot');
+    return projectIdentity(config).resolve({ ...input, cwd: executionRoot });
   }
   if (action === 'worker-result.enqueue') {
     const input = object(request.input, 'Worker result receipt');
-    projectIdentity(config).requireRegisteredProject(input.projectId);
+    if (input.projectRoute !== undefined) {
+      projectIdentity(config).validateWorkerRoute(input.projectId, input.projectRoute, { executionRoot: config.executionRoot });
+    } else projectIdentity(config).validateSameRootProject(input.projectId, { executionRoot: config.executionRoot });
+    validateReceiptTaskIdentity(config, input);
     return workerResults(config).enqueue(input);
   }
   if (action === 'worker-result.list') {
     const input = object(request.input, 'Worker result receipt filter');
-    if (input.projectId !== undefined) projectIdentity(config).requireRegisteredProject(input.projectId);
+    projectIdentity(config).validateControlProject(nonEmpty(input.projectId, 'projectId'));
     return workerResults(config).list(input);
   }
   if (action === 'worker-result.ack') return workerResults(config).acknowledge(object(request.input, 'Worker result receipt acknowledgement'));
+  if (action === 'workbench.close') {
+    const input = object(request.input, 'task closure');
+    const projectId = nonEmpty(input.projectId, 'projectId');
+    projectIdentity(config).validateControlProject(projectId);
+    const pending = workerResults(config).list({ projectId, taskId: nonEmpty(input.taskId, 'taskId') });
+    if (pending.count !== 0) throw new Error('task closure requires zero pending Worker result receipts');
+    return workbench(config).closeTask(input);
+  }
   const store = workbench(config);
   if (action === 'workbench.migrate') return store.startupStatus();
   if (action === 'workbench.register') return store.registerTask(object(request.input, 'task registration'));
@@ -99,11 +141,17 @@ export function executeRuntimeRequest(rawRequest, context) {
   if (request.requestId !== undefined) requestId = nonEmpty(request.requestId, 'requestId');
   else if (action.startsWith('worker-result.')) {
     const input = object(request.input, 'Worker result request input');
-    const identity = input.receiptId ?? input.taskId ?? input.projectId ?? 'all';
+    const identity = [input.projectId, input.receiptId ?? input.taskId ?? 'all'].filter(Boolean).join(':');
     requestId = `${action}:${nonEmpty(String(identity), 'Worker result request identity')}`;
   } else requestId = nonEmpty(request.requestId, 'requestId');
   const controlRoot = path.resolve(nonEmpty(context?.controlRoot, 'controlRoot'));
-  return { schemaVersion: 1, requestId, action, ok: true, result: execute(action, request, roots(controlRoot, request)) };
+  return {
+    schemaVersion: 1,
+    requestId,
+    action,
+    ok: true,
+    result: execute(action, request, roots(controlRoot, request, context?.executionRoot)),
+  };
 }
 
 export const controlRuntimeActions = [...ACTIONS];

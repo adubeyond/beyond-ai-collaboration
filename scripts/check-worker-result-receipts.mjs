@@ -1,11 +1,32 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { executeRuntimeRequest } from '../模板交付包/scripts/runtime/control-runtime.mjs';
 import { WorkerResultReceiptStore } from '../模板交付包/scripts/runtime/worker-result-receipts.mjs';
+
+const receiptStoreModule = new URL('../模板交付包/scripts/runtime/worker-result-receipts.mjs', import.meta.url).href;
+
+function listInChild(runtimeRoot, projectId) {
+  const script = `import { WorkerResultReceiptStore } from ${JSON.stringify(receiptStoreModule)};\n`
+    + `const store = new WorkerResultReceiptStore({ runtimeRoot: ${JSON.stringify(runtimeRoot)} });\n`
+    + `process.stdout.write(JSON.stringify(store.list({ projectId: ${JSON.stringify(projectId)} })));`;
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['--input-type=module', '--eval', script], {
+      encoding: 'utf8', windowsHide: true,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (status) => resolve({ status, stdout, stderr }));
+  });
+}
 
 function fixture(name) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), `beyond-worker-result-${name}-`));
@@ -29,19 +50,33 @@ function receipt(overrides = {}) {
 }
 
 function runtime(controlRoot, requestId, action, input) {
-  return executeRuntimeRequest({ schemaVersion: 1, requestId, action, input }, { controlRoot });
+  const executionRoot = action === 'worker-result.enqueue'
+    ? projectRootFor(controlRoot, input.projectId)
+    : undefined;
+  return executeRuntimeRequest({ schemaVersion: 1, requestId, action, input }, { controlRoot, executionRoot });
+}
+
+function projectRootFor(controlRoot, projectId = 'local-project-a') {
+  return path.join(path.dirname(controlRoot), `${projectId}-project`);
 }
 
 function registerProject(controlRoot, projectId = 'local-project-a', options = {}) {
   const local = options.local !== false;
   const shared = options.shared !== false;
-  const projectRoot = path.join(path.dirname(controlRoot), `${projectId}-project`);
+  const projectRoot = projectRootFor(controlRoot, projectId);
   fs.mkdirSync(projectRoot, { recursive: true });
   if (local) {
     const directory = path.join(controlRoot, 'local', 'projects');
     fs.mkdirSync(directory, { recursive: true });
     fs.writeFileSync(path.join(directory, `${projectId}.md`), [
-      '---', `id: ${projectId}`, `path: ${projectRoot}`, '---', '',
+      '---', `id: ${projectId}`, `path: ${projectRoot}`,
+      `repositories_json: ${JSON.stringify([{ path: projectRoot, remote: null, role: 'project-root' }])}`,
+      '---', '',
+    ].join('\n'), 'utf8');
+    fs.writeFileSync(path.join(projectRoot, 'AGENTS.md'), [
+      '<!-- BEYOND-RUNTIME-VERSION: 3.2.5 -->',
+      `<!-- BEYOND-CONTROL-ROOT: ${path.relative(projectRoot, controlRoot).replaceAll('\\', '/')} -->`,
+      `<!-- BEYOND-PROJECT-ID: ${projectId} -->`, '',
     ].join('\n'), 'utf8');
   }
   if (shared) {
@@ -53,14 +88,25 @@ function registerProject(controlRoot, projectId = 'local-project-a', options = {
   }
 }
 
+function registerActiveTask(controlRoot, overrides = {}) {
+  fs.mkdirSync(path.join(controlRoot, 'local'), { recursive: true });
+  const view = path.join(controlRoot, 'local', '当前工作台.md');
+  if (!fs.existsSync(view)) fs.writeFileSync(view, '# 当前工作台\n', 'utf8');
+  return runtime(controlRoot, `register-${overrides.taskId ?? 'task-a'}`, 'workbench.register', {
+    taskId: 'task-a', task: '任务A', worker: 'worker-a', status: '进行中', progress: '执行中',
+    pause: '无', result: '无', updatedAt: '2026-08-23T16:00:00+08:00',
+    ...overrides,
+  });
+}
+
 test('worker-result actions derive requestId when the envelope omits it', () => {
   const f = fixture('derived-request-id');
   const created = executeRuntimeRequest({
     schemaVersion: 1,
     action: 'worker-result.enqueue',
     input: receipt(),
-  }, { controlRoot: f.root });
-  assert.equal(created.requestId, 'worker-result.enqueue:task-a');
+  }, { controlRoot: f.root, executionRoot: projectRootFor(f.root) });
+  assert.equal(created.requestId, 'worker-result.enqueue:local-project-a:task-a');
   assert.equal(created.result.mode, 'created');
   assert.throws(() => executeRuntimeRequest({
     schemaVersion: 1,
@@ -69,17 +115,27 @@ test('worker-result actions derive requestId when the envelope omits it', () => 
   }, { controlRoot: f.root }), /requestId is required/);
 });
 
-test('runtime accepts a project registered in either local or shared records', () => {
-  for (const [name, options] of [
-    ['local-only', { shared: false }],
-    ['shared-only', { local: false }],
-  ]) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), `beyond-worker-result-${name}-`));
-    registerProject(root, 'local-project-a', options);
-    const created = runtime(root, `${name}-enqueue`, 'worker-result.enqueue', receipt()).result.record;
-    assert.equal(runtime(root, `${name}-list`, 'worker-result.list', { projectId: 'local-project-a' }).result.count, 1);
-    runtime(root, `${name}-ack`, 'worker-result.ack', { taskId: 'task-a', receiptId: created.receiptId });
-  }
+test('runtime write requires a local project registration and exact same-root execution', () => {
+  const localRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-local-only-'));
+  registerProject(localRoot, 'local-project-a', { shared: false });
+  const created = runtime(localRoot, 'local-enqueue', 'worker-result.enqueue', receipt()).result.record;
+  assert.equal(runtime(localRoot, 'local-list', 'worker-result.list', { projectId: 'local-project-a' }).result.count, 1);
+  runtime(localRoot, 'local-ack', 'worker-result.ack', {
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: created.receiptId,
+  });
+
+  const sharedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-shared-only-'));
+  registerProject(sharedRoot, 'local-project-a', { local: false });
+  assert.throws(() => runtime(sharedRoot, 'shared-enqueue', 'worker-result.enqueue', receipt()), /local project registration/);
+  assert.throws(() => runtime(sharedRoot, 'shared-list', 'worker-result.list', { projectId: 'local-project-a' }), /local project registration/);
+  assert.equal(fs.existsSync(path.join(sharedRoot, 'local', 'runtime', 'worker-results', 'pending')), false);
+
+  const crossRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-cross-root-'));
+  registerProject(crossRoot);
+  assert.throws(() => executeRuntimeRequest({
+    schemaVersion: 1, action: 'worker-result.enqueue', input: receipt(),
+  }, { controlRoot: crossRoot, executionRoot: crossRoot }), /requires projectRoute/);
+  assert.equal(fs.existsSync(path.join(crossRoot, 'local', 'runtime', 'worker-results', 'pending')), false);
 });
 
 test('runtime rejects a project not registered in this control root without writing pending data', () => {
@@ -88,7 +144,119 @@ test('runtime rejects a project not registered in this control root without writ
   assert.throws(() => runtime(root, 'wrong-enqueue', 'worker-result.enqueue', receipt()), /not registered in this control root/);
   assert.equal(fs.existsSync(path.join(root, 'local', 'runtime', 'worker-results', 'pending')), false);
   assert.throws(() => runtime(root, 'wrong-list', 'worker-result.list', { projectId: 'local-project-a' }), /not registered in this control root/);
-  assert.equal(runtime(root, 'control-root-audit', 'worker-result.list', {}).result.count, 0);
+  assert.throws(() => runtime(root, 'control-root-audit', 'worker-result.list', {}), /projectId is required/);
+});
+
+test('runtime rejects a receipt that names the registered Worker as its source', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-self-source-'));
+  registerProject(root);
+  registerActiveTask(root);
+  assert.throws(() => runtime(root, 'self-source-enqueue', 'worker-result.enqueue', receipt({
+    sourceThreadId: 'worker-a',
+  })), /sourceThreadId cannot equal the registered Worker/);
+  assert.equal(runtime(root, 'self-source-empty', 'worker-result.list', {
+    projectId: 'local-project-a',
+  }).result.count, 0);
+});
+
+test('runtime leaves source-PM matching to the PM consumer after rejecting self-source', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-non-worker-source-'));
+  registerProject(root);
+  registerActiveTask(root);
+  const created = runtime(root, 'non-worker-source-enqueue', 'worker-result.enqueue', receipt({
+    sourceThreadId: 'unrelated-thread',
+    workerThreadId: 'worker-a',
+  })).result.record;
+  assert.equal(created.sourceThreadId, 'unrelated-thread');
+  assert.equal(created.workerThreadId, 'worker-a');
+});
+
+test('runtime accepts an omitted optional Worker id without claiming owner verification', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-optional-worker-'));
+  registerProject(root);
+  registerActiveTask(root);
+  const created = runtime(root, 'optional-worker-enqueue', 'worker-result.enqueue', receipt()).result.record;
+  assert.equal(created.workerThreadId, null);
+});
+
+test('runtime fails closed when machine state exists without its workbench view', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-missing-view-'));
+  registerProject(root);
+  registerActiveTask(root);
+  fs.unlinkSync(path.join(root, 'local', '当前工作台.md'));
+  assert.throws(() => runtime(root, 'missing-view-enqueue', 'worker-result.enqueue', receipt({
+    sourceThreadId: 'worker-a',
+    workerThreadId: 'worker-a',
+  })), /workbench view is missing beside machine state/);
+  assert.equal(runtime(root, 'missing-view-empty', 'worker-result.list', {
+    projectId: 'local-project-a',
+  }).result.count, 0);
+});
+
+test('runtime rejects a Worker id that conflicts with the registered task owner', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-worker-mismatch-'));
+  registerProject(root);
+  registerActiveTask(root);
+  assert.throws(() => runtime(root, 'worker-mismatch-enqueue', 'worker-result.enqueue', receipt({
+    workerThreadId: 'worker-b',
+  })), /workerThreadId does not match the registered Worker/);
+  assert.equal(runtime(root, 'worker-mismatch-empty', 'worker-result.list', {
+    projectId: 'local-project-a',
+  }).result.count, 0);
+});
+
+test('runtime accepts a non-Worker source and Worker that match an active task', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-active-match-'));
+  registerProject(root);
+  registerActiveTask(root);
+  const created = runtime(root, 'active-match-enqueue', 'worker-result.enqueue', receipt({
+    workerThreadId: 'worker-a',
+  })).result.record;
+  assert.equal(created.sourceThreadId, '01a00000-0000-7000-8000-000000000002');
+  assert.equal(created.workerThreadId, 'worker-a');
+});
+
+test('runtime preserves the pre-registration completion race', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-pre-register-'));
+  registerProject(root);
+  fs.mkdirSync(path.join(root, 'local'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'local', '当前工作台.md'), '# 当前工作台\n', 'utf8');
+  runtime(root, 'pre-register-workbench', 'workbench.migrate', {});
+  const created = runtime(root, 'pre-register-enqueue', 'worker-result.enqueue', receipt({
+    workerThreadId: 'worker-before-register',
+  })).result.record;
+  assert.equal(created.workerThreadId, 'worker-before-register');
+});
+
+test('copied local registration cannot make another control root return a fake empty list', () => {
+  const source = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-control-source-'));
+  const copied = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-control-copy-'));
+  registerProject(source);
+  fs.mkdirSync(path.join(copied, 'local', 'projects'), { recursive: true });
+  fs.mkdirSync(path.join(copied, 'shared', 'projects'), { recursive: true });
+  fs.copyFileSync(
+    path.join(source, 'local', 'projects', 'local-project-a.md'),
+    path.join(copied, 'local', 'projects', 'local-project-a.md'),
+  );
+  fs.copyFileSync(
+    path.join(source, 'shared', 'projects', 'local-project-a.md'),
+    path.join(copied, 'shared', 'projects', 'local-project-a.md'),
+  );
+  assert.throws(() => runtime(copied, 'copied-control-list', 'worker-result.list', {
+    projectId: 'local-project-a',
+  }), /AGENTS controlRoot mismatch/);
+});
+
+test('two local project ids cannot share one canonical path at runtime', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-duplicate-path-'));
+  registerProject(root);
+  const projectRoot = projectRootFor(root, 'local-project-a');
+  fs.writeFileSync(path.join(root, 'local', 'projects', 'local-project-b.md'), [
+    '---', 'id: local-project-b', `path: ${projectRoot}`, 'repositories_json: []', '---', '',
+  ].join('\n'), 'utf8');
+  assert.throws(() => runtime(root, 'duplicate-path-list', 'worker-result.list', {
+    projectId: 'local-project-a',
+  }), /one project id for the canonical local path/);
 });
 
 test('registered project list distinguishes a legitimate empty result from a wrong-root query', () => {
@@ -107,7 +275,7 @@ test('ack remains able to remove an existing receipt after source registration d
   fs.rmSync(path.join(root, 'local', 'projects'), { recursive: true, force: true });
   fs.rmSync(path.join(root, 'shared', 'projects'), { recursive: true, force: true });
   assert.equal(runtime(root, 'cleanup-ack', 'worker-result.ack', {
-    taskId: 'task-a', receiptId: created.receiptId,
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: created.receiptId,
   }).result.removed, true);
 });
 
@@ -127,7 +295,7 @@ test('identical enqueue is idempotent', () => {
   const second = f.store.enqueue(receipt({ createdAt: '2026-08-23T08:01:00.000Z' }));
   assert.equal(second.mode, 'existing');
   assert.equal(second.record.receiptId, first.record.receiptId);
-  assert.equal(f.store.list({ taskId: 'task-a' }).count, 1);
+  assert.equal(f.store.list({ projectId: 'local-project-a', taskId: 'task-a' }).count, 1);
 });
 
 test('a newer terminal result replaces the same task without creating history', () => {
@@ -136,7 +304,7 @@ test('a newer terminal result replaces the same task without creating history', 
   const completed = f.store.enqueue(receipt({ finalText: '已完成\n目标代号已经处理。', createdAt: '2026-08-23T08:02:00.000Z' }));
   assert.equal(completed.mode, 'replaced');
   assert.equal(completed.supersededReceiptId, paused.record.receiptId);
-  assert.deepEqual(f.store.list({ taskId: 'task-a' }).records, [completed.record]);
+  assert.deepEqual(f.store.list({ projectId: 'local-project-a', taskId: 'task-a' }).records, [completed.record]);
   assert.equal(fs.existsSync(path.join(f.root, 'worker-results', 'history')), false);
 });
 
@@ -145,30 +313,30 @@ test('stale acknowledgement cannot remove a newer result', () => {
   const paused = f.store.enqueue(receipt({ businessState: '已暂停', finalText: '已暂停\n等待目标代号。' }));
   const completed = f.store.enqueue(receipt({ finalText: '已完成\n目标代号已经处理。' }));
   assert.throws(() => f.store.acknowledge({
-    taskId: 'task-a', receiptId: paused.record.receiptId,
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: paused.record.receiptId,
   }), /stale acknowledgement/);
-  assert.equal(f.store.list({ taskId: 'task-a' }).records[0].receiptId, completed.record.receiptId);
+  assert.equal(f.store.list({ projectId: 'local-project-a', taskId: 'task-a' }).records[0].receiptId, completed.record.receiptId);
 });
 
 test('acknowledgement deletes the body instead of archiving it', () => {
   const f = fixture('ack');
   const created = f.store.enqueue(receipt());
   const result = f.store.acknowledge({
-    taskId: 'task-a', receiptId: created.record.receiptId,
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: created.record.receiptId,
   });
   assert.equal(result.removed, true);
-  assert.equal(f.store.list({}).count, 0);
+  assert.equal(f.store.list({ projectId: 'local-project-a' }).count, 0);
   assert.equal(fs.existsSync(path.join(f.root, 'worker-results', 'history')), false);
 });
 
 test('optional Worker identity is checked when both producer and consumer provide it', () => {
   const f = fixture('optional-worker');
   const created = f.store.enqueue(receipt({ workerThreadId: 'worker-a' }));
-  assert.equal(f.store.list({ workerThreadId: 'worker-a' }).count, 1);
+  assert.equal(f.store.list({ projectId: 'local-project-a', workerThreadId: 'worker-a' }).count, 1);
   assert.throws(() => f.store.acknowledge({
-    taskId: 'task-a', receiptId: created.record.receiptId, workerThreadId: 'worker-b',
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: created.record.receiptId, workerThreadId: 'worker-b',
   }), /owner mismatch/);
-  assert.equal(f.store.list({ taskId: 'task-a' }).count, 1);
+  assert.equal(f.store.list({ projectId: 'local-project-a', taskId: 'task-a' }).count, 1);
 });
 
 test('invalid state, mismatched final and corrupted pending data fail visibly', () => {
@@ -177,14 +345,120 @@ test('invalid state, mismatched final and corrupted pending data fail visibly', 
   assert.throws(() => f.store.enqueue(receipt({ businessState: '已暂停' })), /finalText must start/);
   fs.mkdirSync(f.store.pendingRoot, { recursive: true });
   fs.writeFileSync(path.join(f.store.pendingRoot, 'broken.json'), '{', 'utf8');
-  assert.throws(() => f.store.list({}), /cannot read Worker result receipt/);
+  assert.throws(() => f.store.list({ projectId: 'local-project-a' }), /cannot read Worker result receipt/);
 });
 
 test('pending receipt survives process restart until acknowledgement', () => {
   const f = fixture('restart');
   const created = f.store.enqueue(receipt());
   const restarted = new WorkerResultReceiptStore({ runtimeRoot: path.join(f.root, 'worker-results') });
-  assert.equal(restarted.list({ taskId: 'task-a' }).records[0].receiptId, created.record.receiptId);
+  assert.equal(restarted.list({ projectId: 'local-project-a', taskId: 'task-a' }).records[0].receiptId, created.record.receiptId);
+});
+
+test('legacy task-only pending files migrate once into the project namespace', () => {
+  const f = fixture('legacy-migrate');
+  const created = f.store.enqueue(receipt());
+  const namespaced = f.store.receiptPath('local-project-a', 'task-a');
+  const legacy = f.store.legacyReceiptPath('task-a');
+  fs.renameSync(namespaced, legacy);
+  assert.equal(f.store.list({ projectId: 'local-project-a' }).records[0].receiptId, created.record.receiptId);
+  assert.equal(fs.existsSync(legacy), false);
+  assert.equal(fs.existsSync(namespaced), true);
+  assert.equal(f.store.acknowledge({
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: created.record.receiptId,
+  }).removed, true);
+});
+
+test('concurrent legacy migration converges on one namespaced receipt without ENOENT', async () => {
+  for (let round = 0; round < 5; round += 1) {
+    const f = fixture(`legacy-concurrent-${round}`);
+    const created = f.store.enqueue(receipt());
+    const namespaced = f.store.receiptPath('local-project-a', 'task-a');
+    const legacy = f.store.legacyReceiptPath('task-a');
+    fs.renameSync(namespaced, legacy);
+    const results = await Promise.all(Array.from({ length: 12 }, () => (
+      listInChild(path.join(f.root, 'worker-results'), 'local-project-a')
+    )));
+    for (const result of results) {
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(JSON.parse(result.stdout).records[0].receiptId, created.record.receiptId);
+    }
+    assert.equal(fs.existsSync(legacy), false);
+    assert.equal(f.store.readPath(namespaced).receiptId, created.record.receiptId);
+  }
+});
+
+test('duplicate legacy and namespaced copies collapse only when receipt ids match', () => {
+  const f = fixture('legacy-duplicate');
+  const created = f.store.enqueue(receipt());
+  const namespaced = f.store.receiptPath('local-project-a', 'task-a');
+  const legacy = f.store.legacyReceiptPath('task-a');
+  fs.copyFileSync(namespaced, legacy);
+  assert.deepEqual(f.store.list({ projectId: 'local-project-a' }).records, [created.record]);
+  assert.equal(fs.existsSync(legacy), false);
+
+  const other = fixture('legacy-conflict-source');
+  other.store.enqueue(receipt({ finalText: '已完成\n另一份冲突终态。' }));
+  fs.copyFileSync(other.store.receiptPath('local-project-a', 'task-a'), legacy);
+  assert.throws(() => f.store.list({ projectId: 'local-project-a' }), /conflicting legacy and namespaced/);
+});
+
+test('legacy migration uses the stored project id when another project has the same task id', () => {
+  const f = fixture('legacy-cross-project');
+  f.store.enqueue(receipt());
+  const second = f.store.enqueue(receipt({
+    projectId: 'local-project-b', finalText: '已完成\n项目B旧回执。',
+  }));
+  const secondPath = f.store.receiptPath('local-project-b', 'task-a');
+  fs.renameSync(secondPath, f.store.legacyReceiptPath('task-a'));
+  assert.equal(f.store.list({ projectId: 'local-project-a' }).count, 1);
+  assert.equal(f.store.list({ projectId: 'local-project-b' }).records[0].receiptId, second.record.receiptId);
+});
+
+test('same task id in two projects has separate pending files and project-bound acknowledgement', () => {
+  const f = fixture('project-namespace');
+  const first = f.store.enqueue(receipt());
+  const second = f.store.enqueue(receipt({
+    projectId: 'local-project-b',
+    finalText: '已完成\n项目B结果已经交付。',
+  }));
+  assert.equal(f.store.list({ projectId: 'local-project-a', taskId: 'task-a' }).count, 1);
+  assert.equal(f.store.list({ projectId: 'local-project-b', taskId: 'task-a' }).count, 1);
+  assert.equal(fs.readdirSync(f.store.pendingRoot).filter((name) => name.endsWith('.json')).length, 2);
+  assert.notEqual(f.store.receiptPath('local-project-a', 'task-a'), f.store.receiptPath('local-project-b', 'task-a'));
+  assert.throws(() => f.store.acknowledge({
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: second.record.receiptId,
+  }), /stale acknowledgement|project mismatch/);
+  assert.equal(f.store.list({ projectId: 'local-project-b' }).count, 1);
+  assert.equal(f.store.acknowledge({
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: first.record.receiptId,
+  }).removed, true);
+  assert.equal(f.store.list({ projectId: 'local-project-b' }).count, 1);
+});
+
+test('runtime keeps the same task id isolated across projects and rejects cross-project ack', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-runtime-namespace-'));
+  registerProject(root, 'local-project-a');
+  registerProject(root, 'local-project-b');
+  const first = runtime(root, 'runtime-namespace-a', 'worker-result.enqueue', receipt()).result.record;
+  const second = runtime(root, 'runtime-namespace-b', 'worker-result.enqueue', receipt({
+    projectId: 'local-project-b', finalText: '已完成\n项目B结果已经交付。',
+  })).result.record;
+  assert.equal(runtime(root, 'runtime-list-a', 'worker-result.list', {
+    projectId: 'local-project-a', taskId: 'task-a',
+  }).result.count, 1);
+  assert.equal(runtime(root, 'runtime-list-b', 'worker-result.list', {
+    projectId: 'local-project-b', taskId: 'task-a',
+  }).result.count, 1);
+  assert.throws(() => runtime(root, 'runtime-cross-ack', 'worker-result.ack', {
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: second.receiptId,
+  }), /stale acknowledgement|project mismatch/);
+  runtime(root, 'runtime-ack-a', 'worker-result.ack', {
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: first.receiptId,
+  });
+  assert.equal(runtime(root, 'runtime-list-b-after-a', 'worker-result.list', {
+    projectId: 'local-project-b', taskId: 'task-a',
+  }).result.count, 1);
 });
 
 test('a crash after workbench acceptance retries the same operation without duplicate history', () => {
@@ -207,10 +481,14 @@ test('a crash after workbench acceptance retries the same operation without dupl
     affectsMainline: true, pendingDependencies: [],
   };
   const first = runtime(root, 'accept-crash-first', 'workbench.accept', acceptance).result;
-  assert.equal(runtime(root, 'pending-after-crash', 'worker-result.list', { taskId: 'task-crash' }).result.count, 1);
+  assert.equal(runtime(root, 'pending-after-crash', 'worker-result.list', {
+    projectId: 'local-project-a', taskId: 'task-crash',
+  }).result.count, 1);
   const retried = runtime(root, 'accept-crash-retry', 'workbench.accept', acceptance).result;
   assert.deepEqual(retried, first);
-  runtime(root, 'ack-crash', 'worker-result.ack', { taskId: 'task-crash', receiptId: pending.receiptId });
+  runtime(root, 'ack-crash', 'worker-result.ack', {
+    projectId: 'local-project-a', taskId: 'task-crash', receiptId: pending.receiptId,
+  });
   const history = JSON.parse(fs.readFileSync(path.join(root, 'local', 'history', 'workbench', '2026-08.json'), 'utf8'));
   assert.equal(history.records.filter((record) => record.taskId === 'task-crash').length, 1);
 });
@@ -233,7 +511,7 @@ test('runtime lifecycle keeps one task through pause, resume, completion and rec
     updatedAt: '2026-08-23T16:01:00+08:00',
   });
   runtime(root, 'ack-pause-a', 'worker-result.ack', {
-    taskId: 'task-a', receiptId: pauseReceipt.receiptId,
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: pauseReceipt.receiptId,
   });
   runtime(root, 'resume-a', 'workbench.update', {
     operationId: 'resume-a', taskId: 'task-a', expectedStatus: '已暂停', status: '进行中',
@@ -250,9 +528,9 @@ test('runtime lifecycle keeps one task through pause, resume, completion and rec
     affectsMainline: true, pendingDependencies: [],
   });
   runtime(root, 'ack-complete-a', 'worker-result.ack', {
-    taskId: 'task-a', receiptId: completedReceipt.receiptId,
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: completedReceipt.receiptId,
   });
-  assert.equal(runtime(root, 'list-empty', 'worker-result.list', {}).result.count, 0);
+  assert.equal(runtime(root, 'list-empty', 'worker-result.list', { projectId: 'local-project-a' }).result.count, 0);
   assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'local', 'runtime', 'workbench', 'workbench-state.json'), 'utf8')).tasks['task-a'], undefined);
   assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'local', 'history', 'workbench', '2026-08.json'), 'utf8')).records.length, 1);
 });
@@ -270,7 +548,7 @@ test('fixed beyond-control CLI enqueues, lists and acknowledges the same receipt
     if (includeRequestId) envelope.requestId = name;
     fs.writeFileSync(request, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
     const result = spawnSync(process.execPath, [path.join(controlRoot, 'scripts', 'beyond-control.mjs'), 'runtime', '--request', request], {
-      cwd: root, encoding: 'utf8', windowsHide: true,
+      cwd: projectRootFor(controlRoot), encoding: 'utf8', windowsHide: true,
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const output = JSON.parse(result.stdout);
@@ -278,7 +556,9 @@ test('fixed beyond-control CLI enqueues, lists and acknowledges the same receipt
     return output.result;
   };
   const created = invoke('cli-enqueue', 'worker-result.enqueue', receipt(), false).record;
-  assert.equal(invoke('cli-list', 'worker-result.list', { taskId: 'task-a' }).count, 1);
-  assert.equal(invoke('cli-ack', 'worker-result.ack', { taskId: 'task-a', receiptId: created.receiptId }).removed, true);
-  assert.equal(invoke('cli-empty', 'worker-result.list', {}).count, 0);
+  assert.equal(invoke('cli-list', 'worker-result.list', { projectId: 'local-project-a', taskId: 'task-a' }).count, 1);
+  assert.equal(invoke('cli-ack', 'worker-result.ack', {
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: created.receiptId,
+  }).removed, true);
+  assert.equal(invoke('cli-empty', 'worker-result.list', { projectId: 'local-project-a' }).count, 0);
 });

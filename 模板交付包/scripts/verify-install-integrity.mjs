@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
   readFileSync,
+  realpathSync,
   readdirSync,
 } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -48,6 +50,113 @@ const expectedControlRuntimeFiles = [
 
 function display(path) {
   return path.split(sep).join("/");
+}
+
+function canonicalPath(value) {
+  const absolute = resolve(value);
+  try { return realpathSync.native(absolute); } catch { return absolute; }
+}
+
+function samePath(left, right) {
+  const canonicalLeft = canonicalPath(left);
+  const canonicalRight = canonicalPath(right);
+  return process.platform === "win32"
+    ? canonicalLeft.toLowerCase() === canonicalRight.toLowerCase()
+    : canonicalLeft === canonicalRight;
+}
+
+function pathKey(value) {
+  const canonical = canonicalPath(value);
+  return process.platform === "win32" ? canonical.toLowerCase() : canonical;
+}
+
+function normalizeRemote(value) {
+  let remote = String(value ?? "").trim();
+  if (!remote) return null;
+  remote = remote.replace(/^([^@\s]+)@([^:\s]+):(.+)$/, "https://$2/$3");
+  try {
+    const url = new URL(remote);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    if (["ssh:", "git:"].includes(url.protocol)) url.protocol = "https:";
+    url.hostname = url.hostname.toLowerCase();
+    remote = url.toString();
+  } catch {
+    // Local and provider-specific spellings remain opaque normalized values.
+  }
+  return remote.replace(/\.git\/?$/i, "").replace(/\/$/, "").toLowerCase();
+}
+
+function gitRepositoryFacts(repositoryRoot) {
+  const run = (args) => spawnSync("git", ["-C", repositoryRoot, ...args], {
+    encoding: "utf8", windowsHide: true,
+  });
+  const topLevel = run(["rev-parse", "--show-toplevel"]);
+  if (topLevel.status !== 0) return null;
+  const remote = run(["remote", "get-url", "origin"]);
+  return {
+    topLevel: canonicalPath(String(topLevel.stdout ?? "").trim()),
+    remote: remote.status === 0 ? normalizeRemote(remote.stdout) : null,
+  };
+}
+
+function validateRegisteredRepositories(value, canonicalProjectRoot, label) {
+  let parsed;
+  try { parsed = JSON.parse(value ?? ""); }
+  catch {
+    errors.push(`${label}缺少有效repositories_json`);
+    return null;
+  }
+  if (!Array.isArray(parsed)) {
+    errors.push(`${label}的repositories_json不是数组`);
+    return null;
+  }
+  const paths = [];
+  for (const item of parsed) {
+    const objectItem = item && typeof item === "object" && !Array.isArray(item) ? item : null;
+    const rawPath = typeof item === "string" ? item : objectItem?.path;
+    if (typeof rawPath !== "string" || !rawPath.trim()) {
+      errors.push(`${label}的repositories_json包含无效路径条目`);
+      continue;
+    }
+    const repositoryPath = canonicalPath(rawPath);
+    const expectedRole = samePath(repositoryPath, canonicalProjectRoot) ? "project-root" : "component";
+    if (objectItem?.role !== undefined && !["project-root", "component"].includes(objectItem.role)) {
+      errors.push(`${label}的repositories_json包含无效role`);
+    } else if (objectItem?.role !== undefined && objectItem.role !== expectedRole) {
+      errors.push(`${label}的repositories_json的role与路径不一致`);
+    }
+    if (objectItem?.kind !== undefined && objectItem.kind !== "git") {
+      errors.push(`${label}的repositories_json包含无效kind`);
+    }
+    const requiresGit = objectItem?.kind === "git" || expectedRole === "component" || Boolean(objectItem?.remote);
+    if (requiresGit) {
+      const facts = existsSync(repositoryPath) && lstatSync(repositoryPath).isDirectory()
+        ? gitRepositoryFacts(repositoryPath) : null;
+      if (!facts || !samePath(facts.topLevel, repositoryPath)) {
+        errors.push(`${label}的登记仓库不是存在的精确Git根：${display(repositoryPath)}`);
+      } else if (objectItem?.remote && facts.remote !== normalizeRemote(objectItem.remote)) {
+        errors.push(`${label}的登记仓库remote与现场不一致：${display(repositoryPath)}`);
+      }
+    }
+    paths.push(pathKey(repositoryPath));
+  }
+  if (new Set(paths).size !== paths.length) errors.push(`${label}的repositories_json包含重复路径`);
+  return parsed;
+}
+
+function frontmatter(text) {
+  const match = text?.match(/^---\n([\s\S]*?)\n---(?:\n|$)/);
+  const values = {};
+  if (!match) return values;
+  for (const line of match[1].split("\n")) {
+    const separator = line.indexOf(":");
+    if (separator < 1) continue;
+    values[line.slice(0, separator).trim()] = line.slice(separator + 1).trim().replace(/^['"]|['"]$/g, "");
+  }
+  return values;
 }
 
 function readUtf8(path, label) {
@@ -335,6 +444,10 @@ if (manifest) {
 
   const controlMatch = installedAgents?.match(/<!-- BEYOND-CONTROL-ROOT: ([^\n]+) -->/);
   const projectMatch = installedAgents?.match(/<!-- BEYOND-PROJECT-ID: ([^\n]+) -->/);
+  if ((installedAgents?.match(/<!-- BEYOND-CONTROL-ROOT: /g) ?? []).length > 1
+    || (installedAgents?.match(/<!-- BEYOND-PROJECT-ID: /g) ?? []).length > 1) {
+    errors.push("项目入口包含重复控制仓或项目编号映射");
+  }
   if (controlMatch) {
     const mappedControlRoot = resolve(projectRoot, controlMatch[1].trim());
     const mappedManifest = readUtf8(join(mappedControlRoot, "beyond-release.json"), "项目映射的控制仓版本清单");
@@ -363,6 +476,45 @@ if (manifest) {
       errors.push("项目入口缺少BEYOND项目编号映射");
     } else {
       const projectId = projectMatch[1].trim();
+      const localDirectory = join(mappedControlRoot, "local", "projects");
+      const localRegistrations = existsSync(localDirectory) && lstatSync(localDirectory).isDirectory()
+        ? readdirSync(localDirectory, { withFileTypes: true })
+          .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".md"))
+          .map((entry) => {
+            const file = join(localDirectory, entry.name);
+            return { file, facts: frontmatter(readUtf8(file, `本机项目登记${entry.name}`)) };
+          })
+        : [];
+      const idMatches = localRegistrations.filter((record) => record.facts.id === projectId);
+      const pathMatches = localRegistrations.filter((record) => record.facts.path && samePath(record.facts.path, projectRoot));
+      if (idMatches.length === 1 && (!idMatches[0].facts.path || !samePath(idMatches[0].facts.path, projectRoot))) {
+        errors.push("本机项目登记路径与当前项目根不一致");
+      }
+      if (pathMatches.length === 1 && pathMatches[0].facts.id !== projectId) {
+        errors.push("本机项目登记编号与项目入口不一致");
+      }
+      if (idMatches.length === 0 && pathMatches.length === 0) errors.push("项目映射的本机项目登记不存在");
+      if (idMatches.length !== 1) errors.push(`本机项目编号必须且只能登记一次：${projectId}`);
+      if (pathMatches.length !== 1) errors.push("当前项目根必须且只能存在一条本机登记");
+      const registrationRecord = idMatches.length === 1 && pathMatches.length === 1
+        && idMatches[0].file === pathMatches[0].file ? idMatches[0] : null;
+      if (!registrationRecord) {
+        errors.push("本机项目登记编号与当前项目根没有唯一闭合");
+      } else {
+        const registeredRepositories = validateRegisteredRepositories(
+          registrationRecord.facts.repositories_json,
+          projectRoot,
+          "项目映射的本机项目登记",
+        );
+        const hasComponentRepository = registeredRepositories?.some((item) => {
+          const value = typeof item === "string" ? item : item?.path;
+          return typeof value === "string" && value.trim() && !samePath(value, projectRoot);
+        });
+        if (hasComponentRepository
+          && (!registrationRecord.facts.host_id || !registrationRecord.facts.codex_project_id)) {
+          errors.push("多仓或跨根项目登记缺少host_id或codex_project_id，不能形成可执行Worker路由");
+        }
+      }
       const overview = readUtf8(join(mappedControlRoot, "projects", projectId, "项目总览.md"), "项目映射的项目总览");
       if (overview) {
         validateProjectInitialization(overview, "项目映射的项目总览");
@@ -433,5 +585,5 @@ if (errors.length > 0) {
 }
 
 console.log(contentOnly
-  ? `BEYOND ${manifest.releaseVersion}内容验真通过：六个Skill、控制仓入口和固定脚本一致`
-  : `BEYOND ${manifest.releaseVersion}安装验真通过：六个Skill、控制仓结构、项目运行内核一致，标准路径不依赖BEYOND Hook`);
+  ? `BEYOND ${manifest.releaseVersion}内容验真通过（模式：发行模板，不是已初始化业务项目）：六个Skill、控制仓入口和固定脚本一致`
+  : `BEYOND ${manifest.releaseVersion}安装验真通过（模式：已初始化业务项目）：六个Skill、控制仓结构、项目运行内核一致，标准路径不依赖BEYOND Hook`);

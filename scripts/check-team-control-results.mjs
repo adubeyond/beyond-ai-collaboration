@@ -84,8 +84,9 @@ try {
   cpSync(join(repositoryRoot, "examples", "minimal-project"), secondClone, { recursive: true });
   run("git", ["init"], secondClone);
   run("git", ["remote", "add", "origin", "https://example.com/team/local-first.git"], secondClone);
-  const clonedIdentity = JSON.parse(controlCommand(["inspect-project", "--project-root", secondClone]).stdout);
-  check("不同本机路径按同一remote复用项目编号", clonedIdentity.projectId === promoted.projectId, `${clonedIdentity.projectId} != ${promoted.projectId}`);
+  const clonedIdentity = controlCommand(["inspect-project", "--project-root", secondClone], 2);
+  check("同一主机的第二个clone不能冒充既有规范项目根", clonedIdentity.status === 2
+    && clonedIdentity.output.includes("已经绑定其他路径"), clonedIdentity.output);
 
   cpSync(join(repositoryRoot, "examples", "minimal-project"), secureRemoteProject, { recursive: true });
   run("git", ["init"], secureRemoteProject);
@@ -107,7 +108,7 @@ try {
 
   const nestedInstall = JSON.parse(controlCommand(["install-project-entry", "--project-root", project, "--confirm-fusion", "yes"]).stdout);
   const firstEntry = readFileSync(join(project, "AGENTS.md"), "utf8");
-  check("项目入口包含完整3.2内核", firstEntry.includes("BEYOND-RUNTIME-VERSION: 3.2.4"));
+  check("项目入口包含完整3.2内核", firstEntry.includes("BEYOND-RUNTIME-VERSION: 3.2.5"));
   check("项目入口登记项目内控制仓", firstEntry.includes("BEYOND-CONTROL-ROOT: ./beyond-control"));
   check("项目内控制仓文档链接可达", firstEntry.includes("](./beyond-control/docs/AI编程协同机制/00-模板入口.md)"));
   check("项目入口把控制脚本映射到项目内控制仓", firstEntry.includes("`./beyond-control/scripts/beyond-control.mjs"));

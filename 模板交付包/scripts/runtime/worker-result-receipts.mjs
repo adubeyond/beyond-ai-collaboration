@@ -79,14 +79,77 @@ function validateRecord(raw) {
   return record;
 }
 
+function waitForFileUnlock(milliseconds = 5) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function retryTransientFileOperation(operation, attempts = 20) {
+  for (let index = 0; index < attempts; index += 1) {
+    try { return operation(); }
+    catch (error) {
+      if (!['EBUSY', 'EPERM', 'EACCES'].includes(error?.code) || index === attempts - 1) throw error;
+      waitForFileUnlock();
+    }
+  }
+  return undefined;
+}
+
 export class WorkerResultReceiptStore {
   constructor({ runtimeRoot }) {
     this.runtimeRoot = path.resolve(text(runtimeRoot, 'runtimeRoot', 4096));
     this.pendingRoot = path.join(this.runtimeRoot, 'pending');
   }
 
-  receiptPath(taskId) {
+  receiptPath(projectId, taskId) {
+    const namespace = `${identifier(projectId, 'projectId')}\0${identifier(taskId, 'taskId')}`;
+    return path.join(this.pendingRoot, `${digest(namespace)}.json`);
+  }
+
+  legacyReceiptPath(taskId) {
     return path.join(this.pendingRoot, `${digest(identifier(taskId, 'taskId'))}.json`);
+  }
+
+  migratePendingLayout() {
+    if (!fs.existsSync(this.pendingRoot)) return;
+    const files = fs.readdirSync(this.pendingRoot, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+      .map((entry) => path.join(this.pendingRoot, entry.name));
+    for (const file of files) {
+      const record = this.readPathIfPresent(file);
+      if (!record) continue;
+      const target = this.receiptPath(record.projectId, record.taskId);
+      if (path.resolve(file) === path.resolve(target)) continue;
+      try {
+        fs.linkSync(file, target);
+      } catch (error) {
+        if (['EXDEV', 'ENOTSUP', 'EPERM'].includes(error?.code)) {
+          try {
+            retryTransientFileOperation(() => fs.copyFileSync(file, target, fs.constants.COPYFILE_EXCL));
+          } catch (copyError) {
+            if (!['EEXIST', 'ENOENT'].includes(copyError?.code)) throw copyError;
+          }
+        } else if (!['EEXIST', 'ENOENT'].includes(error?.code)) throw error;
+      }
+      const namespaced = this.readPathIfPresent(target);
+      if (!namespaced) {
+        throw new Error(`namespaced Worker result receipt disappeared during migration for ${record.projectId}/${record.taskId}`);
+      }
+      if (namespaced.receiptId !== record.receiptId) {
+        throw new Error(`conflicting legacy and namespaced Worker result receipts for ${record.projectId}/${record.taskId}`);
+      }
+      try { retryTransientFileOperation(() => fs.unlinkSync(file)); }
+      catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+      }
+    }
+  }
+
+  readPathIfPresent(file) {
+    try { return retryTransientFileOperation(() => this.readPath(file)); }
+    catch (error) {
+      if (error?.code === 'ENOENT') return null;
+      throw error;
+    }
   }
 
   readPath(file) {
@@ -94,7 +157,9 @@ export class WorkerResultReceiptStore {
     try {
       parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
     } catch (error) {
-      throw new Error(`cannot read Worker result receipt ${path.basename(file)}: ${error.message}`);
+      const wrapped = new Error(`cannot read Worker result receipt ${path.basename(file)}: ${error.message}`);
+      if (error?.code) wrapped.code = error.code;
+      throw wrapped;
     }
     try {
       return validateRecord(parsed);
@@ -106,7 +171,8 @@ export class WorkerResultReceiptStore {
   enqueue(raw) {
     const record = validateInput(raw);
     fs.mkdirSync(this.pendingRoot, { recursive: true });
-    const target = this.receiptPath(record.taskId);
+    this.migratePendingLayout();
+    const target = this.receiptPath(record.projectId, record.taskId);
     const existing = fs.existsSync(target) ? this.readPath(target) : null;
     if (existing?.receiptId === record.receiptId) return { mode: 'existing', record: existing };
     const temporary = `${target}.tmp`;
@@ -126,11 +192,12 @@ export class WorkerResultReceiptStore {
 
   list(raw = {}) {
     const input = object(raw, 'Worker result receipt filter');
-    const filters = {};
+    const filters = { projectId: identifier(input.projectId, 'projectId') };
     for (const key of ['projectId', 'taskId', 'workerThreadId', 'sourceThreadId']) {
-      if (input[key] !== undefined) filters[key] = identifier(input[key], key);
+      if (key !== 'projectId' && input[key] !== undefined) filters[key] = identifier(input[key], key);
     }
     if (!fs.existsSync(this.pendingRoot)) return { count: 0, records: [] };
+    this.migratePendingLayout();
     const records = fs.readdirSync(this.pendingRoot, { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
       .map((entry) => this.readPath(path.join(this.pendingRoot, entry.name)))
@@ -141,17 +208,20 @@ export class WorkerResultReceiptStore {
 
   acknowledge(raw) {
     const input = object(raw, 'Worker result receipt acknowledgement');
+    const projectId = identifier(input.projectId, 'projectId');
     const taskId = identifier(input.taskId, 'taskId');
     const receiptId = identifier(input.receiptId, 'receiptId');
     const workerThreadId = optionalIdentifier(input.workerThreadId, 'workerThreadId');
-    const target = this.receiptPath(taskId);
+    this.migratePendingLayout();
+    const target = this.receiptPath(projectId, taskId);
     if (!fs.existsSync(target)) throw new Error('pending Worker result receipt not found');
     const record = this.readPath(target);
+    if (record.projectId !== projectId) throw new Error('Worker result receipt project mismatch');
     if (record.receiptId !== receiptId) throw new Error('stale acknowledgement cannot remove a newer Worker result receipt');
     if (workerThreadId && record.workerThreadId && record.workerThreadId !== workerThreadId) {
       throw new Error('Worker result receipt owner mismatch');
     }
     fs.unlinkSync(target);
-    return { acknowledged: receiptId, taskId, workerThreadId: record.workerThreadId, removed: true };
+    return { acknowledged: receiptId, projectId, taskId, workerThreadId: record.workerThreadId, removed: true };
   }
 }
