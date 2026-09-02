@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -26,6 +26,17 @@ function runNode(args) {
 function git(cwd, args) {
   const result = spawnSync("git", args, { cwd, encoding: "utf8", windowsHide: true });
   if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
+}
+
+function pathKey(value) {
+  const absolute = resolve(value);
+  let canonical = absolute;
+  try {
+    canonical = realpathSync.native(absolute);
+  } catch {
+    // Some negative checks intentionally compare a path that is not materialized.
+  }
+  return canonical.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
 try {
@@ -112,13 +123,13 @@ try {
     && workbenchResult.counts.已暂停 === 1);
   check("已完成任务进入历史", existsSync(join(controlRoot, "local", "history", "legacy", `${inspect.projectId}-workbench.md`)));
   const localRegistration = readFileSync(join(controlRoot, "local", "projects", `${inspect.projectId}.md`), "utf8");
-  check("重复remote正式路径进入本机登记", localRegistration.includes(join(projectRoot, "ui-a").replace(/\\/g, "/")));
   const repositories = JSON.parse(localRegistration.match(/^repositories_json:\s*(.+)$/m)?.[1] ?? "[]");
-  const repositoryPaths = repositories.map((item) => resolve(item.path).toLowerCase());
-  check("正式仓路径形成机器可读登记", repositoryPaths.includes(resolve(projectRoot).toLowerCase())
-    && repositoryPaths.includes(resolve(join(projectRoot, "ui-a")).toLowerCase())
-    && repositoryPaths.includes(resolve(externalRepository).toLowerCase()));
-  check("重复remote未选路径不进入机器登记", !repositoryPaths.includes(resolve(join(projectRoot, "ui-b")).toLowerCase()));
+  const repositoryPaths = repositories.map((item) => pathKey(item.path));
+  check("重复remote正式路径进入本机登记", repositoryPaths.includes(pathKey(join(projectRoot, "ui-a"))));
+  check("正式仓路径形成机器可读登记", repositoryPaths.includes(pathKey(projectRoot))
+    && repositoryPaths.includes(pathKey(join(projectRoot, "ui-a")))
+    && repositoryPaths.includes(pathKey(externalRepository)));
+  check("重复remote未选路径不进入机器登记", !repositoryPaths.includes(pathKey(join(projectRoot, "ui-b"))));
 
   const upgraded = runNode([
     "register-project", "--project-root", projectRoot,
@@ -127,7 +138,7 @@ try {
   check("普通升级不要求重复提供外部仓与平台绑定", upgraded.status === 0, upgraded.stderr);
   const upgradedRegistration = readFileSync(join(controlRoot, "local", "projects", `${inspect.projectId}.md`), "utf8");
   const upgradedRepositories = JSON.parse(upgradedRegistration.match(/^repositories_json:\s*(.+)$/m)?.[1] ?? "[]");
-  check("升级保留既有外部仓", upgradedRepositories.some((item) => resolve(item.path).toLowerCase() === resolve(externalRepository).toLowerCase()));
+  check("升级保留既有外部仓", upgradedRepositories.some((item) => pathKey(item.path) === pathKey(externalRepository)));
   check("升级保留host与Codex项目绑定", /^host_id:\s*local$/m.test(upgradedRegistration)
     && /^codex_project_id:\s*codex-existing-product$/m.test(upgradedRegistration));
 
@@ -159,7 +170,7 @@ try {
     );
     const selectedRepositories = JSON.parse(duplicateRootRegistration.match(/^repositories_json:\s*(.+)$/m)?.[1] ?? "[]");
     check("重复remote选择不会把未选项目根重新加入", selectedRepositories.length === 1
-      && resolve(selectedRepositories[0].path).toLowerCase() === resolve(duplicateRootChild).toLowerCase(),
+      && pathKey(selectedRepositories[0].path) === pathKey(duplicateRootChild),
     JSON.stringify(selectedRepositories));
   }
 } finally {
