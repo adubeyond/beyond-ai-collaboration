@@ -9,6 +9,7 @@ const packageRoot = join(repositoryRoot, "模板交付包");
 const scratch = mkdtempSync(join(tmpdir(), "beyond-existing-project-"));
 const controlRoot = join(scratch, "beyond-control");
 const projectRoot = join(scratch, "existing-product");
+const externalRepository = join(scratch, "external-crawler");
 const controlScript = join(controlRoot, "scripts", "beyond-control.mjs");
 let passed = 0;
 const errors = [];
@@ -65,6 +66,9 @@ try {
     git(child, ["init"]);
     git(child, ["remote", "add", "origin", "https://gitea.example/team/ui.git"]);
   }
+  mkdirSync(externalRepository, { recursive: true });
+  git(externalRepository, ["init"]);
+  git(externalRepository, ["remote", "add", "origin", "https://gitea.example/team/crawler.git"]);
 
   const inspectResult = runNode(["inspect-project", "--project-root", projectRoot]);
   const inspect = JSON.parse(inspectResult.stdout);
@@ -76,12 +80,24 @@ try {
     && inspect.legacyWorkbench.counts.已暂停 === 1
     && inspect.legacyWorkbench.counts.已完成 === 2);
 
+  const parentRepository = join(scratch, "parent-repository");
+  const nestedNonGitProject = join(parentRepository, "plain-project");
+  mkdirSync(nestedNonGitProject, { recursive: true });
+  git(parentRepository, ["init"]);
+  const nestedInspectResult = runNode(["inspect-project", "--project-root", nestedNonGitProject]);
+  const nestedInspect = JSON.parse(nestedInspectResult.stdout);
+  check("父Git仓不会冒充非Git项目的正式仓", nestedInspectResult.status === 0
+    && nestedInspect.gitRoot === null
+    && nestedInspect.repositories.length === 0,
+  JSON.stringify({ gitRoot: nestedInspect.gitRoot, repositories: nestedInspect.repositories }));
+
   const blocked = runNode(["install-project-entry", "--project-root", projectRoot, "--confirm-fusion", "yes"]);
   check("未选择正式仓库和旧任务迁移时阻断", blocked.status === 2 && blocked.stderr.includes("准确选择一个正式路径"));
 
   const installed = runNode([
     "install-project-entry", "--project-root", projectRoot, "--confirm-fusion", "yes",
-    "--canonical-repositories", join(projectRoot, "ui-a"), "--adopt-legacy-workbench", "yes",
+    "--canonical-repositories", join(projectRoot, "ui-a"), "--repository-roots", externalRepository,
+    "--adopt-legacy-workbench", "yes", "--host-id", "local", "--codex-project-id", "codex-existing-product",
   ]);
   const installResult = JSON.parse(installed.stdout);
   check("显式确认后完成融合", installed.status === 0 && installResult.adoption?.imported === 3, installed.stderr);
@@ -97,6 +113,55 @@ try {
   check("已完成任务进入历史", existsSync(join(controlRoot, "local", "history", "legacy", `${inspect.projectId}-workbench.md`)));
   const localRegistration = readFileSync(join(controlRoot, "local", "projects", `${inspect.projectId}.md`), "utf8");
   check("重复remote正式路径进入本机登记", localRegistration.includes(join(projectRoot, "ui-a").replace(/\\/g, "/")));
+  const repositories = JSON.parse(localRegistration.match(/^repositories_json:\s*(.+)$/m)?.[1] ?? "[]");
+  const repositoryPaths = repositories.map((item) => resolve(item.path).toLowerCase());
+  check("正式仓路径形成机器可读登记", repositoryPaths.includes(resolve(projectRoot).toLowerCase())
+    && repositoryPaths.includes(resolve(join(projectRoot, "ui-a")).toLowerCase())
+    && repositoryPaths.includes(resolve(externalRepository).toLowerCase()));
+  check("重复remote未选路径不进入机器登记", !repositoryPaths.includes(resolve(join(projectRoot, "ui-b")).toLowerCase()));
+
+  const upgraded = runNode([
+    "register-project", "--project-root", projectRoot,
+    "--canonical-repositories", join(projectRoot, "ui-a"),
+  ]);
+  check("普通升级不要求重复提供外部仓与平台绑定", upgraded.status === 0, upgraded.stderr);
+  const upgradedRegistration = readFileSync(join(controlRoot, "local", "projects", `${inspect.projectId}.md`), "utf8");
+  const upgradedRepositories = JSON.parse(upgradedRegistration.match(/^repositories_json:\s*(.+)$/m)?.[1] ?? "[]");
+  check("升级保留既有外部仓", upgradedRepositories.some((item) => resolve(item.path).toLowerCase() === resolve(externalRepository).toLowerCase()));
+  check("升级保留host与Codex项目绑定", /^host_id:\s*local$/m.test(upgradedRegistration)
+    && /^codex_project_id:\s*codex-existing-product$/m.test(upgradedRegistration));
+
+  git(externalRepository, ["remote", "set-url", "origin", "https://gitea.example/team/replaced-crawler.git"]);
+  const driftedUpgrade = runNode([
+    "register-project", "--project-root", projectRoot,
+    "--canonical-repositories", join(projectRoot, "ui-a"),
+  ]);
+  check("升级拒绝静默洗白外部仓remote漂移", driftedUpgrade.status === 2
+    && driftedUpgrade.stderr.includes("remote已经漂移"), driftedUpgrade.stderr);
+
+  const duplicateRootProject = join(scratch, "duplicate-root-project");
+  const duplicateRootChild = join(duplicateRootProject, "component");
+  mkdirSync(duplicateRootChild, { recursive: true });
+  git(duplicateRootProject, ["init"]);
+  git(duplicateRootProject, ["remote", "add", "origin", "https://gitea.example/team/duplicate.git"]);
+  git(duplicateRootChild, ["init"]);
+  git(duplicateRootChild, ["remote", "add", "origin", "https://gitea.example/team/duplicate.git"]);
+  const duplicateRootInstalled = runNode([
+    "install-project-entry", "--project-root", duplicateRootProject, "--confirm-fusion", "yes",
+    "--canonical-repositories", duplicateRootChild,
+    "--host-id", "local", "--codex-project-id", "codex-duplicate-root",
+  ]);
+  check("项目根与子仓同remote时可精确选择子仓", duplicateRootInstalled.status === 0, duplicateRootInstalled.stderr);
+  if (duplicateRootInstalled.status === 0) {
+    const duplicateRootResult = JSON.parse(duplicateRootInstalled.stdout);
+    const duplicateRootRegistration = readFileSync(
+      join(controlRoot, "local", "projects", `${duplicateRootResult.projectId}.md`), "utf8",
+    );
+    const selectedRepositories = JSON.parse(duplicateRootRegistration.match(/^repositories_json:\s*(.+)$/m)?.[1] ?? "[]");
+    check("重复remote选择不会把未选项目根重新加入", selectedRepositories.length === 1
+      && resolve(selectedRepositories[0].path).toLowerCase() === resolve(duplicateRootChild).toLowerCase(),
+    JSON.stringify(selectedRepositories));
+  }
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }

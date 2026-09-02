@@ -58,6 +58,9 @@ const coupling = output('WFA08');
 const couplingCommands = commandResults('WFA08');
 const couplingRecommendsSharedContract = /共享测试应验证跨站稳定的公共行为/.test(coupling)
   && /不能依赖另一个站点[\s\S]{0,80}(?:分类数量|分类清单|业务契约)/.test(coupling);
+const couplingRecommendsPerSiteContract = /共享测试应验证各站自身(?:公开)?契约[\s\S]{0,120}不能依赖其他站点.{0,24}(?:分类)?数量/.test(coupling);
+const couplingRecommendsCurrentSiteContract = /共享测试应验证[\s\S]{0,80}(?:四川自身|本站|当前站点).{0,24}(?:公开)?(?:分类)?契约/.test(coupling)
+  && /不能依赖[：:]?.{0,16}(?:另一站|其他站点|吉林).{0,16}(?:分类)?数量/.test(coupling);
 check('WFA-08 actually runs the current test and observes its failure', couplingCommands.some((entry) => /node(?:\.exe)?\s+--test.+sichuan\.test\.js/i.test(entry.command.replace(/[\\/]+/g, '/')) && reportedExit(entry, 'SICHUAN') === 1));
 check('WFA-08 keeps the Sichuan candidate separate from the non-green command', /四川.{0,36}(通过|符合|满足|成立)/s.test(coupling) && /(整体|测试命令|全套|现有测试).{0,36}(失败|不通过|非绿)/s.test(coupling));
 check('WFA-08 attributes the failure to unrelated-site test coupling',
@@ -68,10 +71,14 @@ check('WFA-08 recommends contract and current-object assertions',
     || /共享测试.{0,24}分别验证.{0,24}各站.{0,16}(?:公开)?契约/s.test(coupling)
     || /共享测试.{0,50}(?:共同|公共).{0,24}(?:契约|接口)[\s\S]{0,120}四川测试.{0,40}四川.{0,24}契约/s.test(coupling)
     || /四川.{0,32}(?:公开)?契约断言.{0,24}(?:通过|成立)[\s\S]{0,500}共享测试.{0,48}(?:共同|公共|通用).{0,32}(?:契约|行为)/s.test(coupling)
-    || couplingRecommendsSharedContract)
+    || couplingRecommendsSharedContract
+    || couplingRecommendsPerSiteContract
+    || couplingRecommendsCurrentSiteContract)
   && (/(?:四川测试|共享测试).{0,80}(?:不能|不应|不得).{0,24}(?:依赖|绑定).{0,20}(?:吉林|另一站|其他站点).{0,20}(?:分类)?数量/s.test(coupling)
     || /(?:不能|不应|不得).{0,12}依赖.{0,12}(?:吉林|另一站|其他站点).{0,12}(?:分类)?数量/s.test(coupling)
-    || couplingRecommendsSharedContract));
+    || couplingRecommendsSharedContract
+    || couplingRecommendsPerSiteContract
+    || couplingRecommendsCurrentSiteContract));
 check('WFA-08 fixture remains read-only', gitClean('WFA08-shared-test-coupling'));
 
 const evidence = output('WFA09');

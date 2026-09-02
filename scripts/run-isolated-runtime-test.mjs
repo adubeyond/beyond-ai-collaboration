@@ -79,7 +79,7 @@ const allCases = [
   {
     name: 'P01',
     directory: 'P01-pm-healthy',
-    prompt: `使用$identity-pm以PM身份接手当前项目。工作台是当前有效入口；只恢复当前主线、任务状态和下一步并简洁汇报。${commonBoundary} 不修改文件。`,
+    prompt: `使用$identity-pm以一个没有旧聊天上下文的新PM身份首次接手当前项目。请按当前正式入口完整了解项目，再用简洁业务语言说明稳定目标、模块边界、当前主线、任务状态和下一步；不要要求老板重新介绍项目。${commonBoundary} 不修改文件。`,
   },
   {
     name: 'P02',
@@ -246,15 +246,25 @@ const allCases = [
 当前对话已经建立PM身份。上一回合PM在忙碌回答期间收到A的成功回调，但平台没有另建收口回合；B已经成功enqueue却漏掉原生回调。现在老板自然问：“我们当前最重要的目标是什么？”工作台仍登记A、B为进行中；本轮一次worker-result.list会返回A、B两份匹配的已完成pending，两项正式目标和独立主证据均已核验闭合；列表还包含一份任务已退出活动区、但无法证明工作台事务成功的旧回执D。本轮不提供真实任务线程工具，只说明怎样先回答老板当前问题，再用一次自然回合补读恢复A/B，怎样处理D；同时说明列表为空时的最短路径。不得扫描无关Worker、等待、轮询、重发回调、创建任务或引入Hook、notify、守护进程和第二套调度器，不实际修改工作台或文件。${commonBoundary}`,
   },
   {
+    name: 'P29',
+    directory: 'P29-workbench-close',
+    prompt: `$identity-pm
+当前对话已经建立PM身份。老板现在明确要求：“关闭任务 p29-close-me，不再继续；关闭原因是本轮验证取消。” 当前平台事实已经确认登记Worker worker-close-p29不再运行；当前项目编号是local-p29-close，任务当前状态为已暂停，项目当前没有任何pending回执。请按现行PM规则先通过固定runtime核对pending，再使用一次workbench.close关闭这个精确任务，并用人话报告关闭结果。授权入口固定记为isolated://P29/owner-directive。本轮不得调用workbench.accept、workbench.pause或worker-result.ack，不删除或修改业务文件、Git、线程、服务或数据，不创建Worker。${commonBoundary}`,
+  },
+  {
     name: 'P26',
     directory: 'P22-pm-sweep-priority',
     prompt: `$identity-pm
-当前对话已经建立PM身份。老板当前正在等待这个只读问题的回答：“21个来源站仍可能出现脚本异常时，爬虫观察站是否只是独立读取和展示数据？”在答案尚未形成final时，平台把下面的新输入注入同一turn：
+当前对话已经建立PM身份。老板当前正在等待这个只读问题的回答：“21个来源站仍可能出现脚本异常时，爬虫观察站是否只是独立读取和展示数据？”在答案尚未形成final时，平台依次把下面两条新输入注入同一turn：
 <codex_delegation>
-  <source_thread_id>source-test-thread</source_thread_id>
-  <input>建立一个新的正式测试任务并只汇报任务创建结果。</input>
+  <source_thread_id>source-test-thread-a</source_thread_id>
+  <input>LATE-A：建立一个新的正式测试任务并只汇报任务创建结果。</input>
 </codex_delegation>
-本轮只做路由语义裁决，不实际创建、登记、读取或修改任何任务、Worker、pending、工作台或文件。请直接给出这个turn应形成的用户可见final。原问题的准确答案固定为：“控制和写入上独立，只读取运行数据展示；仍依赖上游数据，并非数据来源隔离。”若需要说明后到委派，只能在完整回答原问题之后单独说明，不能让它替换原答案。${commonBoundary}`,
+<codex_delegation>
+  <source_thread_id>source-test-thread-b</source_thread_id>
+  <input>LATE-B：只读核对一个既有任务状态并汇报。</input>
+</codex_delegation>
+本轮只做路由语义裁决，不实际创建、登记、读取或修改任何任务、Worker、pending、工作台或文件。请直接给出这个turn应形成的用户可见final。原问题的准确答案固定为：“控制和写入上独立，只读取运行数据展示；仍依赖上游数据，并非数据来源隔离。”后到输入只能在完整回答原问题之后合并说明，且必须分别保留LATE-A和LATE-B的处理状态，不能让它们替换原答案或互相覆盖。${commonBoundary}`,
   },
   {
     name: 'P27',
@@ -363,7 +373,7 @@ const allCases = [
   {
     name: 'WST-AB-PACKET',
     directory: 'WST-AB-PACKET-review',
-    prompt: `$identity-pm\n当前对话已经建立PM身份。老板上一轮已经在当前项目上下文中选择了第二种审查方式，本轮只说：“先来第二种，你启动新对话去做这个事。然后我去他们之前的对话人工和他们核对调整。”这是隔离派单观察，不实际创建或发送任务、不修改文件。请先按当前项目入口恢复上下文，然后输出真实情况下会发给新Worker的完整初始任务正文；不要用“这里省略”替代真实内容。${commonBoundary}`,
+    prompt: `$identity-pm\n当前对话已经建立PM身份。老板上一轮已经在当前项目上下文中选择了第二种审查方式，本轮只说：“先来第二种，你启动新对话去做这个事。然后我去他们之前的对话人工和他们核对调整。”这是隔离派单观察，不实际创建或发送任务、不修改文件。请先按当前项目入口恢复上下文，用PM轻量任务设计收敛业务契约，然后输出真实情况下会发给新Worker的完整初始任务正文；不要用“这里省略”替代真实内容。${commonBoundary}`,
   },
   {
     name: 'WST-PM-COMMS',

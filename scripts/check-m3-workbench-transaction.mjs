@@ -48,6 +48,25 @@ function completion(overrides = {}) {
   };
 }
 
+function closure(overrides = {}) {
+  return {
+    operationId: 'close-worker-a-owner-1',
+    projectId: 'project-a',
+    taskId: 'task-a',
+    worker: 'worker-a',
+    expectedStatus: '进行中',
+    businessState: '已关闭',
+    ownerDirective: 'explicit-owner-instruction',
+    workerStopped: true,
+    closedBy: 'pm-main',
+    closureReason: '老板明确决定不再继续任务A',
+    taskLocator: 'thread://worker-a',
+    authorizationLocator: 'thread://pm-main/turn/close-a',
+    closedAt: '2026-08-18T12:06:00+08:00',
+    ...overrides,
+  };
+}
+
 test('register preserves free text and rejects a second owner', () => {
   const f = fixture('register');
   seed(f);
@@ -89,6 +108,28 @@ test('non-final or rejected input leaves the task active', () => {
   assert.equal(f.store.snapshot().tasks['task-a'].status, '进行中');
 });
 
+test('explicit owner closure archives without claiming completion or a mainline result', () => {
+  const f = fixture('close');
+  seed(f);
+  const first = f.store.closeTask(closure());
+  assert.equal(first.status, '已关闭');
+  assert.equal(f.store.snapshot().tasks['task-a'], undefined);
+  assert.deepEqual(f.store.snapshot().recentMainlineResults, []);
+  const [history] = f.store.history('2026-08').records;
+  assert.equal(history.status, '已关闭');
+  assert.equal(history.conclusion, '老板明确决定不再继续任务A');
+  assert.deepEqual(f.store.closeTask(closure()), first);
+  assert.equal(f.store.history('2026-08').records.length, 1);
+});
+
+test('closure without explicit authorization or a stopped Worker leaves the task active', () => {
+  const f = fixture('close-reject');
+  seed(f);
+  assert.throws(() => f.store.closeTask(closure({ ownerDirective: 'inferred' })), /owner-authorized/);
+  assert.throws(() => f.store.closeTask(closure({ workerStopped: false })), /owner-authorized/);
+  assert.equal(f.store.snapshot().tasks['task-a'].status, '进行中');
+});
+
 test('changed reuse of an operation id is rejected', () => {
   const f = fixture('reuse');
   seed(f);
@@ -114,6 +155,17 @@ test('fault after state commit recovers history and view', () => {
   f.store.recover();
   assert.equal(f.store.history('2026-08').records.length, 1);
   assert.match(f.store.view(), /当前无活动正式任务/);
+});
+
+test('faulted closure recovery preserves the closed terminal state exactly once', () => {
+  const f = fixture('close-fault');
+  seed(f);
+  assert.throws(() => f.store.closeTask(closure(), { faultAt: 'afterStateCommit' }), (e) => e instanceof InjectedFault);
+  assert.equal(f.store.snapshot().tasks['task-a'], undefined);
+  assert.equal(f.store.history('2026-08').records.length, 0);
+  f.store.recover();
+  assert.equal(f.store.history('2026-08').records.length, 1);
+  assert.equal(f.store.history('2026-08').records[0].status, '已关闭');
 });
 
 test('managed view drift is repaired without deleting free text', () => {

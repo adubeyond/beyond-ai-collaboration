@@ -26,8 +26,8 @@ user result
 → PM records one task and assigns one Worker
 → Worker reads only relevant project facts
 → Worker designs, implements, tests, repairs, and delivers continuously
-→ Worker freezes one final, stores the same text as pending, wakes PM once, and outputs the final
-→ PM verifies evidence, updates the workbench, and deletes the consumed pending receipt
+→ Worker closes the terminal result under the Worker identity rule
+→ PM verifies and converges it under the PM closeout rule
 ```
 
 A normal task package contains only:
@@ -42,7 +42,9 @@ relevant project-fact entries
 real pause boundaries
 ```
 
-The packet is a compact business contract, not a PM-authored execution manual. A formal task is fresh, user-visible, and bound to the formal project; a fork that inherits PM history, a projectless task, or an internal helper cannot carry a formal business result. The task explicitly starts only the Worker identity. Before the one native callback, the Worker stores the exact frozen final as project-local pending state. This is a short-lived control snapshot, not a second business result or message archive; PM deletes it only after the matching workbench transaction succeeds. The Worker then selects and loads one Action Skill for the current primary problem and may switch methods later without creating stage-specific tasks.
+The packet is a compact business contract, not a PM-authored execution manual. A formal task is fresh, user-visible, and bound to the formal project; a fork that inherits PM history, a projectless task, or an internal helper cannot carry a formal business result. The task explicitly starts only the Worker identity. The Worker then selects and loads one Action Skill for the current primary problem and may switch methods later without creating stage-specific tasks.
+
+Terminal execution is owned only by the [Worker identity rule](../../模板交付包/skills/identity-worker/SKILL.md), and receipt matching and convergence are owned only by [PM pause, resume, and closeout](../../模板交付包/skills/identity-pm/references/lifecycle-and-closeout.md). This architecture explains component relationships only; it does not duplicate the pending scan, Worker-read, or workbench-transaction algorithm.
 
 Test verdicts preserve the full coverage denominator, including failures, skips, and exclusions. Offline evidence does not impersonate current DOM, GUI, network, database, or runtime canaries, and a task-scoped candidate verdict does not turn a failing repository-wide gate green. Testing by the same Worker is professional testing, not independent testing.
 
@@ -80,6 +82,15 @@ A task pauses only for:
 ## Git and workspaces
 
 The user-selected formal project is the default workspace. BEYOND does not create or recommend worktrees.
+
+A formal route distinguishes four roots instead of treating every path as the same workspace:
+
+- `canonicalProjectRoot`: the registered BEYOND project root and formal project identity;
+- `repositoryRoot`: the exact registered repository or delivery root owned by the task;
+- `executionRoot`: the Worker's actual checkout root for this run;
+- `controlRoot`: the one control repository that owns identity, workbench, and terminal receipts.
+
+All four roots may be identical for a local single-repository task. One BEYOND project and control root may also cover multiple explicitly registered repositories, including deeper or external roots. A platform- or user-provided existing worktree is validated against its registered repository and formal target; BEYOND does not create another worktree. Cross-root task packages carry the verified route, including host and Codex project bindings, and the runtime rejects path, repository, remote, host, or project drift instead of guessing another control root.
 
 Workers may edit and validate in the same formal project when task-owned paths and modules are explicit, shared objects do not overlap, and runtime side effects are isolated. Actual overlap in a file, contract, data object, service, environment, or generated output serializes only the affected action.
 

@@ -60,9 +60,9 @@ The PM does not become the developer and does not continuously poll Workers for 
 ### 1. Download the official release
 
 - [BEYOND-3.2.4.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip)
-- [BEYOND-3.2.4.zip.sha256](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip.sha256)
+- [BEYOND-3.2.4.zip.sha256 (optional checksum)](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip.sha256)
 
-Verify the checksum file before extraction. See the [Installation, Upgrade, and Project Initialization Guide](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) for exact commands.
+The ZIP is sufficient for installation. A missing or unavailable `.sha256` file does not block installation; if a checksum file is supplied and does not match, stop. See the [Installation, Upgrade, and Project Initialization Guide](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) for exact commands.
 
 ### 2. Let Codex install it
 

@@ -22,24 +22,28 @@ prepare the target package and six Skills
 
 The standard BEYOND path does not install an identity Hook and does not require `/hooks` or a guard probe. Use a new ordinary conversation without an identity Skill for installation maintenance so an active PM or Worker does not replace its own project entry while doing business work. Wait for active tasks to stop before replacing the root entry or Skills; after installation, restart Codex and verify the loaded version from a new process.
 
-The 3.2.4 runtime uses the existing fixed `runtime` entry for project identity, workbench transactions, and one short-lived Worker-result receipt. A Worker stores the exact frozen final before one native callback, then outputs the same user-visible final. PM removes the pending body only after the matching workbench update succeeds. This does not install a Hook, notify branch, daemon, or extra Codex CLI, and it does not retain a message archive.
+BEYOND 3.2.5 does not install a terminal-result Hook, notify branch, background process, or extra Codex CLI. Formal results remain in user-visible Codex Worker tasks. Only the [Worker identity rules](../../skills/identity-worker/SKILL.md) own terminal formation and the native callback; only [PM pause, resume, and closeout](../../skills/identity-pm/references/lifecycle-and-closeout.md) owns matching, acceptance, pause, and receipt consumption. This installation guide describes what to install and verify; it does not copy the pending-scan, Worker-read, or workbench-transaction algorithm. An upgrade replaces the control repository and six Skills, then verifies the loaded version after restart. The upgrade maintenance path backs up and removes only a legacy BEYOND notify branch, without changing other plugins or user-owned notify configuration.
 
 ## 2. Prepare the target release
 
-The immutable BEYOND 3.2.4 artifacts are:
+BEYOND 3.2.5 is still a pre-release candidate. Until it is formally released, the immutable public stable artifacts remain 3.2.4:
 
 - Release: <https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.4>
 - Package: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip>
-- SHA-256 file: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip.sha256>
+- Optional SHA-256 file: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip.sha256>
 
-Download and verify on Windows without using a web UI for Git operations:
+Only the ZIP is required on Windows. If the optional checksum file is already present beside it, verify it without using a web UI for Git operations:
 
 ```powershell
 curl.exe -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip" -o "BEYOND-3.2.4.zip"
-curl.exe -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip.sha256" -o "BEYOND-3.2.4.zip.sha256"
-$expectedHash = ((Get-Content -LiteralPath ".\BEYOND-3.2.4.zip.sha256" -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
-$actualHash = (Get-FileHash -LiteralPath ".\BEYOND-3.2.4.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($actualHash -ne $expectedHash) { throw "BEYOND-3.2.4.zip SHA-256 mismatch" }
+$checksumPath = ".\BEYOND-3.2.4.zip.sha256"
+if (Test-Path -LiteralPath $checksumPath) {
+  $expectedHash = ((Get-Content -LiteralPath $checksumPath -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+  $actualHash = (Get-FileHash -LiteralPath ".\BEYOND-3.2.4.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actualHash -ne $expectedHash) { throw "BEYOND-3.2.4.zip SHA-256 mismatch" }
+} else {
+  Write-Warning "Optional SHA-256 file not supplied; continue and complete the in-package and installed-content checks"
+}
 Expand-Archive -LiteralPath ".\BEYOND-3.2.4.zip" -DestinationPath ".\BEYOND-3.2.4-install"
 ```
 
@@ -47,12 +51,11 @@ On Linux or macOS:
 
 ```bash
 curl -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip" -o BEYOND-3.2.4.zip
-curl -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip.sha256" -o BEYOND-3.2.4.zip.sha256
-sha256sum -c BEYOND-3.2.4.zip.sha256
+if [ -f BEYOND-3.2.4.zip.sha256 ]; then sha256sum -c BEYOND-3.2.4.zip.sha256 || exit 1; else echo "optional SHA-256 file not supplied; continuing to in-package verification"; fi
 unzip BEYOND-3.2.4.zip -d BEYOND-3.2.4-install
 ```
 
-Continue only when the verification command confirms that the package matches the SHA-256 file attached to the same Release. Extraction produces one complete `beyond-control/` directory. Put that directory under the business-project root instead of scattering package files over the project.
+The ZIP is required; the external SHA-256 file is optional verification material. A missing or unavailable checksum file does not block installation, but a supplied checksum that does not match must stop it. With or without the external checksum, verify the in-package content manifest and the final installed content. Extraction produces one complete `beyond-control/` directory. Put that directory under the business-project root instead of scattering package files over the project.
 
 Install these six directories from `beyond-control/skills/` into the active Codex Skills directory:
 
@@ -65,18 +68,24 @@ task-test
 task-ops
 ```
 
-During an upgrade, preserve real content under `local/`, `projects/`, and `shared/`. If an existing `.codex/hooks.json` references `beyond-runtime-guard.mjs`, the fixed script removes only those legacy BEYOND handlers after backup. Other Hooks and `.codex` files remain unchanged.
+During an upgrade, preserve real content under `local/`, `projects/`, and `shared/`. The fixed fusion path automatically investigates only the project root itself and exact Git roots that are direct children. Register every other formal component repository, including deeper nested repositories and repositories outside the project root, explicitly with `--repository-roots`. Do not copy `beyond-control` into each business repository and do not create a worktree for installation.
 
-Installation maintenance is file-level copying, entry fusion, and verification; the business project does not need to be a Git repository. Resolve the project root from the current Codex project directory and its root `AGENTS.md`; never make a successful `git rev-parse` a prerequisite. On Windows, both backup inventories must include hidden files and directories. Use `Get-ChildItem -Force -Recurse -File` or an equivalent relative-path, byte-count, and SHA-256 comparison on both sides. A changed Hidden attribute on a directory is not evidence that file content was lost.
+For a cross-root or multi-repository project, or a project that must support an existing platform worktree, obtain the actual host ID and Codex project ID from the current Codex project and pass them during first fusion as `--host-id` and `--codex-project-id`; never guess them. Later upgrades preserve previously registered external repository roots and platform bindings when those flags are omitted. If a registered path is missing, is no longer an exact Git root, or its origin remote has drifted, stop and request an explicit decision instead of silently rewriting the registration.
+
+If an existing `.codex/hooks.json` references `beyond-runtime-guard.mjs`, the fixed script removes only those legacy BEYOND handlers after backup. Other Hooks and `.codex` files remain unchanged.
+
+Installation maintenance is file-level copying, entry fusion, and verification; the business project does not need to be a Git repository. Resolve the project root from the current Codex project directory and its root `AGENTS.md`; never make a successful `git rev-parse` a prerequisite. An upgrade rollback preimage covers only objects that this run will actually replace or fuse: the project-root `AGENTS.md`, candidate product paths that will be overwritten in the existing project, and the six user Skills. Record a candidate path that did not previously exist so rollback can remove it precisely. `beyond-control/local/**`, `projects/**`, `shared/**`, `.git/**`, and business code are preserved in place and are outside both the overwrite set and the backup-permission gate; do not recursively enumerate, copy, or change permissions on them. Stop only when an actual overwrite target is unreadable. On Windows, backup inventories for the actual overwrite set must include hidden files and directories. For directory targets, use `Get-ChildItem -Force -Recurse -File` or an equivalent relative-path, byte-count, and SHA-256 comparison on both sides. A changed Hidden attribute on a directory is not evidence that file content was lost.
 
 Prompt for an AI-assisted maintenance conversation:
 
 ```text
 This is BEYOND installation maintenance. Do not create a PM, Worker, or business task.
-Install or upgrade the current project's beyond-control directory and six global Skills from the official BEYOND 3.2.4 release. First confirm that the package matches the BEYOND-3.2.4.zip.sha256 file attached to the same Release.
+Install or upgrade the current project's beyond-control directory and six global Skills from the official BEYOND 3.2.4 release. If BEYOND-3.2.4.zip.sha256 is present beside the ZIP, verify it; if it is absent, do not block installation, but still complete the in-package manifest and final installed-content checks. Install a v3.2.5 pre-release candidate only through the candidate-root directed test guide; it is not an official Release.
 The project may be non-Git. Resolve its root from the current Codex project directory and root AGENTS.md; do not run or depend on a git rev-parse gate.
-Back up the project entry and local control data. Preserve native rules and real local, projects, and shared content; never replace them with empty templates.
-On Windows, inventory both source and backup with hidden entries included, and compare relative paths, bytes, and SHA-256. Do not fail an otherwise identical backup only because the .git directory lost its Hidden attribute.
+The fixed entry discovers only the project root itself and exact Git roots that are direct children. Pass every confirmed formal repository that is deeper or outside the project root through --repository-roots. Do not copy beyond-control into each business repository and do not create a worktree for installation.
+For cross-root, multi-repository, or existing-worktree use, obtain the actual hostId and Codex projectId from the current Codex project and pass --host-id and --codex-project-id during first fusion; never guess them. Later upgrades preserve registered external roots and platform bindings when those flags are omitted. Stop and request a decision if a path, exact Git root, or origin remote has drifted.
+Back up only the project entry, candidate product paths, and six user Skills that this run will actually overwrite; record candidate paths that were previously absent. Preserve native rules and real local, projects, shared, .git, and business-code content in place. Do not enumerate or copy those preserved roots, never replace them with empty templates, and do not treat an unreadable cache inside them as an installation blocker.
+On Windows, inventory actual overwrite targets on both sides with hidden entries included, and compare relative paths, bytes, and SHA-256. Do not fail an otherwise identical backup only because a directory lost its Hidden attribute.
 If a legacy BEYOND identity Hook exists, remove only BEYOND handlers and guard files while preserving all other Hooks and .codex content.
 Run installation verification afterward. Do not claim project initialization or business work is complete.
 ```

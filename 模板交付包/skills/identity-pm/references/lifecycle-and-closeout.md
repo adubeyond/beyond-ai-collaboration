@@ -2,17 +2,19 @@
 
 只在 Worker报告暂停或完成、证据需要退回、出现两个控制 Worker，或正式任务线程客观不可恢复时读取。普通进展、普通失败和任务内方法切换不读取。
 
-业务状态始终只有`进行中 / 已暂停 / 已完成`。测试结果、当前动作、消息类型、PM是否已经查看和 Worker是否在线都不是新的业务状态。
+任务状态始终只有`进行中 / 已暂停 / 已完成 / 已关闭`。`已关闭`只表示老板明确决定不再追求该任务结果，不是Worker终态，也不冒充完成。测试结果、当前动作、消息类型、PM是否已经查看和 Worker是否在线都不是新的任务状态。
 
 新任务仍由一次原生回调唤醒PM，用户可见Worker final仍保存正式交付；固定`worker-result`只保存同一份冻结final的短期待处理快照，用来补齐平台恢复回合可能出现的空响应或控制面不可读。它不保存过程消息、不形成历史、不轮询，也不引入Hook、notify适配器、额外Codex CLI或后台进程。
 
-所有`worker-result`固定调用都让`runtime --request`读取JSON请求文件，不把JSON正文当路径传入。文件外层固定为`{"schemaVersion":1,"action":"worker-result.enqueue|list|ack","input":{…}}`；`enqueue`的input使用`projectId / taskId / sourceThreadId / businessState / finalText`，`list`和`ack`只传各自动作实际需要的过滤或确认字段。字段名不使用`operation / status / final`等猜测别名；这三类动作的`requestId`可省略并由运行内核生成。
+所有`worker-result`固定调用都让`runtime --request`读取JSON请求文件，不把JSON正文当路径传入。文件外层固定为`{"schemaVersion":1,"action":"worker-result.enqueue|list|ack","input":{…}}`；`enqueue`的input使用`projectId / taskId / sourceThreadId / businessState / finalText`及任务包确有的`projectRoute`，`list`至少用`projectId`限定当前项目，`ack`固定带`projectId / taskId / receiptId`。字段名不使用`operation / status / final`等猜测别名；这三类动作的`requestId`可省略并由运行内核生成。
 
 唤醒只表示PM应扫描，不证明Worker已经结束。收到任一回调后，先通过固定`runtime`入口执行一次`worker-result.list`读取当前项目全部待处理回执；再按`projectId + taskId + sourceThreadId`匹配当前PM和工作台活动任务，只对匹配回执的登记Worker各定点读取一次，不能只处理回调来源，也不扫描无关Worker。附带`workerThreadId`时再核对该字段。匹配回执存在时不得调用正时长`wait_threads`、重复`read_thread`、轮询或要求Worker仅为平台可见性重发final。平台final可读时以它为正式真值，只要求业务状态以及结果、提交、发布和生产事实不与回执冲突；措辞、格式或详略不同本身不阻止验收。平台final暂不可读时，回执只能恢复同一份冻结正文，不能单独证明业务完成：活动任务、唯一Worker、来源身份、正式目标和独立主证据仍须闭合。只有回执而没有独立验收证据时保持任务和回执原样，不执行`accept / pause / ack`，也不等待；两者存在实质矛盾时保持未验收并退回原Worker。没有回执的新任务不得沿用原生final绕过终态协议；没有回执的旧任务只即时读取回调来源一次，可读final按旧任务处理，不可读就保持原状态，不等待、不猜测。
 
-每份回执只有`pending`一种控制状态。同一`receiptId`只处理一次；同一任务的新终态会替换尚未消费的旧终态，旧`receiptId`不能删除新回执。PM用该`receiptId`派生稳定`operationId`提交`workbench.pause`或`workbench.accept`，成功后才执行一次`worker-result.ack`删除正文；若在状态提交后、删除前中断，下次以同一`operationId`取得幂等结果后再删。工作台提交或删除失败时保留回执，下次只重试未完成的固定动作。回执不是长期final入口，工作台仍指向正式Worker任务和一手证据。
+跨根、多仓或既有worktree的新任务若由原Worker报告任务包缺少`projectRoute`，这是派单纠正，不是业务暂停或终态。PM保持同一活动任务为`进行中`，重新执行`project.resolve`取得当前verified route，并把完整`projectRoute`只发送给同一原Worker后立即结束回合；不得执行`workbench.pause / workbench.accept / worker-result.ack`，不得用无回执原生final收口，也不得创建替代Worker。无法取得verified route时才把这一真实控制阻断报告老板，不让Worker先做业务动作或猜测路径。
 
-原生回调仍是主触发。平台把回调或其他`<codex_delegation>`注入PM正在回答老板请求的同一turn时，它只是并发控制输入，不构成新的老板目标或替换指令；PM可以在现有安全工具边界处理匹配终态，但不得丢弃已经开始处理的请求，最终答复必须先给出该请求的完整结果或准确未完成说明，再在尾部简要知会后台处理。非回调触发的自然PM回合开始时，只要工作台还有`进行中`或`已暂停`任务，PM就通过固定`runtime`入口补读一次当前项目pending；列表为空时立即继续老板当前目标，不读取Worker。存在回执时只核对与活动任务匹配的唯一Worker，不扫描无关Worker；最终答复先回答老板当前问题，与其无关的收口只在尾部简要知会。已退出活动区的回执只有在同一`receiptId`对应的工作台事务已经幂等成功时才补一次`worker-result.ack`，否则保留并说明，不重新执行`workbench.accept`或`workbench.pause`。该补读只恢复已保存结果，不代替原生回调；不得高频轮询或用补读冒充唤醒主通道，不循环、不等待，也不建立Hook、notify、守护进程或第二套调度器。
+每份回执只有`pending`一种控制状态。同一`receiptId`只处理一次；同一`projectId + taskId`的新终态会替换尚未消费的旧终态，不同项目的同名任务彼此隔离，旧`receiptId`不能删除新回执。PM用该`receiptId`派生稳定`operationId`提交`workbench.pause`或`workbench.accept`，成功后才执行一次带`projectId + taskId + receiptId`的`worker-result.ack`删除正文；若在状态提交后、删除前中断，下次以同一`operationId`取得幂等结果后再删。工作台提交或删除失败时保留回执，下次只重试未完成的固定动作。回执不是长期final入口，工作台仍指向正式Worker任务和一手证据。
+
+原生回调仍是主触发。平台把一条或多条回调及其他`<codex_delegation>`注入PM正在回答老板请求的同一turn时，它们只是按到达顺序追加的并发控制输入，不构成新的老板目标或替换指令；PM可以在现有安全工具边界逐项处理匹配终态，但不得丢弃、重启、截断或改写已经开始处理的请求。最终答复必须先给出老板该请求全部事项的完整结果或准确未完成说明，再在尾部用一段合并摘要列出本回合实际处理的每个后台任务、终态和收口结果；后一条回调不能覆盖前一条，重复回调只做幂等核对，未实际处理的回调不得写成已经收口。非回调触发的自然PM回合开始时，只要工作台还有`进行中`或`已暂停`任务，PM就通过固定`runtime`入口补读一次当前项目pending；列表为空时立即继续老板当前目标，不读取Worker。存在回执时只核对与活动任务匹配的唯一Worker，不扫描无关Worker；最终答复先回答老板当前问题，与其无关的收口只在尾部简要知会。已退出活动区的回执只有在同一`receiptId`对应的工作台事务已经幂等成功时才补一次`worker-result.ack`，否则保留并说明，不重新执行`workbench.accept`或`workbench.pause`。该补读只恢复已保存结果，不代替原生回调；不得高频轮询或用补读冒充唤醒主通道，不循环、不等待，也不建立Hook、notify、守护进程或第二套调度器。
 
 ## 1. 处理暂停
 
@@ -49,7 +51,42 @@ Worker final只承载业务结论和主证据入口，PM沿其主证据定点核
 
 PM处理完成结果只更新任务状态和验收结论，不建立“候选完成、待采纳、验证中、已消费”等额外业务状态。
 
-## 3. 重复、冲突与线程恢复
+## 3. 处理老板主动关闭
+
+只有老板明确点名任务并要求“关闭、取消、不做了”，明确说明由另一任务替代，或在重复任务中明确保留哪一个时，才能使用`workbench.close`。PM不得从Worker沉默、任务闲置、普通失败、超时、失联、缺少final或主线变化推断关闭，也不得把应当暂停、返工、验收或恢复的任务改写为关闭。
+
+关闭前必须核对精确`taskId`、登记Worker已经不在运行、当前项目中该任务没有pending回执，并保存老板明确指令的可追溯入口和一条关闭原因。存在pending时先按原终态协议处理，不能ack后强行关闭；Worker仍运行时先停止或等待已授权动作安全结束，不能只改工作台制造双写现场。满足条件后用一次`workbench.close`把任务移出活动区并写入月度历史，状态固定为`已关闭`。关闭不调用`workbench.accept`，不生成或消费Worker回执，也不进入近期主线结果。
+
+`workbench.close`沿用固定`runtime --request <JSON请求文件>`入口。老板本轮明确要求关闭就是`ownerDirective`的来源；请求必须原样包含`"ownerDirective": "explicit-owner-instruction"`，不得省略、改写，也不能用`authorizationLocator`代替。构造请求时把三个字段严格分开：`ownerDirective`只能写固定哨兵`explicit-owner-instruction`，老板的关闭原因写入`closureReason`，老板本次明确指令的入口写入`authorizationLocator`，三者不得互换。普通任务的`requestId`与`operationId`都固定为`close-<taskId>`；编号只能使用ASCII字母、数字、点、下划线和短横线，首字符必须是字母或数字，总长不超过200，不能把冒号、时间戳时区或授权入口拼进编号。极长`taskId`导致超长时，改用`close-`加`taskId + authorizationLocator`的SHA-256十六进制摘要。`expectedStatus`必须等于工作台当前状态，`worker / taskLocator`来自该任务现有登记，`closedBy`使用当前PM的可追溯编号，`closedAt`使用当前有效ISO时间：
+
+```json
+{
+  "schemaVersion": 1,
+  "requestId": "close-<taskId>",
+  "action": "workbench.close",
+  "input": {
+    "projectId": "<当前正式项目编号>",
+    "operationId": "close-<taskId>",
+    "taskId": "<精确任务编号>",
+    "worker": "<登记Worker>",
+    "expectedStatus": "<进行中或已暂停>",
+    "businessState": "已关闭",
+    "ownerDirective": "explicit-owner-instruction",
+    "workerStopped": true,
+    "closedBy": "<当前PM编号>",
+    "closureReason": "<老板明确关闭原因>",
+    "taskLocator": "<现有正式任务入口>",
+    "authorizationLocator": "<老板本次明确指令入口>",
+    "closedAt": "<当前ISO时间>"
+  }
+}
+```
+
+字段已经由本契约固定时，PM不得为构造关闭请求读取`control-runtime.mjs`、`workbench-transaction.mjs`或其他runtime实现源码；固定入口返回校验错误时按错误保持任务原状态并报告，不猜测别名或改走手工写入。
+
+`workbench.close`只关闭BEYOND控制面任务记录。它不删除或恢复业务文件、代码、分支、提交、stash、服务、数据、任务线程或其他外部对象；这些对象需要各自明确授权和正式入口。关闭失败时保持原任务状态，不手工修改工作台或历史。
+
+## 4. 重复、冲突与线程恢复
 
 同一`receiptId`或Worker final入口已经写入工作台时只处理一次，不重复改变状态、回复消费消息或启动任务。两个来源声称控制同一任务时，只停止可能重叠的写入，由 PM根据平台真实任务、工作目录和当前现场确认唯一 Worker；其他安全工作继续。
 
@@ -57,7 +94,7 @@ PM处理完成结果只更新任务状态和验收结论，不建立“候选完
 
 恢复优先使用原正式任务线程和现有 Git/运行现场，不重新接手、不重建任务包、不从头调查。PM向原Worker发送恢复输入时，只传当前发送工具声明的必填字段；当前标准调用只使用`threadId + prompt`，不得附加可选`hostId`、模型或推理参数。发送成功后立即结束PM回合，不读取或等待Worker；新终态由回执与原生回调返回。原线程客观不可恢复时，才建立替代 Worker，并明确正式工作目录、最新 Git和运行事实、已完成内容、剩余验收以及旧实例不会继续写入的依据。
 
-## 4. 对用户收口
+## 5. 对用户收口
 
 按根入口的用户沟通边界收口，说明当前真实结果、是否已经交付或发布、未覆盖范围和必要下一步。PM不把内部状态码、消息协议和长证据清单直接倾倒给用户。
 

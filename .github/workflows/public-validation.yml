@@ -11,8 +11,12 @@ permissions:
 
 jobs:
   validate:
-    name: validate
-    runs-on: ubuntu-latest
+    name: validate (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -23,6 +27,22 @@ jobs:
           package-manager-cache: false
       - name: Validate public repository content
         run: node scripts/check-public-content.mjs --strict-candidate
+      - name: Validate project identity
+        run: node --test scripts/check-m3-project-identity.mjs
+      - name: Validate project execution routing
+        run: node --test scripts/check-project-runtime-routing.mjs
+      - name: Validate terminal receipts
+        run: node --test scripts/check-worker-result-receipts.mjs
+      - name: Validate existing-project adoption
+        run: node scripts/check-existing-project-adoption.mjs
+      - name: Validate install integrity
+        run: node scripts/check-install-integrity.mjs
+      - name: Validate project-entry migration
+        run: node scripts/check-project-entry-migration.mjs
+      - name: Validate workbench upgrade migration
+        run: node --test scripts/check-workbench-upgrade-migration.mjs
+      - name: Validate implementation paths
+        run: node scripts/check-implementation-paths.mjs
       - name: Run minimal example tests
         working-directory: examples/minimal-project
         run: npm test

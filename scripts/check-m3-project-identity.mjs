@@ -46,10 +46,26 @@ function snapshot(f, overrides = {}) {
 
 function writeRegistrations(f, options = {}) {
   const projectId = options.projectId ?? 'project-1';
+  const localRemote = options.localRemote ?? 'git@example.test:team/app.git';
+  const initialized = spawnSync('git', ['init'], { cwd: f.projectRoot, encoding: 'utf8', windowsHide: true });
+  assert.equal(initialized.status, 0, initialized.stderr);
+  const currentRemote = spawnSync('git', ['remote', 'get-url', 'origin'], {
+    cwd: f.projectRoot, encoding: 'utf8', windowsHide: true,
+  });
+  if (currentRemote.status !== 0) {
+    const added = spawnSync('git', ['remote', 'add', 'origin', localRemote], {
+      cwd: f.projectRoot, encoding: 'utf8', windowsHide: true,
+    });
+    assert.equal(added.status, 0, added.stderr);
+  }
+  const repositories = options.repositoryRoots?.map((repositoryPath, index) => ({
+    path: repositoryPath, remote: null, role: index === 0 ? 'project-root' : 'component',
+  }));
   const local = [
     '---', `id: ${projectId}`, 'name: app', `path: ${f.projectRoot}`,
-    `remote: ${options.localRemote ?? 'git@example.test:team/app.git'}`,
+    `remote: ${localRemote}`,
     `host_id: ${options.hostId ?? 'host-a'}`, `codex_project_id: ${options.codexProjectId ?? 'codex-1'}`,
+    ...(repositories ? [`repositories_json: ${JSON.stringify(repositories)}`] : []),
     '---', '', '# app 本机登记', '',
   ].join('\n');
   const shared = [
@@ -58,6 +74,11 @@ function writeRegistrations(f, options = {}) {
   ].join('\n');
   fs.writeFileSync(path.join(f.controlRoot, 'local', 'projects', `${projectId}.md`), local, 'utf8');
   fs.writeFileSync(path.join(f.controlRoot, 'shared', 'projects', `${projectId}.md`), shared, 'utf8');
+  fs.writeFileSync(path.join(f.projectRoot, 'AGENTS.md'), [
+    '<!-- BEYOND-RUNTIME-VERSION: 3.2.5 -->',
+    `<!-- BEYOND-CONTROL-ROOT: ${path.relative(f.projectRoot, f.controlRoot).replaceAll('\\', '/')} -->`,
+    `<!-- BEYOND-PROJECT-ID: ${projectId} -->`, '',
+  ].join('\n'), 'utf8');
 }
 
 test('all project identity sources agreeing returns verified', () => {
@@ -197,6 +218,19 @@ test('duplicate local registration files for one path are conflict even when ids
   assert.ok(result.reasons.includes('duplicate_local_registration_for_path'));
 });
 
+test('the same project id registered twice on one host at different paths is conflict', () => {
+  const f = fixture('duplicate-project-id');
+  const other = path.join(f.root, 'other-project');
+  fs.mkdirSync(other);
+  const input = snapshot(f);
+  input.localMappings.push({
+    beyondProjectId: 'project-1', codexProjectId: 'codex-other', path: other, hostId: 'host-a',
+  });
+  const result = evaluateProjectIdentity(input);
+  assert.equal(result.status, 'conflict');
+  assert.ok(result.reasons.includes('duplicate_local_registration_for_project'));
+});
+
 test('local Codex mapping disagreeing with platform is conflict', () => {
   const f = fixture('codex-conflict');
   const input = snapshot(f);
@@ -253,11 +287,39 @@ test('provider reads existing Markdown registrations and writes only a derived c
   assert.equal(result.status, 'verified');
   assert.equal(result.sourceCounts.localMappings, 1);
   assert.equal(result.sourceCounts.sharedRegistrations, 1);
+  assert.deepEqual(result.projectRoute, {
+    projectId: 'project-1',
+    canonicalProjectRoot: projectIdentityInternals.canonicalPath(f.projectRoot),
+    controlRoot: projectIdentityInternals.canonicalPath(f.controlRoot),
+    repositoryRoot: projectIdentityInternals.canonicalPath(f.projectRoot),
+    hostId: 'host-a',
+    codexProjectId: 'codex-1',
+  });
+  assert.deepEqual(result.registeredRepositoryRoots, [projectIdentityInternals.canonicalPath(f.projectRoot)]);
   assert.ok(fs.existsSync(result.cacheFile));
   const cached = JSON.parse(fs.readFileSync(result.cacheFile, 'utf8'));
   assert.equal(cached.derived, true);
   assert.equal(cached.result.status, 'verified');
   assert.equal(JSON.stringify(cached).includes('secret'), false);
+});
+
+test('provider returns a selected registered repository in the verified project route', () => {
+  const f = fixture('repository-route');
+  const component = path.join(f.projectRoot, 'component');
+  fs.mkdirSync(component, { recursive: true });
+  const initialized = spawnSync('git', ['init'], { cwd: component, encoding: 'utf8', windowsHide: true });
+  assert.equal(initialized.status, 0, initialized.stderr);
+  writeRegistrations(f, { repositoryRoots: [f.projectRoot, component] });
+  const provider = new ProjectIdentityProvider({ controlRoot: f.controlRoot, runtimeRoot: f.runtimeRoot });
+  const result = provider.resolve({
+    cwd: f.cwd, projectRoot: f.projectRoot, repositoryRoot: component,
+    hostId: 'host-a', projectEntryTrusted: true,
+    repository: { remote: 'git@example.test:team/app.git' },
+    platform: snapshot(f).platform, hostRoutes: snapshot(f).hostRoutes,
+  });
+  assert.equal(result.status, 'verified');
+  assert.equal(projectIdentityInternals.samePath(result.projectRoute.repositoryRoot, component), true);
+  assert.equal(result.registeredRepositoryRoots.length, 2);
 });
 
 test('provider can read the user host route index exactly once', () => {
@@ -276,6 +338,38 @@ test('provider can read the user host route index exactly once', () => {
   });
   assert.equal(result.status, 'verified');
   assert.equal(result.sourceCounts.hostRouteFilesRead, 1);
+});
+
+test('provider refuses a verified identity when canonical AGENTS maps another control root', () => {
+  const f = fixture('wrong-control-binding');
+  writeRegistrations(f);
+  const agentsPath = path.join(f.projectRoot, 'AGENTS.md');
+  fs.writeFileSync(agentsPath, fs.readFileSync(agentsPath, 'utf8').replace(
+    /<!-- BEYOND-CONTROL-ROOT: [^\n]+ -->/,
+    '<!-- BEYOND-CONTROL-ROOT: ../other-control -->',
+  ), 'utf8');
+  const provider = new ProjectIdentityProvider({ controlRoot: f.controlRoot, runtimeRoot: f.runtimeRoot });
+  const result = provider.resolve({
+    cwd: f.cwd, projectRoot: f.projectRoot, hostId: 'host-a', projectEntryTrusted: true,
+    repository: { remote: 'git@example.test:team/app.git' },
+    platform: snapshot(f).platform, hostRoutes: snapshot(f).hostRoutes,
+  });
+  assert.equal(result.status, 'conflict');
+  assert.ok(result.reasons.includes('canonical_project_binding_invalid'));
+  assert.equal(result.projectRoute, null);
+});
+
+test('verified identity without local host routing fields does not mint a Worker route', () => {
+  const f = fixture('blank-route-fields');
+  writeRegistrations(f, { hostId: '', codexProjectId: '' });
+  const provider = new ProjectIdentityProvider({ controlRoot: f.controlRoot, runtimeRoot: f.runtimeRoot });
+  const result = provider.resolve({
+    cwd: f.cwd, projectRoot: f.projectRoot, hostId: 'host-a', projectEntryTrusted: true,
+    repository: { remote: 'git@example.test:team/app.git' },
+    platform: snapshot(f).platform, hostRoutes: snapshot(f).hostRoutes,
+  });
+  assert.equal(result.status, 'verified');
+  assert.equal(result.projectRoute, null);
 });
 
 test('malformed host route index is evidence and leaves a trusted project degraded', () => {
@@ -339,7 +433,7 @@ test('provider consumes registrations produced by the existing beyond-control co
   });
   assert.equal(initialized.status, 0, initialized.stderr);
   const registered = spawnSync(process.execPath, [
-    controlScript, 'register-project', '--project-root', f.projectRoot,
+    controlScript, 'install-project-entry', '--project-root', f.projectRoot, '--confirm-fusion', 'yes',
     '--host-id', 'host-a', '--codex-project-id', 'codex-generated', '--name', 'generated',
   ], { cwd: f.controlRoot, encoding: 'utf8', windowsHide: true });
   assert.equal(registered.status, 0, registered.stderr);
@@ -356,10 +450,10 @@ test('provider consumes registrations produced by the existing beyond-control co
       projects: [{ projectId: 'codex-generated', path: f.projectRoot, hostId: 'host-a' }],
     },
     hostRoutes: [{
-      beyondProjectId: registration.project.projectId, codexProjectId: 'codex-generated',
+      beyondProjectId: registration.projectId, codexProjectId: 'codex-generated',
       path: f.projectRoot, hostId: 'host-a',
     }],
   });
   assert.equal(result.status, 'verified');
-  assert.equal(result.identities.beyondProjectId, registration.project.projectId);
+  assert.equal(result.identities.beyondProjectId, registration.projectId);
 });

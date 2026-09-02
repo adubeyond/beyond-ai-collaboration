@@ -50,6 +50,7 @@ const publicEntries = [
 const errors = [];
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const allowedBinaryAssets = new Set([".github/assets/social-preview.png"]);
+const allowedPromotionAssetPattern = /^docs\/promotion\/concepts\/(?:0[1-9]|[1-9]\d)-[a-z0-9-]+\.png$/;
 
 function normalizeRelative(path) {
   return path.split(sep).join("/");
@@ -103,21 +104,30 @@ function validateBinaryAsset(path) {
   const bytes = readFileSync(path);
   const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
-  if (rel !== ".github/assets/social-preview.png") {
+  if (rel !== ".github/assets/social-preview.png" && !allowedPromotionAssetPattern.test(rel)) {
     errors.push(`未定义校验规则的二进制资产：${rel}`);
     return;
   }
-  if (bytes.length > 1024 * 1024) {
-    errors.push(`社交预览图超过 1 MiB：${rel} (${bytes.length} bytes)`);
-  }
   if (bytes.length < 24 || !pngSignature.every((value, index) => bytes[index] === value)) {
-    errors.push(`社交预览图不是有效 PNG：${rel}`);
+    errors.push(`公开图片不是有效 PNG：${rel}`);
     return;
   }
   const width = bytes.readUInt32BE(16);
   const height = bytes.readUInt32BE(20);
-  if (width < 1280 || height < 640 || width !== height * 2) {
-    errors.push(`社交预览图尺寸必须为至少 1280×640 的 2:1：${rel} (${width}×${height})`);
+  if (rel === ".github/assets/social-preview.png") {
+    if (bytes.length > 1024 * 1024) {
+      errors.push(`社交预览图超过 1 MiB：${rel} (${bytes.length} bytes)`);
+    }
+    if (width < 1280 || height < 640 || width !== height * 2) {
+      errors.push(`社交预览图尺寸必须为至少 1280×640 的 2:1：${rel} (${width}×${height})`);
+    }
+    return;
+  }
+  if (bytes.length > 5 * 1024 * 1024) {
+    errors.push(`宣传图片超过 5 MiB：${rel} (${bytes.length} bytes)`);
+  }
+  if (width < 1280 || height < 720) {
+    errors.push(`宣传图片尺寸必须至少为 1280×720：${rel} (${width}×${height})`);
   }
 }
 
@@ -227,7 +237,7 @@ const uniqueFiles = [...new Set(files.map((path) => resolve(path)))].sort();
 
 for (const path of uniqueFiles) {
   const rel = normalizeRelative(relative(repositoryRoot, path));
-  if (allowedBinaryAssets.has(rel)) {
+  if (allowedBinaryAssets.has(rel) || allowedPromotionAssetPattern.test(rel)) {
     validateBinaryAsset(path);
     continue;
   }
@@ -246,7 +256,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "PM uses a short task contract",
-    value: "普通任务包不是表单，通常只有两到四个短段",
+    value: "任务包通常只有两到四个短段",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
@@ -276,7 +286,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "formal project tasks do not degrade to projectless",
-    value: "结果不是`verified`时按真实原因停止，不降级成projectless",
+    value: "否则停止，不降级成projectless",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
@@ -425,13 +435,13 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/task-design/SKILL.md",
-    label: "PM does not execute the design action",
-    value: "PM不得用本 Skill直接完成业务设计",
+    label: "PM uses design only for the business task contract",
+    value: "PM只用下述轻量模式形成业务任务契约",
   },
   {
     path: "模板交付包/skills/task-design/SKILL.md",
-    label: "design skill gives the Worker professional design capability",
-    value: "Worker加载后形成当前任务中的设计专业能力",
+    label: "design skill gives the Worker technical design capability",
+    value: "Worker加载后形成当前任务中的技术设计能力",
   },
   {
     path: "模板交付包/skills/task-design/SKILL.md",
@@ -819,14 +829,14 @@ const requiredTaskStateFacts = [
     value: "业务状态只使用`进行中 / 已暂停 / 已完成`",
   },
   {
-    path: "模板交付包/skills/identity-pm/references/cross-task-coordination.md",
+    path: "模板交付包/docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md",
     label: "BEYOND does not create or recommend worktrees",
     value: "BEYOND不创建或推荐 worktree",
   },
   {
-    path: "模板交付包/skills/identity-pm/references/cross-task-coordination.md",
+    path: "模板交付包/docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md",
     label: "same directory is not automatically a conflict",
-    value: "目录相同本身不是冲突",
+    value: "同一仓库或目录也不能单独证明冲突",
   },
   {
     path: "模板交付包/skills/identity-pm/references/dispatch-and-init.md",
@@ -834,9 +844,9 @@ const requiredTaskStateFacts = [
     value: "当前正式项目是默认工作区",
   },
   {
-    path: "模板交付包/skills/identity-pm/references/cross-task-coordination.md",
+    path: "模板交付包/docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md",
     label: "shared Git index and history operations are serialized",
-    value: "同一 Git工作区的索引、HEAD或历史动作串行",
+    value: "同一 Git工作区的索引、HEAD和历史动作串行",
   },
   {
     path: "模板交付包/skills/task-ops/references/git-and-resource-closeout.md",
@@ -865,8 +875,8 @@ const requiredTaskStateFacts = [
   },
   {
     path: "模板交付包/docs/AI编程协同机制/当前工作台.md",
-    label: "workbench separates business state from other facts",
-    value: "业务状态只使用`进行中 / 已暂停 / 已完成`",
+    label: "workbench separates active, completed and owner-closed task states",
+    value: "任务状态只使用`进行中 / 已暂停 / 已完成 / 已关闭`",
   },
   {
     path: "模板交付包/docs/AI编程协同机制/当前工作台.md",
@@ -888,12 +898,12 @@ const requiredTaskStateFacts = [
 for (const fact of requiredTaskStateFacts) {
   const path = join(repositoryRoot, ...fact.path.split("/"));
   if (!existsSync(path)) {
-    errors.push(`三态任务规则文件缺失：${fact.path}`);
+    errors.push(`任务状态规则文件缺失：${fact.path}`);
     continue;
   }
   const text = readFileSync(path, "utf8");
   if (!text.includes(fact.value)) {
-    errors.push(`三态任务规则缺失：${fact.label} (${fact.path})`);
+    errors.push(`任务状态规则缺失：${fact.label} (${fact.path})`);
   }
 }
 

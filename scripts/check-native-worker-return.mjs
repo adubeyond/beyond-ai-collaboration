@@ -189,6 +189,12 @@ test('premature return cannot claim completion or allow later Worker tools', () 
   assert.match(lifecycle, /匹配回执存在时不得调用正时长`wait_threads`/);
   assert.match(lifecycle, /回执只能恢复同一份冻结正文，不能单独证明业务完成/);
   assert.match(lifecycle, /没有回执的新任务不得沿用原生final绕过终态协议/);
+  assert.match(lifecycle, /缺少`projectRoute`，这是派单纠正，不是业务暂停或终态/);
+  assert.match(lifecycle, /保持同一活动任务为`进行中`/);
+  assert.match(lifecycle, /不得执行`workbench\.pause \/ workbench\.accept \/ worker-result\.ack`/);
+  assert.match(worker, /读取业务文件或调用业务工具前即停止业务动作/);
+  assert.match(worker, /不执行`worker-result\.enqueue`/);
+  assert.match(worker, /收到精确route后由同一Worker继续原任务/);
   assert.doesNotMatch(lifecycle, /wait_threads\(timeoutMs=/);
   assert.match(lifecycle, /执行线程未形成正式结果/);
   assert.match(lifecycle, /`workbench\.pause`一次把业务任务记为`已暂停`/);
@@ -196,7 +202,7 @@ test('premature return cannot claim completion or allow later Worker tools', () 
 
 test('missing implementation or release steps stay with the original business result', () => {
   const pm = read('模板交付包/skills/identity-pm/SKILL.md');
-  assert.match(pm, /同一结果的检查点、返工和补齐验收继续使用原Worker/);
+  assert.match(pm, /同一结果的检查点、返工和补验收沿用原Worker/);
   assert.match(pm, /同一结果恢复或补充原Worker/);
   assert.match(pm, /只有新的独立结果才新建/);
 });
@@ -206,9 +212,22 @@ test('runtime exposes project identity, workbench and short-lived Worker result 
   for (const retired of ['task.prepare', 'terminal.pending', 'migration.apply', 'notify']) {
     assert.doesNotMatch(runtime, new RegExp(retired.replace('.', '\\.')));
   }
-  for (const current of ['project.resolve', 'worker-result.enqueue', 'worker-result.list', 'worker-result.ack', 'workbench.migrate', 'workbench.register', 'workbench.pause', 'workbench.accept', 'workbench.recover']) {
+  for (const current of ['project.resolve', 'worker-result.enqueue', 'worker-result.list', 'worker-result.ack', 'workbench.migrate', 'workbench.register', 'workbench.pause', 'workbench.accept', 'workbench.close', 'workbench.recover']) {
     assert.match(runtime, new RegExp(current.replace('.', '\\.')));
   }
+});
+
+test('owner-authorized closure is separate from completion, pause and Worker receipts', () => {
+  const pm = read('模板交付包/skills/identity-pm/SKILL.md');
+  const lifecycle = read('模板交付包/skills/identity-pm/references/lifecycle-and-closeout.md');
+  const runtime = read('模板交付包/scripts/runtime/control-runtime.mjs');
+  assert.match(pm, /只有老板明确要求关闭、取消、不再做、以另一任务替代/);
+  assert.match(pm, /沉默、闲置、失败、失联、超时或缺少结果都不能推断关闭/);
+  assert.match(lifecycle, /登记Worker已经不在运行/);
+  assert.match(lifecycle, /该任务没有pending回执/);
+  assert.match(lifecycle, /关闭不调用`workbench\.accept`/);
+  assert.match(lifecycle, /不生成或消费Worker回执/);
+  assert.match(runtime, /task closure requires zero pending Worker result receipts/);
 });
 
 test('readable platform final stays authoritative without byte-for-byte receipt equality', () => {
@@ -225,11 +244,24 @@ test('readable platform final stays authoritative without byte-for-byte receipt 
 test('an injected delegation cannot replace the active user request', () => {
   const pm = read('模板交付包/skills/identity-pm/SKILL.md');
   const lifecycle = read('模板交付包/skills/identity-pm/references/lifecycle-and-closeout.md');
-  assert.match(pm, /`<codex_delegation>`、Worker回调或其他任务消息属于并发输入/);
+  assert.match(pm, /`<codex_delegation>`、Worker回调或其他任务消息是追加并发输入/);
   assert.match(pm, /不是老板撤回或替换当前问题/);
-  assert.match(pm, /用户可见final必须先完整回答已经开始处理的老板请求/);
-  assert.match(pm, /不得只返回较晚到达的委派或收口结果/);
-  assert.match(lifecycle, /注入PM正在回答老板请求的同一turn/);
-  assert.match(lifecycle, /不得丢弃已经开始处理的请求/);
-  assert.match(lifecycle, /最终答复必须先给出该请求的完整结果或准确未完成说明/);
+  assert.match(pm, /任何回调都不得打断前台回答/);
+  assert.match(pm, /final先完整回答老板请求的全部事项/);
+  assert.match(pm, /多条回调不得覆盖或遗漏/);
+  assert.match(lifecycle, /一条或多条回调及其他`<codex_delegation>`注入PM正在回答老板请求的同一turn/);
+  assert.match(lifecycle, /不得丢弃、重启、截断或改写已经开始处理的请求/);
+  assert.match(lifecycle, /最终答复必须先给出老板该请求全部事项的完整结果或准确未完成说明/);
+  assert.match(lifecycle, /后一条回调不能覆盖前一条/);
+});
+
+test('Worker completion always reports its PM while nonterminal supervision stays separate', () => {
+  const pm = read('模板交付包/skills/identity-pm/SKILL.md');
+  const worker = read('模板交付包/skills/identity-worker/SKILL.md');
+  assert.match(worker, /Worker把正式任务做完后必须向唯一来源PM报告一次/);
+  assert.match(worker, /来源PM正在回答老板、暂时忙碌或可能延后处理，都不能成为跳过终态回执或原生回调的理由/);
+  assert.match(worker, /这种说明不执行`worker-result\.enqueue`/);
+  assert.match(worker, /普通里程碑、方法选择和可自行闭环的问题留在当前Worker/);
+  assert.match(pm, /PM督导只在明确检查点或需要项目全貌裁决主线、其他任务或共享对象时发生/);
+  assert.match(pm, /任务保持`进行中`，不使用终态回执、`pause`或`accept`/);
 });
