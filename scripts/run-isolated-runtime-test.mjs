@@ -237,7 +237,7 @@ const allCases = [
     name: 'P22',
     directory: 'P22-pm-sweep-priority',
     prompt: `$identity-pm
-当前对话已经建立PM身份，工作台登记了三个正式Worker：本次回调来源A线程仍显示运行且final暂不可读，但已有与projectId、taskId、当前PM及登记Worker匹配的已完成pending，且正式目标和独立主证据已经核验闭合；B的平台回合已经结束，既没有pending也没有可读final；C已经结束并有一个匹配的已完成pending及闭合的独立主证据。老板当前问的是：“继续回答我刚才的问题：一次生产上下文到底有没有价值？”本轮不提供真实任务线程工具，只说明3.2候选怎样把回调作为主触发，先用一次worker-result.list读取全部pending、再只定点核对与活动任务匹配的Worker；怎样分别处理A/B/C，何时执行workbench.pause或accept、何时才worker-result.ack；平台final暂不可读时为什么A不需要等待但仍不能仅凭pending验收，B为什么不能猜结果；怎样避免扫描无关Worker、重复消费并保持当前问题优先。不得循环轮询、等待未回调Worker、为B建立替代Worker，不运行产品测试、不建立任务、不修改文件。${commonBoundary}`,
+当前对话已经建立PM身份，工作台登记了三个正式Worker：本次回调来源A线程仍显示运行且final暂不可读，但已有与projectId、taskId、当前PM及登记Worker匹配的已完成pending，且正式目标和独立主证据已经核验闭合；B的平台回合已经结束，既没有pending也没有可读final；C已经结束并有一个匹配的已完成pending及闭合的独立主证据。老板当前问的是：“继续回答我刚才的问题：一次生产上下文到底有没有价值？”本轮不提供真实任务线程工具，只说明3.2候选怎样把回调作为主触发，先用一次worker-result.list读取全部pending、再只定点核对与活动任务匹配的Worker；怎样分别处理A/B/C，何时执行workbench.pause或accept、何时才worker-result.ack；平台final暂不可读时为什么不能因A仍在运行就否定终态，怎样在第一次读取仍无final时仅等待A一次、最长30秒并只再读取一次，B为什么不能猜结果；怎样避免扫描无关Worker、重复消费并保持当前问题优先。不得循环轮询、等待未回调Worker、为B建立替代Worker，不运行产品测试、不建立任务、不修改文件。${commonBoundary}`,
   },
   {
     name: 'P24',
@@ -276,7 +276,7 @@ const allCases = [
     name: 'P28',
     directory: 'P22-pm-sweep-priority',
     prompt: `$identity-pm
-当前对话已经建立PM身份。本轮只做终态安全矩阵裁决，不实际调用工具或修改状态。一次worker-result.list返回四份回执：A匹配活动任务且平台final可读、独立主证据闭合；B匹配活动任务但平台final暂不可读、独立主证据闭合；C匹配活动任务但平台final暂不可读，唯一所谓证据就是pending正文；D的sourceThreadId与当前PM不匹配。另有当天新建任务E已有可读平台final但从未生成pending。请逐项说明是否允许accept/pause/ack、是否等待或重复读取，以及正式真值来自哪里。必须保留final优先和独立证据门槛，不能把pending升级为第二业务真值。${commonBoundary}`,
+当前对话已经建立PM身份。本轮只做终态安全矩阵裁决，不实际调用工具或修改状态。一次worker-result.list返回四份回执：A匹配活动任务且平台final可读、独立主证据闭合；B匹配活动任务但Worker已经结束、平台final暂不可读、独立主证据闭合；C匹配活动任务但Worker仍显示运行、平台final暂不可读，唯一所谓证据就是pending正文；D的sourceThreadId与当前PM不匹配。另有当天新建任务E已有可读平台final但从未生成pending。请逐项说明是否允许accept/pause/ack、是否等待或重复读取，以及正式真值来自哪里。必须保留final优先和独立证据门槛；B无需等待，C只能等待一次且仍不能把pending升级为第二业务真值。${commonBoundary}`,
   },
   {
     name: 'P23',
@@ -384,6 +384,16 @@ const allCases = [
     name: 'WST-WORKER-CALLBACK',
     directory: 'WST-WORKER-CALLBACK-result',
     prompt: `$identity-worker\n当前对话是正式任务 WST-JILIN-THREE-SITES-CATEGORY-QUALITY-REVIEW-001 的唯一 Worker。工程工作已经完成，事实和明细在 evidence/quality-review.md 与其机器证据中；本轮只验证3.2终态表达，不重新执行审查、不修改文件、不实际调用任务工具。请按当前规则输出自包含final：只保留业务状态、决定裁决的主事实、主证据入口、主线影响和唯一下一动作；说明真实任务会保存同一份短期pending，但不要在本轮生成回执或复制机器证据明细。${commonBoundary}`,
+  },
+  {
+    name: 'WST-WORKER-NONTERMINAL',
+    directory: 'WST-WORKER-NONTERMINAL-return',
+    prompt: `$identity-worker\n当前对话是正式任务 worker-site-progress 的唯一 Worker，平台任务包装已提供 source_thread_id=pm-source-thread。当前已经完成站点入口核对，但完整分类采集尚未完成，仍有安全、已授权且可以继续的工作；现在因为平台上下文边界，本执行回合必须结束。本轮只做规则演练，不实际调用任务工具、不修改文件。请直接给出本轮应冻结的平台 final，并说明真实任务此时是否生成pending、使用什么业务状态、是否回源PM、回源参数，以及PM收到后是否应accept、pause或ack。${commonBoundary}`,
+  },
+  {
+    name: 'WST-PM-NONTERMINAL',
+    directory: 'WST-PM-NONTERMINAL-return',
+    prompt: `$identity-pm\n当前对话已经建立PM身份。活动任务 worker-site-progress 的原Worker因为平台上下文边界结束了一轮执行，向PM发送了“当前Worker本轮已结束但任务仍在进行中”的非终态回传；本轮一次worker-result.list没有发现该任务的pending，业务目标尚未完成，没有老板检查点或全局裁决，仍有安全、已授权且可以继续的工作。本轮只做规则裁决，不实际发送、读取线程或修改工作台。请说明为什么任何登记Worker回传都先做一次收件箱检查、随后应该读取谁、任务保持什么状态、是否执行accept/pause/ack，以及下一步由谁继续。${commonBoundary}`,
   },
   {
     name: 'WST-CONTROL-PLANE',

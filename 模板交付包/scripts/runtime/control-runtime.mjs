@@ -1,6 +1,7 @@
 import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { ProjectIdentityProvider } from './project-identity-provider.mjs';
 import { WorkerResultReceiptStore } from './worker-result-receipts.mjs';
 import { WorkbenchTransactionStore } from './workbench-transaction.mjs';
@@ -12,6 +13,7 @@ const ACTIONS = new Set([
   'workbench.update',
   'workbench.pause',
   'workbench.snapshot',
+  'workbench.inspect',
   'workbench.accept',
   'workbench.close',
   'workbench.recover',
@@ -79,8 +81,8 @@ function validateReceiptTaskIdentity(config, input) {
   }
 }
 
-function workerResults(config) {
-  return new WorkerResultReceiptStore({ runtimeRoot: config.workerResultRoot });
+function workerResults(config, options = {}) {
+  return new WorkerResultReceiptStore({ runtimeRoot: config.workerResultRoot, ...options });
 }
 
 function projectIdentity(config) {
@@ -88,6 +90,107 @@ function projectIdentity(config) {
     controlRoot: config.controlRoot,
     runtimeRoot: config.projectIdentityRoot,
   });
+}
+
+function workbenchTransaction(config, operationId) {
+  const file = path.join(config.workbenchRoot, 'transactions', `${operationId}.json`);
+  if (!fs.existsSync(file)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    throw new Error(`cannot read workbench transaction ${operationId}: ${error.message}`);
+  }
+}
+
+function inspectWorkbench(config, rawInput) {
+  const input = object(rawInput, 'workbench inspection');
+  const projectId = nonEmpty(input.projectId, 'projectId');
+  projectIdentity(config).validateControlProject(projectId);
+  const filter = { projectId };
+  if (input.taskId !== undefined) filter.taskId = nonEmpty(input.taskId, 'taskId');
+  const pending = workerResults(config, { readOnly: true }).list(filter);
+  const store = new WorkbenchTransactionStore({
+    runtimeRoot: config.workbenchRoot,
+    viewPath: config.viewPath,
+    historyRoot: config.historyRoot,
+    readOnly: true,
+  });
+  const state = store.snapshot();
+  const recovery = store.recoveryStatus();
+  const records = pending.records.map((receipt) => {
+    const activeTask = state.tasks?.[receipt.taskId] ?? null;
+    const operationKind = receipt.businessState === '已完成' ? 'accept' : 'pause';
+    const operationId = `${operationKind}-${receipt.receiptId}`;
+    const operation = state.operations?.[operationId] ?? null;
+    const transaction = operationKind === 'accept' ? workbenchTransaction(config, operationId) : null;
+    const historyRecord = transaction?.phase === 'completed' && typeof transaction.completedAt === 'string'
+      ? store.history(transaction.completedAt.slice(0, 7)).records
+        .find((record) => record.operationId === operationId) ?? null
+      : null;
+    const committedAcceptanceMatches = Boolean(operation && transaction?.phase === 'completed'
+      && operation.inputDigest === transaction.inputDigest
+      && JSON.stringify(operation.output) === JSON.stringify(transaction.output)
+      && isDeepStrictEqual(historyRecord, operation.historyRecord)
+      && historyRecord?.taskId === receipt.taskId
+      && historyRecord.worker === transaction.output?.worker
+      && historyRecord.status === '已完成');
+    const workerMatches = !receipt.workerThreadId
+      || activeTask?.worker === receipt.workerThreadId
+      || transaction?.output?.worker === receipt.workerThreadId;
+    let disposition = 'review-active-task';
+    let reason = 'active-task-and-pending-receipt';
+
+    if (transaction && transaction.phase !== 'completed') {
+      disposition = 'preserve-conflict';
+      reason = 'matching-workbench-transaction-incomplete';
+    } else if (operationKind === 'accept' && committedAcceptanceMatches
+      && (transaction.kind ?? 'accepted') === 'accepted'
+      && transaction.output?.taskId === receipt.taskId
+      && transaction.output?.status === '已完成'
+      && !activeTask && workerMatches) {
+      disposition = 'ack-committed-receipt';
+      reason = 'matching-workbench-operation-committed';
+    } else if (operationKind === 'pause'
+      && operation?.output?.taskId === receipt.taskId
+      && operation.output.status === '已暂停'
+      && activeTask?.status === '已暂停' && workerMatches) {
+      disposition = 'ack-committed-receipt';
+      reason = 'matching-workbench-operation-committed';
+    } else if (!activeTask) {
+      disposition = 'preserve-conflict';
+      reason = 'active-task-missing-without-committed-operation';
+    } else if (!workerMatches) {
+      disposition = 'preserve-conflict';
+      reason = 'registered-worker-mismatch';
+    } else if (operation || transaction) {
+      disposition = 'preserve-conflict';
+      reason = 'workbench-state-conflicts-with-receipt';
+    }
+
+    return {
+      ...receipt,
+      activeStatus: activeTask?.status ?? null,
+      registeredWorker: activeTask?.worker ?? transaction?.output?.worker ?? null,
+      expectedOperationId: operationId,
+      disposition,
+      reason,
+    };
+  });
+  const counts = {
+    reviewActiveTask: records.filter((record) => record.disposition === 'review-active-task').length,
+    ackCommittedReceipt: records.filter((record) => record.disposition === 'ack-committed-receipt').length,
+    preserveConflict: records.filter((record) => record.disposition === 'preserve-conflict').length,
+  };
+  return {
+    projectId,
+    stateRevision: state.revision,
+    activeTaskCount: Object.keys(state.tasks ?? {}).length,
+    pendingReceiptCount: records.length,
+    counts,
+    viewMatchesState: recovery.viewMatchesState,
+    pendingTransactions: recovery.pendingTransactions,
+    records,
+  };
 }
 
 function execute(action, request, config) {
@@ -109,6 +212,7 @@ function execute(action, request, config) {
     projectIdentity(config).validateControlProject(nonEmpty(input.projectId, 'projectId'));
     return workerResults(config).list(input);
   }
+  if (action === 'workbench.inspect') return inspectWorkbench(config, request.input);
   if (action === 'worker-result.ack') return workerResults(config).acknowledge(object(request.input, 'Worker result receipt acknowledgement'));
   if (action === 'workbench.close') {
     const input = object(request.input, 'task closure');
@@ -139,8 +243,8 @@ export function executeRuntimeRequest(rawRequest, context) {
   if (!ACTIONS.has(action)) throw new Error(`unsupported runtime action: ${action}`);
   let requestId;
   if (request.requestId !== undefined) requestId = nonEmpty(request.requestId, 'requestId');
-  else if (action.startsWith('worker-result.')) {
-    const input = object(request.input, 'Worker result request input');
+  else if (action.startsWith('worker-result.') || action === 'workbench.inspect') {
+    const input = object(request.input, 'runtime request identity input');
     const identity = [input.projectId, input.receiptId ?? input.taskId ?? 'all'].filter(Boolean).join(':');
     requestId = `${action}:${nonEmpty(String(identity), 'Worker result request identity')}`;
   } else requestId = nonEmpty(request.requestId, 'requestId');

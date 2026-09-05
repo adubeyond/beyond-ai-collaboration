@@ -67,7 +67,7 @@ try {
   const initial = json(["worker-policy", "--action", "show", "--project-id", projectId]).value;
   check("未批准策略默认关闭", initial.configured === true && initial.policy.mode === "platform-default" && initial.policy.confirmed === false, JSON.stringify(initial));
 
-  for (const taskKind of ["ordinary-engineering", "bulk-structured", "complex-high-risk"]) {
+  for (const taskKind of ["design-analysis", "ordinary-engineering", "bulk-structured", "complex-high-risk"]) {
     const unresolved = json(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", taskKind]).value;
     check(`未批准时${taskKind}不覆盖平台模型`, unresolved.decision === "keep-platform-default" && Object.keys(unresolved.createParameters).length === 0, JSON.stringify(unresolved));
   }
@@ -82,14 +82,21 @@ try {
   check("策略变更先建立可恢复备份", existsSync(enabled.backup), enabled.backup);
 
   const expected = {
+    "design-analysis": { model: "gpt-5.6-sol", thinking: "high" },
     "ordinary-engineering": { model: "gpt-5.6-terra", thinking: "high" },
     "bulk-structured": { model: "gpt-5.6-luna", thinking: "high" },
-    "complex-high-risk": { model: "gpt-5.6-sol", thinking: "xhigh" },
+    "complex-high-risk": { model: "gpt-5.6-sol", thinking: "high" },
   };
+  const overviewBeforeResolve = readFileSync(overviewPath, "utf8");
+  const shown = json(["worker-policy", "--action", "show", "--project-id", projectId]).value;
+  check("show展示与解析相同的唯一映射", JSON.stringify(shown.choices["beyond-worker-matrix-v1"]) === JSON.stringify(expected));
   for (const [taskKind, createParameters] of Object.entries(expected)) {
     const resolved = json(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", taskKind]).value;
     check(`已批准时${taskKind}解析固定参数`, resolved.decision === "use-approved-project-worker-matrix" && JSON.stringify(resolved.createParameters) === JSON.stringify(createParameters), JSON.stringify(resolved));
+    check(`${taskKind}只产生模型与强度创建参数`, Object.keys(resolved.createParameters).sort().join(",") === "model,thinking");
   }
+  check("show与resolve不改写项目策略", readFileSync(overviewPath, "utf8") === overviewBeforeResolve);
+  check("策略仍只作用于新建正式Worker", shown.policy.scope === "new-formal-worker");
 
   const migrated = json([
     "install-project-entry", "--project-root", project, "--confirm-fusion", "yes",
@@ -114,6 +121,10 @@ try {
   ]).value;
   const defaultResolution = json(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", "complex-high-risk"]).value;
   check("用户可明确恢复平台默认", disabled.policy.mode === "platform-default" && Object.keys(defaultResolution.createParameters).length === 0);
+  for (const taskKind of Object.keys(expected)) {
+    const resolved = json(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", taskKind]).value;
+    check(`已批准平台默认时${taskKind}仍不覆盖`, resolved.decision === "keep-platform-default" && Object.keys(resolved.createParameters).length === 0);
+  }
 
   const beforeInvalid = readFileSync(overviewPath, "utf8");
   const invalidMode = command([

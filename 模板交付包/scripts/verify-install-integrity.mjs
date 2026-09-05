@@ -549,6 +549,9 @@ if (manifest) {
   if (controlRuntime && !controlRuntime.includes("worker-result.enqueue")) {
     errors.push("控制运行统一入口缺少Worker短期终态动作");
   }
+  if (controlRuntime && !controlRuntime.includes("workbench.inspect")) {
+    errors.push("控制运行统一入口缺少只读工作台检查动作");
+  }
   if (workerResultRuntime && (!workerResultRuntime.includes("pendingRoot") || !workerResultRuntime.includes("acknowledge"))) {
     errors.push("Worker短期终态运行文件缺少pending或消费删除能力");
   }

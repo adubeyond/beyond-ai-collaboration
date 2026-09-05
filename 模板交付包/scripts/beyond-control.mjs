@@ -32,7 +32,7 @@ const initializationEnd = "<!-- END BEYOND PROJECT INITIALIZATION -->";
 const legacyRuntimeGuardRelative = ".codex/beyond-runtime-guard.mjs";
 const codexHooksRelative = ".codex/hooks.json";
 const workerPolicyModes = new Set(["platform-default", "beyond-worker-matrix-v1"]);
-const workerTaskKinds = new Set(["ordinary-engineering", "bulk-structured", "complex-high-risk"]);
+const workerTaskKinds = new Set(["design-analysis", "ordinary-engineering", "bulk-structured", "complex-high-risk"]);
 const initializationModes = new Set(["full", "on-demand"]);
 const initializationDecisions = new Set(["migrate", "register", "defer"]);
 const initializationGroups = ["overview", "architecture", "development", "testing", "operations", "security", "other"];
@@ -46,9 +46,10 @@ const initializationGroupLabels = {
   other: "其他专属资料",
 };
 const workerMatrixV1 = {
+  "design-analysis": { model: "gpt-5.6-sol", thinking: "high" },
   "ordinary-engineering": { model: "gpt-5.6-terra", thinking: "high" },
   "bulk-structured": { model: "gpt-5.6-luna", thinking: "high" },
-  "complex-high-risk": { model: "gpt-5.6-sol", thinking: "xhigh" },
+  "complex-high-risk": { model: "gpt-5.6-sol", thinking: "high" },
 };
 const legacyWorkerPolicyPattern = /(Luna|Terra|Sol|gpt-5\.[0-9]+-(?:luna|terra|sol)|模型矩阵|Worker.{0,20}(?:模型|推理))/i;
 
@@ -1937,7 +1938,7 @@ function printHelp() {
     `  initialization --action complete --project-id <项目编号> --root-entry-reviewed yes\n` +
     `  worker-policy --action show --project-id <项目编号>\n` +
     `  worker-policy --action set --project-id <项目编号> --mode platform-default|beyond-worker-matrix-v1 --approved-by <用户明确批准依据> [--approved-at <ISO时间>]\n` +
-    `  worker-policy --action resolve --project-id <项目编号> --task-kind ordinary-engineering|bulk-structured|complex-high-risk\n` +
+    `  worker-policy --action resolve --project-id <项目编号> --task-kind design-analysis|ordinary-engineering|bulk-structured|complex-high-risk\n` +
     `  list [--git-account <已确认账号> | --all]\n` +
     `  workbench --action list\n` +
     `  workbench --action progress --thread <正式thread> --progress <当前里程碑> [--updated <YYYY-MM-DD>]\n` +

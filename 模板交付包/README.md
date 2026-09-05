@@ -118,3 +118,5 @@ node scripts/beyond-control.mjs runtime --request "<由BEYOND生成的JSON请求
 ```
 
 `--request`接收文件路径，不接收JSON正文。`worker-result.enqueue/list/ack`请求固定使用`schemaVersion + action + input`外层；`list`至少带当前`projectId`，`ack`带`projectId + taskId + receiptId`。这三类动作可省略`requestId`，由运行内核自动生成。
+
+当pending与活动任务或已提交事务的关系不清时，PM可用只读`workbench.inspect`把回执分为正常核对、仅补ack或保留冲突三类；它只需`projectId`、也可省略`requestId`，并且不验收、不改状态、不删除回执。
