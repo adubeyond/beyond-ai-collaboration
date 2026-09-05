@@ -639,10 +639,13 @@ export class WorkbenchTransactionStore {
   recoveryStatus() {
     const state = this.#readState();
     const current = fs.readFileSync(this.viewPath, 'utf8');
+    const transactionFiles = fs.existsSync(this.transactionRoot)
+      ? fs.readdirSync(this.transactionRoot)
+      : [];
     return {
       stateRevision: state.revision,
       viewMatchesState: current === this.#composeView(current, state),
-      pendingTransactions: fs.readdirSync(this.transactionRoot)
+      pendingTransactions: transactionFiles
         .filter((name) => name.endsWith('.json'))
         .filter((name) => readJson(path.join(this.transactionRoot, name), {}).phase !== 'completed'),
     };

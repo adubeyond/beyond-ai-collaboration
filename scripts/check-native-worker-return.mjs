@@ -31,13 +31,29 @@ function matchingActiveReceipts(receipts, activeTasks) {
   });
 }
 
-function closeoutDecision({ matchingReceipt, finalReadable, finalConflict = false, independentEvidence, legacyTask = false }) {
+function closeoutDecision({
+  matchingReceipt,
+  finalReadable,
+  finalConflict = false,
+  independentEvidence,
+  legacyTask = false,
+  workerRunning = false,
+  finalReadableAfterWait = false,
+}) {
   if (!matchingReceipt) {
     return legacyTask && finalReadable
       ? { reads: 1, waits: 0, action: 'accept', ack: false, truth: 'platform-final' }
       : { reads: 1, waits: 0, action: 'hold', ack: false, truth: null };
   }
-  if (finalConflict || !independentEvidence) {
+  if (finalConflict) {
+    return { reads: 1, waits: 0, action: 'hold', ack: false, truth: null };
+  }
+  if (!finalReadable && workerRunning) {
+    return finalReadableAfterWait && independentEvidence
+      ? { reads: 2, waits: 1, action: 'accept', ack: true, truth: 'platform-final' }
+      : { reads: 2, waits: 1, action: 'hold', ack: false, truth: null };
+  }
+  if (!independentEvidence) {
     return { reads: 1, waits: 0, action: 'hold', ack: false, truth: null };
   }
   return {
@@ -47,6 +63,14 @@ function closeoutDecision({ matchingReceipt, finalReadable, finalConflict = fals
     ack: true,
     truth: finalReadable ? 'platform-final' : 'receipt-fallback',
   };
+}
+
+function callbackDisposition({ matchingReceipt, finalState }) {
+  if (matchingReceipt && finalState === 'in-progress') return 'protocol-conflict';
+  if (matchingReceipt) return 'terminal-candidate';
+  if (finalState === 'in-progress') return 'progress';
+  if (finalState === 'terminal') return 'terminal-receipt-failure';
+  return 'hold';
 }
 
 function validTerminalTrace(events) {
@@ -125,7 +149,7 @@ test('one callback selects every matching active receipt without scanning unrela
   assert.deepEqual(matchingActiveReceipts(receipts, activeTasks).map((item) => item.taskId), ['task-a', 'task-c']);
 });
 
-test('matching pending closes with zero wait only after independent evidence is complete', () => {
+test('matching pending uses one bounded visibility wait only for a running Worker without a final', () => {
   assert.deepEqual(closeoutDecision({ matchingReceipt: true, finalReadable: true, independentEvidence: true }), {
     reads: 1, waits: 0, action: 'accept', ack: true, truth: 'platform-final',
   });
@@ -134,6 +158,12 @@ test('matching pending closes with zero wait only after independent evidence is 
   });
   assert.deepEqual(closeoutDecision({ matchingReceipt: true, finalReadable: false, independentEvidence: false }), {
     reads: 1, waits: 0, action: 'hold', ack: false, truth: null,
+  });
+  assert.deepEqual(closeoutDecision({ matchingReceipt: true, finalReadable: false, independentEvidence: true, workerRunning: true, finalReadableAfterWait: true }), {
+    reads: 2, waits: 1, action: 'accept', ack: true, truth: 'platform-final',
+  });
+  assert.deepEqual(closeoutDecision({ matchingReceipt: true, finalReadable: false, independentEvidence: true, workerRunning: true, finalReadableAfterWait: false }), {
+    reads: 2, waits: 1, action: 'hold', ack: false, truth: null,
   });
   assert.deepEqual(closeoutDecision({ matchingReceipt: true, finalReadable: true, finalConflict: true, independentEvidence: true }), {
     reads: 1, waits: 0, action: 'hold', ack: false, truth: null,
@@ -144,6 +174,14 @@ test('matching pending closes with zero wait only after independent evidence is 
   assert.deepEqual(closeoutDecision({ matchingReceipt: false, finalReadable: true, independentEvidence: true, legacyTask: true }), {
     reads: 1, waits: 0, action: 'accept', ack: false, truth: 'platform-final',
   });
+});
+
+test('structured task and receipt state drives callback handling while wording checks consistency', () => {
+  assert.equal(callbackDisposition({ matchingReceipt: true, finalState: 'terminal' }), 'terminal-candidate');
+  assert.equal(callbackDisposition({ matchingReceipt: false, finalState: 'in-progress' }), 'progress');
+  assert.equal(callbackDisposition({ matchingReceipt: false, finalState: 'terminal' }), 'terminal-receipt-failure');
+  assert.equal(callbackDisposition({ matchingReceipt: true, finalState: 'in-progress' }), 'protocol-conflict');
+  assert.equal(callbackDisposition({ matchingReceipt: false, finalState: null }), 'hold');
 });
 
 test('source rules use one frozen final with a short-lived receipt and no experimental delivery stack', () => {
@@ -186,7 +224,9 @@ test('premature return cannot claim completion or allow later Worker tools', () 
   assert.match(worker, /最后一次业务工具调用已经结束/);
   assert.match(worker, /回源工具必须是本轮最后一次工具调用/);
   assert.match(worker, /回源工具返回后不得继续推理、发送过程消息或调用任何工具/);
-  assert.match(lifecycle, /匹配回执存在时不得调用正时长`wait_threads`/);
+  assert.match(lifecycle, /第一次定点读取仍无平台final且Worker仍显示运行/);
+  assert.match(lifecycle, /只允许调用一次最长30秒的`wait_threads`/);
+  assert.match(lifecycle, /不得循环、第二次等待、继续轮询/);
   assert.match(lifecycle, /回执只能恢复同一份冻结正文，不能单独证明业务完成/);
   assert.match(lifecycle, /没有回执的新任务不得沿用原生final绕过终态协议/);
   assert.match(lifecycle, /缺少`projectRoute`，这是派单纠正，不是业务暂停或终态/);
@@ -195,7 +235,8 @@ test('premature return cannot claim completion or allow later Worker tools', () 
   assert.match(worker, /读取业务文件或调用业务工具前即停止业务动作/);
   assert.match(worker, /不执行`worker-result\.enqueue`/);
   assert.match(worker, /收到精确route后由同一Worker继续原任务/);
-  assert.doesNotMatch(lifecycle, /wait_threads\(timeoutMs=/);
+  assert.match(lifecycle, /活动任务与结构化匹配回执是处理路径的主依据/);
+  assert.match(lifecycle, /不能因为Worker仍显示运行就把回调判成无效/);
   assert.match(lifecycle, /执行线程未形成正式结果/);
   assert.match(lifecycle, /`workbench\.pause`一次把业务任务记为`已暂停`/);
 });
@@ -260,8 +301,51 @@ test('Worker completion always reports its PM while nonterminal supervision stay
   const worker = read('模板交付包/skills/identity-worker/SKILL.md');
   assert.match(worker, /Worker把正式任务做完后必须向唯一来源PM报告一次/);
   assert.match(worker, /来源PM正在回答老板、暂时忙碌或可能延后处理，都不能成为跳过终态回执或原生回调的理由/);
-  assert.match(worker, /这种说明不执行`worker-result\.enqueue`/);
-  assert.match(worker, /普通里程碑、方法选择和可自行闭环的问题留在当前Worker/);
-  assert.match(pm, /PM督导只在明确检查点或需要项目全貌裁决主线、其他任务或共享对象时发生/);
-  assert.match(pm, /任务保持`进行中`，不使用终态回执、`pause`或`accept`/);
+  assert.match(worker, /该路径不执行`worker-result\.enqueue`/);
+  assert.match(worker, /普通里程碑、方法选择和可自行闭环的问题在当前执行turn继续时留在Worker/);
+  assert.match(pm, /来源无回执时只读原Worker一次/);
+  assert.match(pm, /`进行中`按进展/);
+});
+
+test('an unfinished Worker turn reports once and the PM continues the same task without terminal actions', () => {
+  const pm = read('模板交付包/skills/identity-pm/SKILL.md');
+  const worker = read('模板交付包/skills/identity-worker/SKILL.md');
+  const lifecycle = read('模板交付包/skills/identity-pm/references/lifecycle-and-closeout.md');
+  // Guard the previously contradictory entry/recovery clauses as well as the progress branch.
+  // These are source-contract checks, not proof of model or Desktop behavior.
+  assert.match(pm, /登记Worker回传（含非终态进展）/);
+  assert.match(lifecycle.split(/\r?\n/)[2], /执行回合结束后的非终态进展/);
+  assert.match(lifecycle, /本轮已经结束本身不构成失联/);
+  assert.match(lifecycle, /不因缺少暂停或完成final改为暂停/);
+  assert.match(lifecycle, /一手证据另行确认线程确实无法继续或不可访问、已阻断剩余任务/);
+  assert.doesNotMatch(lifecycle, /普通进展、普通失败和任务内方法切换不读取/);
+  assert.match(worker, /正式任务尚未形成终态却实际结束当前执行turn/);
+  assert.match(worker, /不得把阶段说明当作本轮final并自行结束/);
+  assert.match(worker, /当前Worker本轮已结束但任务仍在进行中/);
+  assert.match(worker, /工具未直显时按第7节从`ALL_TOOLS`发现/);
+  assert.match(worker, /该路径不执行`worker-result\.enqueue`/);
+  assert.match(worker, /平台final必须直接以`进行中`作为第一行/);
+  assert.match(worker, /PM不得执行`worker-result\.ack`/);
+  assert.match(worker, /这次回源必须是本轮最后一次工具调用/);
+  assert.match(pm, /只读原Worker一次/);
+  assert.match(pm, /按收口reference只执行一次`worker-result\.list`/);
+  assert.match(pm, /该来源不做终态事务/);
+  assert.match(pm, /无回执，禁止ack/);
+  assert.match(pm, /无需老板决定/);
+  assert.match(pm, /原Worker发一次继续或纠偏/);
+  assert.match(pm, /`进行中`按进展/);
+  assert.match(pm, /每轮结束按身份Skill回源/);
+  assert.doesNotMatch(pm + lifecycle, /立即结束(?:PM)?回合/);
+  assert.match(pm, /没有剩余事项才结束PM回合/);
+  assert.match(lifecycle, /结束该纠正动作，不等待其结果，继续老板当前请求及本轮其他已到达回调/);
+  assert.match(lifecycle, /结束该恢复动作，不读取或等待刚恢复的Worker/);
+  assert.match(read('模板交付包/skills/identity-pm/references/dispatch-and-init.md'), /创建请求处理完后按PM主入口继续剩余事项，无剩余事项才结束PM回合/);
+});
+
+test('pause requires a proven external blocker rather than a correctable Worker mistake', () => {
+  const worker = read('模板交付包/skills/identity-worker/SKILL.md');
+  assert.match(worker, /必须用当前一手事实明确命中上述一类/);
+  assert.match(worker, /授权范围内已经没有能够解除阻断的安全动作/);
+  assert.match(worker, /Worker自己的参数、路径、命令或方法选择错误/);
+  assert.match(worker, /不能冒充业务暂停/);
 });

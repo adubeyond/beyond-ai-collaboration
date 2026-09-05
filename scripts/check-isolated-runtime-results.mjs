@@ -565,8 +565,10 @@ const p22Commands = commands('P22').join('\n');
 check('P-22 lists every pending receipt but reads only matching active Workers', /(?:全部|所有).{0,24}(?:pending|回执)/is.test(p22Output)
   && /(?:只|仅).{0,24}(?:读取|核对).{0,36}(?:匹配|对应).{0,20}(?:活动任务|Worker)|(?:不|无需).{0,20}(?:扫描|读取).{0,20}(?:无关|其他)\s*Worker/is.test(p22Output));
 check('P-22 keeps the current user question ahead of unrelated terminal results', /(?:当前用户问题|老板当前(?:提出)?的问题).{0,32}(优先|先回答)|先.{0,16}(回答|处理).{0,24}(当前问题|生产上下文)|先完成老板当前问题的回答|(?:当前|前台)问题始终优先|当前问题必须先完整回答|最终答复先完整回答老板正在问的问题/is.test(p22Output));
-check('P-22 consumes active-looking Worker A from the matching frozen receipt without waiting', /A.{0,100}(?:pending|回执).{0,100}(?:验收|收敛|完成)/is.test(p22Output)
-  && /A.{0,120}(?:不等待|无需等待|不调用.{0,16}wait_threads)/is.test(p22Output));
+check('P-22 never rejects A merely because the Worker is still running', /A.{0,180}(?:不能|不得|不应).{0,40}(?:仍在运行|running).{0,80}(?:否定|无效|拒绝|不扫描)|(?:不能|不得|不应).{0,60}(?:因|因为).{0,40}A.{0,40}(?:仍在运行|running)/is.test(p22Output));
+check('P-22 gives active-looking Worker A one bounded final-visibility wait', /A.{0,220}(?:wait_threads|等待).{0,36}(?:一次|1次).{0,40}(?:30秒|30000)|A.{0,220}(?:30秒|30000).{0,40}(?:wait_threads|等待).{0,36}(?:一次|1次)/is.test(p22Output)
+  && /A.{0,320}(?:再|第二次).{0,32}(?:读取|read_thread)/is.test(p22Output)
+  && /(?:不得|不能|禁止).{0,32}(?:循环|第二次等待|继续轮询)/s.test(p22Output));
 check('P-22 does not treat A pending as self-proving completion', /A.{0,260}(?:独立主证据|正式目标|一手证据).{0,160}(?:闭合|核验|覆盖)|决定可验收的是.{0,80}(?:身份|独立主证据).{0,40}闭合/is.test(p22Output)
   && /(?:不能.{0,12}仅凭\s*pending|pending|回执).{0,100}(?:不能|不是|不作为|不证明).{0,50}(?:单独|自行|唯一|成果|完成|证据|真值)/is.test(p22Output));
 check('P-22 lists all pending receipts once without polling', /worker-result\.list/.test(p22Output)
@@ -694,6 +696,8 @@ check('P-28 allows B receipt fallback only with independent evidence and zero wa
     || /(?:独立主证据|一手证据|正式目标).{0,32}(?:承担|覆盖).{0,16}验收/is.test(p28BSection))
   && /(?:pending|回执)/i.test(p28BSection)
   && /(?:不等待|无需等待|零等待|wait=0|不重复读取|不轮询)/i.test(p28BSection));
+check('P-28 gives running C one bounded visibility wait but no receipt-only acceptance', /(?:等待一次|一次.{0,12}等待|wait_threads.{0,16}(?:一次|1次)|(?:一次|1次).{0,16}wait_threads)/i.test(p28CSection)
+  && /(?:30秒|30000)/.test(p28CSection));
 check('P-28 leaves C unaccepted and unacked without independent evidence',
   ((/(?:无|缺少|没有|不是|不满足).{0,24}(?:独立主证据|一手证据|独立证据)|证据不足/is.test(p28CSection)
       || /不能.{0,16}(?:充当|作为).{0,16}(?:独立主证据|一手证据|独立证据)/is.test(p28CSection))
@@ -791,6 +795,14 @@ const o05Progress = assistantMessages('O05').slice(0, -1);
 check('O-05 keeps mandatory Skill progress bounded', o05Progress.length <= 3
   && o05Progress.length > 0
   && /只读|不改|不联网|不做外部验证|不做任何.{0,40}(?:写入|联网|服务器操作|回滚)|不(?:会)?执行.{0,20}(变更|回滚|写入)|不会触发任何外部操作/.test(o05Progress[0]));
+
+const l6cOutput = text(evidenceFile('L6-C'));
+check('L6-C prioritizes managed machine state over its derived Markdown view',
+  /机器状态.{0,32}(?:优先|为准)|(?:优先|以).{0,24}机器状态/.test(l6cOutput)
+  && /Markdown.{0,32}(?:派生|视图|滞后|陈旧)|(?:派生|视图|滞后|陈旧).{0,32}Markdown/.test(l6cOutput));
+check('L6-C classifies the disagreement as a BEYOND control-consistency candidate',
+  /BEYOND.{0,40}(?:控制数据一致性|控制一致性).{0,28}(?:问题|候选)|(?:控制数据一致性|控制一致性).{0,28}(?:BEYOND|候选)/.test(l6cOutput)
+  && !/不进入BEYOND候选问题/.test(l6cOutput));
 
 const o06Output = text(evidenceFile('O06'));
 check('O-06 treats the running session as the unfinished original operation', /(?:status=running|运行中).{0,120}(?:仍在执行|仍在运行|尚未结束|没有结束|未完成|尚未取得终态)|(?:发布|动作|命令).{0,20}(?:仍在执行|仍在运行|尚未结束|没有结束|未完成|尚未取得终态)|(?:持续获取|继续读取|续读|续收).{0,80}直到.{0,40}(?:退出码|终态)/s.test(o06Output)

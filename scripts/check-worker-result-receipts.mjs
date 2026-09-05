@@ -5,14 +5,35 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { executeRuntimeRequest } from '../模板交付包/scripts/runtime/control-runtime.mjs';
+import { WorkbenchTransactionStore } from '../模板交付包/scripts/runtime/workbench-transaction.mjs';
 import { WorkerResultReceiptStore } from '../模板交付包/scripts/runtime/worker-result-receipts.mjs';
 
 const receiptStoreModule = new URL('../模板交付包/scripts/runtime/worker-result-receipts.mjs', import.meta.url).href;
+const controlRuntimeModule = new URL('../模板交付包/scripts/runtime/control-runtime.mjs', import.meta.url).href;
 
 function listInChild(runtimeRoot, projectId) {
   const script = `import { WorkerResultReceiptStore } from ${JSON.stringify(receiptStoreModule)};\n`
     + `const store = new WorkerResultReceiptStore({ runtimeRoot: ${JSON.stringify(runtimeRoot)} });\n`
     + `process.stdout.write(JSON.stringify(store.list({ projectId: ${JSON.stringify(projectId)} })));`;
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['--input-type=module', '--eval', script], {
+      encoding: 'utf8', windowsHide: true,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (status) => resolve({ status, stdout, stderr }));
+  });
+}
+
+function inspectInChild(controlRoot, projectId, taskId) {
+  const script = `import { executeRuntimeRequest } from ${JSON.stringify(controlRuntimeModule)};\n`
+    + `const result = executeRuntimeRequest({ schemaVersion: 1, action: 'workbench.inspect', input: { projectId: ${JSON.stringify(projectId)}, taskId: ${JSON.stringify(taskId)} } }, { controlRoot: ${JSON.stringify(controlRoot)} });\n`
+    + 'process.stdout.write(JSON.stringify(result));';
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--input-type=module', '--eval', script], {
       encoding: 'utf8', windowsHide: true,
@@ -144,6 +165,7 @@ test('runtime rejects a project not registered in this control root without writ
   assert.throws(() => runtime(root, 'wrong-enqueue', 'worker-result.enqueue', receipt()), /not registered in this control root/);
   assert.equal(fs.existsSync(path.join(root, 'local', 'runtime', 'worker-results', 'pending')), false);
   assert.throws(() => runtime(root, 'wrong-list', 'worker-result.list', { projectId: 'local-project-a' }), /not registered in this control root/);
+  assert.throws(() => runtime(root, 'wrong-inspect', 'workbench.inspect', { projectId: 'local-project-a' }), /not registered in this control root/);
   assert.throws(() => runtime(root, 'control-root-audit', 'worker-result.list', {}), /projectId is required/);
 });
 
@@ -493,6 +515,236 @@ test('a crash after workbench acceptance retries the same operation without dupl
   assert.equal(history.records.filter((record) => record.taskId === 'task-crash').length, 1);
 });
 
+test('workbench.inspect distinguishes active review, committed ack and unresolved conflict without writing', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-workbench-inspect-'));
+  registerProject(root);
+  registerActiveTask(root);
+  const completed = runtime(root, 'inspect-enqueue-complete', 'worker-result.enqueue', receipt({
+    workerThreadId: 'worker-a',
+  })).result.record;
+  const stateFile = path.join(root, 'local', 'runtime', 'workbench', 'workbench-state.json');
+  const viewFile = path.join(root, 'local', '当前工作台.md');
+  const pendingRoot = path.join(root, 'local', 'runtime', 'worker-results', 'pending');
+  const beforeReview = {
+    state: fs.readFileSync(stateFile, 'utf8'),
+    view: fs.readFileSync(viewFile, 'utf8'),
+    pending: fs.readdirSync(pendingRoot).sort(),
+  };
+  const review = executeRuntimeRequest({
+    schemaVersion: 1,
+    action: 'workbench.inspect',
+    input: { projectId: 'local-project-a', taskId: 'task-a' },
+  }, { controlRoot: root });
+  assert.equal(review.requestId, 'workbench.inspect:local-project-a:task-a');
+  assert.equal(review.result.counts.reviewActiveTask, 1);
+  assert.equal(review.result.records[0].disposition, 'review-active-task');
+  assert.deepEqual({
+    state: fs.readFileSync(stateFile, 'utf8'),
+    view: fs.readFileSync(viewFile, 'utf8'),
+    pending: fs.readdirSync(pendingRoot).sort(),
+  }, beforeReview);
+
+  const acceptance = {
+    operationId: `accept-${completed.receiptId}`, taskId: 'task-a', worker: 'worker-a', expectedStatus: '进行中',
+    businessState: '已完成', acceptedBy: 'pm-main', acceptance: 'accepted',
+    acceptedAt: '2026-08-23T16:03:00+08:00', finalLocator: `worker-result://${completed.receiptId}`,
+    evidenceLocator: 'evidence://task-a', conclusion: '任务A完成', completedAt: '2026-08-23T16:03:00+08:00',
+    affectsMainline: true, pendingDependencies: [],
+  };
+  const transactionStore = new WorkbenchTransactionStore({
+    runtimeRoot: path.join(root, 'local', 'runtime', 'workbench'),
+    viewPath: viewFile,
+    historyRoot: path.join(root, 'local', 'history', 'workbench'),
+  });
+  assert.throws(() => transactionStore.consumeAcceptedResult(acceptance, {
+    faultAt: 'afterStateCommit',
+  }), /injected fault: afterStateCommit/);
+  const interrupted = runtime(root, undefined, 'workbench.inspect', {
+    projectId: 'local-project-a', taskId: 'task-a',
+  });
+  assert.equal(interrupted.result.records[0].disposition, 'preserve-conflict');
+  assert.equal(interrupted.result.records[0].reason, 'matching-workbench-transaction-incomplete');
+  transactionStore.consumeAcceptedResult(acceptance);
+  const beforeAckOnly = fs.readFileSync(path.join(pendingRoot, fs.readdirSync(pendingRoot)[0]), 'utf8');
+  const ackOnly = runtime(root, undefined, 'workbench.inspect', {
+    projectId: 'local-project-a', taskId: 'task-a',
+  });
+  assert.equal(ackOnly.result.counts.ackCommittedReceipt, 1);
+  assert.equal(ackOnly.result.records[0].disposition, 'ack-committed-receipt');
+  assert.equal(fs.readFileSync(path.join(pendingRoot, fs.readdirSync(pendingRoot)[0]), 'utf8'), beforeAckOnly);
+
+  const committedState = fs.readFileSync(stateFile, 'utf8');
+  const stateWithoutOperation = JSON.parse(committedState);
+  delete stateWithoutOperation.operations[`accept-${completed.receiptId}`];
+  fs.writeFileSync(stateFile, `${JSON.stringify(stateWithoutOperation, null, 2)}\n`, 'utf8');
+  const missingStateOperation = runtime(root, undefined, 'workbench.inspect', {
+    projectId: 'local-project-a', taskId: 'task-a',
+  });
+  assert.equal(missingStateOperation.result.records[0].disposition, 'preserve-conflict');
+  fs.writeFileSync(stateFile, committedState, 'utf8');
+
+  const historyFile = path.join(root, 'local', 'history', 'workbench', '2026-08.json');
+  const committedHistory = fs.readFileSync(historyFile, 'utf8');
+  fs.unlinkSync(historyFile);
+  const missingHistory = runtime(root, undefined, 'workbench.inspect', {
+    projectId: 'local-project-a', taskId: 'task-a',
+  });
+  assert.equal(missingHistory.result.records[0].disposition, 'preserve-conflict');
+  fs.writeFileSync(historyFile, committedHistory, 'utf8');
+
+  const orphan = runtime(root, 'inspect-enqueue-orphan', 'worker-result.enqueue', receipt({
+    taskId: 'task-orphan', finalText: '已完成\n孤立结果。', createdAt: '2026-08-23T08:04:00.000Z',
+  })).result.record;
+  const conflict = runtime(root, undefined, 'workbench.inspect', {
+    projectId: 'local-project-a', taskId: 'task-orphan',
+  });
+  assert.equal(conflict.result.counts.preserveConflict, 1);
+  assert.equal(conflict.result.records[0].receiptId, orphan.receiptId);
+  assert.equal(conflict.result.records[0].reason, 'active-task-missing-without-committed-operation');
+});
+
+test('workbench.inspect treats a second pause with a new reason as a new result to review', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-inspect-second-pause-'));
+  registerProject(root);
+  registerActiveTask(root);
+  const first = runtime(root, 'first-pause-receipt', 'worker-result.enqueue', receipt({
+    businessState: '已暂停', finalText: '已暂停\n缺少区域代号。', workerThreadId: 'worker-a',
+  })).result.record;
+  runtime(root, 'first-pause', 'workbench.pause', {
+    operationId: `pause-${first.receiptId}`, taskId: 'task-a', expectedStatus: '进行中',
+    status: '已暂停', businessState: '已暂停', progress: '等待区域', pause: '提供区域代号',
+    updatedAt: '2026-08-23T16:02:00+08:00',
+  });
+  runtime(root, 'ack-first-pause', 'worker-result.ack', {
+    projectId: 'local-project-a', taskId: 'task-a', receiptId: first.receiptId,
+  });
+  // The owner may resume the original Worker directly; the workbench remains paused until its next result.
+  runtime(root, 'second-pause-receipt', 'worker-result.enqueue', receipt({
+    businessState: '已暂停', finalText: '已暂停\n区域已确认，缺少槽位代号。', workerThreadId: 'worker-a',
+  }));
+  const result = runtime(root, undefined, 'workbench.inspect', { projectId: 'local-project-a' }).result;
+  assert.equal(result.records[0].disposition, 'review-active-task');
+});
+
+test('workbench.inspect preserves a receipt when archived evidence contradicts the committed record', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-inspect-history-conflict-'));
+  registerProject(root);
+  registerActiveTask(root);
+  const record = runtime(root, 'history-conflict-enqueue', 'worker-result.enqueue', receipt({ workerThreadId: 'worker-a' })).result.record;
+  runtime(root, 'history-conflict-accept', 'workbench.accept', {
+    operationId: `accept-${record.receiptId}`, taskId: 'task-a', worker: 'worker-a', expectedStatus: '进行中',
+    businessState: '已完成', acceptedBy: 'pm-main', acceptance: 'accepted',
+    acceptedAt: '2026-08-23T16:03:00+08:00', completedAt: '2026-08-23T16:03:00+08:00',
+    finalLocator: 'thread://worker-a', evidenceLocator: 'evidence://correct-result',
+    conclusion: '任务A完成', affectsMainline: true, pendingDependencies: [],
+  });
+  const historyFile = path.join(root, 'local', 'history', 'workbench', '2026-08.json');
+  const history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+  history.records[0].evidence = 'evidence://unrelated-result';
+  fs.writeFileSync(historyFile, JSON.stringify(history), 'utf8');
+  const result = runtime(root, undefined, 'workbench.inspect', { projectId: 'local-project-a' }).result;
+  assert.equal(result.records[0].disposition, 'preserve-conflict');
+});
+
+test('workbench.inspect reads an upgraded workbench without creating a missing transaction directory', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-workbench-inspect-upgraded-'));
+  registerProject(root);
+  const workbenchRoot = path.join(root, 'local', 'runtime', 'workbench');
+  const stateFile = path.join(workbenchRoot, 'workbench-state.json');
+  const viewFile = path.join(root, 'local', '当前工作台.md');
+  fs.mkdirSync(workbenchRoot, { recursive: true });
+  fs.writeFileSync(stateFile, `${JSON.stringify({
+    schemaVersion: 1,
+    revision: 1,
+    projectSnapshot: null,
+    tasks: {
+      'task-a': {
+        taskId: 'task-a', task: '任务A', worker: 'worker-a', status: '进行中', progress: '执行中',
+        pause: '无', result: '无', updatedAt: '2026-08-23T16:00:00+08:00',
+      },
+    },
+    recentMainlineResults: [],
+    operations: {},
+    operationOrder: [],
+  }, null, 2)}\n`, 'utf8');
+  fs.writeFileSync(viewFile, '# 当前工作台\n', 'utf8');
+  runtime(root, 'upgraded-enqueue', 'worker-result.enqueue', receipt({ workerThreadId: 'worker-a' }));
+  const transactionRoot = path.join(workbenchRoot, 'transactions');
+  assert.equal(fs.existsSync(transactionRoot), false);
+  const before = {
+    state: fs.readFileSync(stateFile, 'utf8'),
+    view: fs.readFileSync(viewFile, 'utf8'),
+    pending: fs.readdirSync(path.join(root, 'local', 'runtime', 'worker-results', 'pending')).sort(),
+  };
+  const inspected = runtime(root, undefined, 'workbench.inspect', {
+    projectId: 'local-project-a', taskId: 'task-a',
+  });
+  assert.equal(inspected.result.records[0].disposition, 'review-active-task');
+  assert.deepEqual(inspected.result.pendingTransactions, []);
+  assert.equal(fs.existsSync(transactionRoot), false);
+  assert.deepEqual({
+    state: fs.readFileSync(stateFile, 'utf8'),
+    view: fs.readFileSync(viewFile, 'utf8'),
+    pending: fs.readdirSync(path.join(root, 'local', 'runtime', 'worker-results', 'pending')).sort(),
+  }, before);
+});
+
+test('concurrent workbench.inspect processes return one stable read-only classification', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-workbench-inspect-concurrent-'));
+  registerProject(root);
+  registerActiveTask(root);
+  runtime(root, 'concurrent-inspect-enqueue', 'worker-result.enqueue', receipt({ workerThreadId: 'worker-a' }));
+  const stateFile = path.join(root, 'local', 'runtime', 'workbench', 'workbench-state.json');
+  const viewFile = path.join(root, 'local', '当前工作台.md');
+  const pendingRoot = path.join(root, 'local', 'runtime', 'worker-results', 'pending');
+  const pendingFile = path.join(pendingRoot, fs.readdirSync(pendingRoot)[0]);
+  const before = {
+    state: fs.readFileSync(stateFile, 'utf8'),
+    view: fs.readFileSync(viewFile, 'utf8'),
+    pending: fs.readFileSync(pendingFile, 'utf8'),
+  };
+  const results = await Promise.all(Array.from({ length: 12 }, () => (
+    inspectInChild(root, 'local-project-a', 'task-a')
+  )));
+  for (const result of results) {
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.result.records[0].disposition, 'review-active-task');
+  }
+  assert.deepEqual({
+    state: fs.readFileSync(stateFile, 'utf8'),
+    view: fs.readFileSync(viewFile, 'utf8'),
+    pending: fs.readFileSync(pendingFile, 'utf8'),
+  }, before);
+});
+
+test('workbench.inspect recognizes a committed pause and does not migrate legacy receipt paths', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-workbench-inspect-pause-'));
+  registerProject(root);
+  registerActiveTask(root, { taskId: 'task-pause', worker: 'worker-pause' });
+  const paused = runtime(root, 'inspect-enqueue-pause', 'worker-result.enqueue', receipt({
+    taskId: 'task-pause', workerThreadId: 'worker-pause', businessState: '已暂停',
+    finalText: '已暂停\n等待老板决定。',
+  })).result.record;
+  runtime(root, 'inspect-pause', 'workbench.pause', {
+    operationId: `pause-${paused.receiptId}`, taskId: 'task-pause', expectedStatus: '进行中',
+    status: '已暂停', businessState: '已暂停', progress: '等待决定', pause: '老板提供选择后恢复',
+    result: `worker-result://${paused.receiptId}`, updatedAt: '2026-08-23T16:02:00+08:00',
+  });
+  const store = new WorkerResultReceiptStore({
+    runtimeRoot: path.join(root, 'local', 'runtime', 'worker-results'),
+  });
+  const namespaced = store.receiptPath('local-project-a', 'task-pause');
+  const legacy = store.legacyReceiptPath('task-pause');
+  fs.copyFileSync(namespaced, legacy);
+  const inspected = runtime(root, undefined, 'workbench.inspect', {
+    projectId: 'local-project-a', taskId: 'task-pause',
+  });
+  assert.equal(inspected.result.records[0].disposition, 'ack-committed-receipt');
+  assert.equal(fs.existsSync(legacy), true);
+  assert.equal(fs.existsSync(namespaced), true);
+});
+
 test('runtime lifecycle keeps one task through pause, resume, completion and receipt deletion', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-runtime-'));
   registerProject(root);
@@ -561,4 +813,42 @@ test('fixed beyond-control CLI enqueues, lists and acknowledges the same receipt
     projectId: 'local-project-a', taskId: 'task-a', receiptId: created.receiptId,
   }).removed, true);
   assert.equal(invoke('cli-empty', 'worker-result.list', { projectId: 'local-project-a' }).count, 0);
+});
+
+test('fixed beyond-control CLI exposes workbench.inspect without mutating control files', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-workbench-inspect-cli-'));
+  const controlRoot = path.join(root, 'beyond-control');
+  fs.mkdirSync(path.join(controlRoot, 'scripts'), { recursive: true });
+  registerProject(controlRoot);
+  fs.cpSync(path.join(import.meta.dirname, '..', '模板交付包', 'scripts', 'runtime'), path.join(controlRoot, 'scripts', 'runtime'), { recursive: true });
+  fs.copyFileSync(path.join(import.meta.dirname, '..', '模板交付包', 'scripts', 'beyond-control.mjs'), path.join(controlRoot, 'scripts', 'beyond-control.mjs'));
+  const invoke = (name, action, input) => {
+    const request = path.join(root, `${name}.json`);
+    const envelope = { schemaVersion: 1, action, input };
+    if (action !== 'workbench.inspect') envelope.requestId = name;
+    fs.writeFileSync(request, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
+    const result = spawnSync(process.execPath, [path.join(controlRoot, 'scripts', 'beyond-control.mjs'), 'runtime', '--request', request], {
+      cwd: projectRootFor(controlRoot), encoding: 'utf8', windowsHide: true,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    return JSON.parse(result.stdout);
+  };
+  fs.mkdirSync(path.join(controlRoot, 'local'), { recursive: true });
+  fs.writeFileSync(path.join(controlRoot, 'local', '当前工作台.md'), '# 当前工作台\n', 'utf8');
+  invoke('cli-inspect-register', 'workbench.register', {
+    taskId: 'task-a', task: '任务A', worker: 'worker-a', status: '进行中', progress: '执行中',
+    pause: '无', result: '无', updatedAt: '2026-08-23T16:00:00+08:00',
+  });
+  invoke('cli-inspect-enqueue', 'worker-result.enqueue', receipt({ workerThreadId: 'worker-a' }));
+  const stateFile = path.join(controlRoot, 'local', 'runtime', 'workbench', 'workbench-state.json');
+  const viewFile = path.join(controlRoot, 'local', '当前工作台.md');
+  const pendingRoot = path.join(controlRoot, 'local', 'runtime', 'worker-results', 'pending');
+  const pendingFile = path.join(pendingRoot, fs.readdirSync(pendingRoot)[0]);
+  const before = [stateFile, viewFile, pendingFile].map((file) => fs.readFileSync(file, 'utf8'));
+  const inspected = invoke('cli-inspect', 'workbench.inspect', {
+    projectId: 'local-project-a', taskId: 'task-a',
+  });
+  assert.equal(inspected.requestId, 'workbench.inspect:local-project-a:task-a');
+  assert.equal(inspected.result.records[0].disposition, 'review-active-task');
+  assert.deepEqual([stateFile, viewFile, pendingFile].map((file) => fs.readFileSync(file, 'utf8')), before);
 });

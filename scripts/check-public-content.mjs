@@ -389,6 +389,26 @@ const requiredSkillFacts = [
     value: "必需账号、环境、凭据、目标信息或外部资源客观不可用",
   },
   {
+    path: "模板交付包/skills/identity-worker/SKILL.md",
+    label: "unfinished worker turns return one nonterminal update",
+    value: "正式任务尚未形成终态却实际结束当前执行turn",
+  },
+  {
+    path: "模板交付包/skills/identity-worker/SKILL.md",
+    label: "correctable worker mistakes do not become pauses",
+    value: "Worker自己的参数、路径、命令或方法选择错误",
+  },
+  {
+    path: "模板交付包/skills/identity-pm/SKILL.md",
+    label: "nonterminal callbacks do not enter terminal transactions",
+    value: "该来源不做终态事务",
+  },
+  {
+    path: "模板交付包/skills/identity-pm/SKILL.md",
+    label: "PM continues the same worker after a nonterminal turn",
+    value: "向原Worker发一次继续或纠偏",
+  },
+  {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "PM does not turn ordinary failures into pauses",
     value: "普通失败、Skill切换、工作台未同步、可逆本地修改和已授权本地提交不构成暂停",

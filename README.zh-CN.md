@@ -11,7 +11,7 @@ BEYOND 是一套面向 **Codex Desktop 本地项目**的开源 AI 工程协同�
 
 它适合已经在用 Codex 做真实开发，但正在被这些问题困扰的人：新对话反复失忆、任务完成后无人收口、阶段过多需要人工续推、测试通过却无法判断能否发布，以及多个任务并行时责任和写入边界混乱。
 
-[下载 BEYOND v3.2.4](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.4) · [Gitee 镜像](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90 秒真实案例](docs/真实案例与90秒演示.md) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [3.2.4 升级说明](docs/releases/v3.2.4.md) · [系统架构](docs/系统架构与运行机制.md)
+[下载 BEYOND v3.2.5](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.5) · [Gitee 镜像](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90 秒真实案例](docs/真实案例与90秒演示.md) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [3.2.5 升级说明](docs/releases/v3.2.5.md) · [系统架构](docs/系统架构与运行机制.md)
 
 ## BEYOND 带来什么
 
@@ -59,8 +59,8 @@ PM不会代替Worker写代码，也不会为了“掌控进度”持续读取和
 
 ### 1. 下载正式版本
 
-- [BEYOND-3.2.4.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip)
-- [BEYOND-3.2.4.zip.sha256（可选校验文件）](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip.sha256)
+- [BEYOND-3.2.4.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.5/BEYOND-3.2.4.zip)
+- [BEYOND-3.2.4.zip.sha256（可选校验文件）](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.5/BEYOND-3.2.4.zip.sha256)
 
 ZIP即可安装；`.sha256`缺失或下载失败不阻断安装。若提供了校验文件而哈希不一致，则必须停止。完整命令见[安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md)。
 
@@ -135,7 +135,7 @@ $identity-pm
 
 ## 当前边界
 
-- 当前正式版本是`v3.2.4`，主要面向Codex Desktop本地项目。
+- 当前正式版本是`v3.2.5`，主要面向Codex Desktop本地项目。
 - 标准安装与运行路径已在真实Windows项目中验证；公开脚本同时覆盖内容、安装结构和最小示例。
 - 不同平台对任务创建、线程回调和持久权限的支持不同，不能把一个平台的通过结论外推到所有环境。
 - BEYOND不收集安装遥测；GitHub Release下载量只能统计发布资产下载，不能代表全部安装或实际活跃用户。
@@ -148,7 +148,7 @@ $identity-pm
 | 安装、升级或回退 | [安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md) |
 | 在干净示例中体验 | [快速开始](docs/快速开始.md) |
 | 理解PM、Worker、文档和运行时 | [系统架构与运行机制](docs/系统架构与运行机制.md) |
-| 查看3.2.4变化 | [升级说明](docs/releases/v3.2.4.md) · [CHANGELOG](CHANGELOG.md) |
+| 查看3.2.4变化 | [升级说明](docs/releases/v3.2.5.md) · [CHANGELOG](CHANGELOG.md) |
 | 阅读控制仓结构 | [模板交付包说明](模板交付包/README.md) |
 | 提交问题或改进 | [Issues](https://github.com/adubeyond/beyond-ai-collaboration/issues) · [贡献指南](CONTRIBUTING.md) |
 | 私密报告安全问题 | [安全政策](SECURITY.md) |

@@ -105,11 +105,12 @@ check('SIM-02 did not ask the boss to reconfirm the explicit correction', /(无�
 const packetRoot = caseDirectory('WST-AB-PACKET', 'WST-AB-PACKET-review');
 const packetOutput = read(evidenceFile('WST-AB-PACKET'));
 const packetCommands = commands('WST-AB-PACKET').join('\n');
-const packetFacts = ['$identity-worker', '50', '全部异常', '站甲', '站乙', '站丙', '人工复核', 'evidence/three-site-quality-review/'];
+const packetFacts = ['$identity-worker', '50', '全部异常', '站甲', '站乙', '站丙', 'evidence/three-site-quality-review/'];
 check('PACKET keeps every required business fact', packetFacts.every((fact) => packetOutput.includes(fact)) && /10\s*条/.test(packetOutput) && /(?:(?:原有三个站点|三个原站点|原三个站点|原站点)\s*Worker|各站原\s*Worker)/.test(packetOutput));
+check('PACKET preserves the manual review checkpoint', /人工(?:复核|核对)/.test(packetOutput));
 check('PACKET remains a compact business contract', [...packetOutput].length < 1200, 'chars=' + [...packetOutput].length);
 check('PACKET starts only Worker identity', !/\$task-(design|dev|test|ops)/.test(packetOutput));
-check('PACKET PM does not load Action Skills', !/task-(design|dev|test|ops)/.test(packetCommands));
+check('PACKET PM does not load execution Action Skills', !/task-(dev|test|ops)/.test(packetCommands));
 check('PACKET remains read-only', git(packetRoot, 'status', '--short') === '');
 
 const commsRoot = caseDirectory('WST-PM-COMMS', 'WST-PM-COMMS-status');
@@ -138,6 +139,25 @@ check('CALLBACK moves engineering detail to the evidence entry', callbackDetails
 check('CALLBACK remains compact', [...callbackOutput].length < 500, 'chars=' + [...callbackOutput].length);
 check('CALLBACK retires the legacy result inbox', !/应写入.{0,16}(结果)?收件箱|```yaml|task:\s*WST-/s.test(callbackOutput));
 
+const workerNonterminalOutput = read(evidenceFile('WST-WORKER-NONTERMINAL'));
+check('WORKER-NONTERMINAL reports an ended unfinished turn as in progress', /^进行中(?:[，。：:、\s]|$)/.test(workerNonterminalOutput));
+check('WORKER-NONTERMINAL does not create a terminal receipt', /不(?:生成|创建|写入).{0,16}(?:pending|回执)|不.{0,10}worker-result\.enqueue/s.test(workerNonterminalOutput));
+check('WORKER-NONTERMINAL returns once to the source PM', /pm-source-thread/.test(workerNonterminalOutput)
+  && /当前Worker本轮已结束但任务仍在进行中/.test(workerNonterminalOutput)
+  && /threadId/.test(workerNonterminalOutput)
+  && /prompt/.test(workerNonterminalOutput));
+check('WORKER-NONTERMINAL keeps terminal transactions out of the progress path', /不(?:应|会|能)?[^。\n]{0,30}(?:accept|验收)[^。\n]{0,30}(?:pause|暂停)[^。\n]{0,30}ack/s.test(workerNonterminalOutput));
+
+const pmNonterminalOutput = read(evidenceFile('WST-PM-NONTERMINAL'));
+check('PM-NONTERMINAL reads only the returning original Worker once', /原\s*Worker|同一\s*Worker/.test(pmNonterminalOutput)
+  && /一次|1\s*次/.test(pmNonterminalOutput));
+check('PM-NONTERMINAL performs one inbox check and keeps the source task out of terminal transactions', /进行中/.test(pmNonterminalOutput)
+  && /(?:一次|1次).{0,32}(?:worker-result\.list|收件箱|pending|回执)|(?:worker-result\.list|收件箱|pending|回执).{0,32}(?:一次|1次)/s.test(pmNonterminalOutput)
+  && /不执行[^。\n]*(?:accept|验收)[^。\n]*(?:pause|暂停)[^。\n]*ack/s.test(pmNonterminalOutput));
+check('PM-NONTERMINAL continues the same Worker instead of replacing it', /同一|原\s*Worker/.test(pmNonterminalOutput)
+  && /继续|续推|恢复/.test(pmNonterminalOutput)
+  && /不(?:新建|创建|更换).{0,12}(?:Worker|执行者)|无.{0,8}(?:替代Worker|替代\s*Worker)/s.test(pmNonterminalOutput));
+
 const controlRoot = caseDirectory('WST-CONTROL-PLANE', 'WST-CONTROL-PLANE-integration');
 const controlOutput = read(evidenceFile('WST-CONTROL-PLANE'));
 const controlCommands = commands('WST-CONTROL-PLANE').join('\n');
@@ -146,7 +166,7 @@ check('CONTROL-PLANE accepts one verified Worker final through runtime', /beyond
   && !Object.values(controlState.tasks).some((task) => task.worker === 'worker-company-manager')
   && controlState.recentMainlineResults.some((result) => result.worker === 'worker-company-manager'));
 check('CONTROL-PLANE does not revive legacy paths', !/workbench\s+--action|inbox\s+--action/.test(controlCommands));
-check('CONTROL-PLANE distinguishes source acceptance from release', /未发布|尚未发布|页面.{0,12}(未|没有).{0,8}变化|不能.{0,12}用户可用/s.test(controlOutput));
+check('CONTROL-PLANE distinguishes source acceptance from release', /未发布|尚未发布|不是.{0,6}已发布|页面.{0,12}(未|没有).{0,8}变化|不(?:能|代表).{0,12}用户.{0,4}可用/s.test(controlOutput));
 
 const languageForbidden = ['node --test', 'exitCode', '4f82c1a0b7d9e2f3a11c', 'codex/fix-company-manager-dedup', 'companyManagers', 'managerCount', 'managerId', 'src/companyRelations.js', '7 条断言'];
 for (const caseName of ['WST-USER-LANGUAGE-DIRECT', 'WST-USER-LANGUAGE-WORKER']) {

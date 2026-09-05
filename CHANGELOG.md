@@ -6,7 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-## [3.2.5] - 2026-09-02
+## [3.2.5] - 2026-09-05
+
+### Release follow-up
+
+- Promote the candidate series to the v3.2.5 stable release without replacing prior candidate tags.
+- Report an actually ended, unfinished Worker turn to the original PM without treating ordinary failures as business pauses; preserve unfinished foreground questions while dispatching, restoring, or processing concurrent callbacks.
+- Add read-only `workbench.inspect` for pending-receipt reconciliation, requiring matching committed evidence before acknowledgement and preserving conflicting records.
+- Keep internal helpers advisory and formal business outcomes owned by their registered Workers.
+- Add a design/analysis Worker category and use approved project defaults of Sol/high for design and complex high-risk work, Terra/high for ordinary engineering, and Luna/high for frozen bulk work. Existing Workers and the PM are not automatically reconfigured.
+- Local runtime and rule checks passed; model benchmarks and scenario reviews are bounded evidence, not a guarantee of Desktop callback delivery or all workload performance.
 
 ### Changed
 

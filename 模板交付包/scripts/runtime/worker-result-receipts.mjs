@@ -95,9 +95,10 @@ function retryTransientFileOperation(operation, attempts = 20) {
 }
 
 export class WorkerResultReceiptStore {
-  constructor({ runtimeRoot }) {
+  constructor({ runtimeRoot, readOnly = false }) {
     this.runtimeRoot = path.resolve(text(runtimeRoot, 'runtimeRoot', 4096));
     this.pendingRoot = path.join(this.runtimeRoot, 'pending');
+    this.readOnly = readOnly === true;
   }
 
   receiptPath(projectId, taskId) {
@@ -169,6 +170,7 @@ export class WorkerResultReceiptStore {
   }
 
   enqueue(raw) {
+    if (this.readOnly) throw new Error('read-only Worker result store does not accept mutations');
     const record = validateInput(raw);
     fs.mkdirSync(this.pendingRoot, { recursive: true });
     this.migratePendingLayout();
@@ -197,16 +199,26 @@ export class WorkerResultReceiptStore {
       if (key !== 'projectId' && input[key] !== undefined) filters[key] = identifier(input[key], key);
     }
     if (!fs.existsSync(this.pendingRoot)) return { count: 0, records: [] };
-    this.migratePendingLayout();
-    const records = fs.readdirSync(this.pendingRoot, { withFileTypes: true })
+    if (!this.readOnly) this.migratePendingLayout();
+    const scanned = fs.readdirSync(this.pendingRoot, { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
       .map((entry) => this.readPath(path.join(this.pendingRoot, entry.name)))
-      .filter((record) => Object.entries(filters).every(([key, value]) => record[key] === value))
-      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.receiptId.localeCompare(right.receiptId));
+      .filter((record) => Object.entries(filters).every(([key, value]) => record[key] === value));
+    const records = this.readOnly ? [...scanned.reduce((unique, record) => {
+      const key = `${record.projectId}\0${record.taskId}`;
+      const prior = unique.get(key);
+      if (prior && prior.receiptId !== record.receiptId) {
+        throw new Error(`conflicting Worker result receipts for ${record.projectId}/${record.taskId}`);
+      }
+      if (!prior) unique.set(key, record);
+      return unique;
+    }, new Map()).values()] : scanned;
+    records.sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.receiptId.localeCompare(right.receiptId));
     return { count: records.length, records };
   }
 
   acknowledge(raw) {
+    if (this.readOnly) throw new Error('read-only Worker result store does not accept mutations');
     const input = object(raw, 'Worker result receipt acknowledgement');
     const projectId = identifier(input.projectId, 'projectId');
     const taskId = identifier(input.taskId, 'taskId');

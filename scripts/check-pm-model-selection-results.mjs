@@ -24,11 +24,11 @@ const resolve = (projectId, taskKind) => JSON.parse(execFileSync(process.execPat
 const approved = {
   A: resolve('local-aaaaaaaaaaaa', 'ordinary-engineering'),
   B: resolve('local-aaaaaaaaaaaa', 'ordinary-engineering'),
-  C: resolve('local-aaaaaaaaaaaa', 'complex-high-risk'),
+  C: resolve('local-aaaaaaaaaaaa', 'design-analysis'),
   D: resolve('local-aaaaaaaaaaaa', 'bulk-structured'),
   E: resolve('local-aaaaaaaaaaaa', 'ordinary-engineering'),
 };
-const unapproved = resolve('local-bbbbbbbbbbbb', 'complex-high-risk');
+const unapproved = resolve('local-bbbbbbbbbbbb', 'design-analysis');
 
 const taskSection = (label, nextLabel) => {
   const next = nextLabel
@@ -52,10 +52,10 @@ const check = (name, passed) => results.push({ name, passed: Boolean(passed) });
 check('M-01 PM actually invokes the fixed resolver for all distinct policy decisions', /--action[= ]+resolve/.test(commands)
   && /local-aaaaaaaaaaaa[^\r\n]*ordinary-engineering/.test(commands)
   && /local-aaaaaaaaaaaa[^\r\n]*bulk-structured/.test(commands)
-  && /local-aaaaaaaaaaaa[^\r\n]*complex-high-risk/.test(commands)
-  && /local-bbbbbbbbbbbb[^\r\n]*complex-high-risk/.test(commands));
+  && /local-aaaaaaaaaaaa[^\r\n]*design-analysis/.test(commands)
+  && /local-bbbbbbbbbbbb[^\r\n]*design-analysis/.test(commands));
 check('M-02 ordinary development uses the approved Terra high mapping', approved.A.createParameters.model === 'gpt-5.6-terra' && approved.A.createParameters.thinking === 'high' && /Terra/i.test(taskA) && /高|high/i.test(taskA));
-check('M-03 complex high-risk task receives Sol with xhigh reasoning', approved.C.createParameters.model === 'gpt-5.6-sol' && approved.C.createParameters.thinking === 'xhigh' && /Sol/i.test(taskC) && /超高|xhigh/i.test(taskC));
+check('M-03 difficult diagnosis receives Sol with high reasoning', approved.C.createParameters.model === 'gpt-5.6-sol' && approved.C.createParameters.thinking === 'high' && /Sol/i.test(taskC) && /高|high/i.test(taskC) && !/超高|极高|xhigh/i.test(taskC));
 check('M-04 high-volume clear audit uses Luna high reasoning', approved.D.createParameters.model === 'gpt-5.6-luna' && approved.D.createParameters.thinking === 'high' && /Luna/i.test(taskD) && /高|high/i.test(taskD));
 check(
   'M-05 runtime settings stay outside the business packet',
