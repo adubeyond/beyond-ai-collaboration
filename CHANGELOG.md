@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.6] - 2026-09-14
+
+- Promote the validated R3 artifact unchanged; preserve previous versions and build provenance.
+- Support scoped PM ownership alongside whole-project ownership and approved Worker sweet-spot model combinations with natural-boundary switching.
+- Preserve bounded wait and native callback/receipt handling; recover an exact completed local Worker final when normal interfaces remain empty, rejecting stale or mismatched records.
+- Preserve existing project state during manifest-scoped upgrades; keep external checksum files optional.
+- Document real-use recovery evidence and the remaining long-context and local-record-format limitations. No new context-reread policy is included.
+
+See [release notes](docs/en/releases/v3.2.6.md) and [Chinese release notes](docs/releases/v3.2.6.md).
+
 ## [3.2.5] - 2026-09-05
 
 ### Release follow-up

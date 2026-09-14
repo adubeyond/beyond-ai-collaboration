@@ -22,38 +22,11 @@ prepare the target package and six Skills
 
 The standard BEYOND path does not install an identity Hook and does not require `/hooks` or a guard probe. Use a new ordinary conversation without an identity Skill for installation maintenance so an active PM or Worker does not replace its own project entry while doing business work. Wait for active tasks to stop before replacing the root entry or Skills; after installation, restart Codex and verify the loaded version from a new process.
 
-BEYOND 3.2.5 does not install a terminal-result Hook, notify branch, background process, or extra Codex CLI. Formal results remain in user-visible Codex Worker tasks. Only the [Worker identity rules](../../skills/identity-worker/SKILL.md) own terminal formation and the native callback; only [PM pause, resume, and closeout](../../skills/identity-pm/references/lifecycle-and-closeout.md) owns matching, acceptance, pause, and receipt consumption. This installation guide describes what to install and verify; it does not copy the pending-scan, Worker-read, or workbench-transaction algorithm. An upgrade replaces the control repository and six Skills, then verifies the loaded version after restart. The upgrade maintenance path backs up and removes only a legacy BEYOND notify branch, without changing other plugins or user-owned notify configuration.
+BEYOND 3.2.6 does not install a terminal-result Hook, notify branch, background process, or extra Codex CLI. Formal results remain in user-visible Codex Worker tasks. Only the [Worker identity rules](../../skills/identity-worker/SKILL.md) own terminal formation and the native callback; only [PM pause, resume, and closeout](../../skills/identity-pm/references/lifecycle-and-closeout.md) owns matching, acceptance, pause, and receipt consumption. This installation guide describes what to install and verify; it does not copy the pending-scan, Worker-read, or workbench-transaction algorithm. An upgrade replaces the control repository and six Skills, then verifies the loaded version after restart. The upgrade maintenance path backs up and removes only a legacy BEYOND notify branch, without changing other plugins or user-owned notify configuration.
 
 ## 2. Prepare the target release
 
-BEYOND 3.2.5 is still a pre-release candidate. Until it is formally released, the immutable public stable artifacts remain 3.2.4:
-
-- Release: <https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.4>
-- Package: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip>
-- Optional SHA-256 file: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip.sha256>
-
-Only the ZIP is required on Windows. If the optional checksum file is already present beside it, verify it without using a web UI for Git operations:
-
-```powershell
-curl.exe -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip" -o "BEYOND-3.2.4.zip"
-$checksumPath = ".\BEYOND-3.2.4.zip.sha256"
-if (Test-Path -LiteralPath $checksumPath) {
-  $expectedHash = ((Get-Content -LiteralPath $checksumPath -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
-  $actualHash = (Get-FileHash -LiteralPath ".\BEYOND-3.2.4.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
-  if ($actualHash -ne $expectedHash) { throw "BEYOND-3.2.4.zip SHA-256 mismatch" }
-} else {
-  Write-Warning "Optional SHA-256 file not supplied; continue and complete the in-package and installed-content checks"
-}
-Expand-Archive -LiteralPath ".\BEYOND-3.2.4.zip" -DestinationPath ".\BEYOND-3.2.4-install"
-```
-
-On Linux or macOS:
-
-```bash
-curl -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.4/BEYOND-3.2.4.zip" -o BEYOND-3.2.4.zip
-if [ -f BEYOND-3.2.4.zip.sha256 ]; then sha256sum -c BEYOND-3.2.4.zip.sha256 || exit 1; else echo "optional SHA-256 file not supplied; continuing to in-package verification"; fi
-unzip BEYOND-3.2.4.zip -d BEYOND-3.2.4-install
-```
+Use the supplied complete BEYOND-3.2.6.zip and its root INSTALL.md. This is a version-numbered local distribution, not yet publicly uploaded. Do not download an older package instead. Extract into a temporary directory and verify the included manifest.
 
 The ZIP is required; the external SHA-256 file is optional verification material. A missing or unavailable checksum file does not block installation, but a supplied checksum that does not match must stop it. With or without the external checksum, verify the in-package content manifest and the final installed content. Extraction produces one complete `beyond-control/` directory. Put that directory under the business-project root instead of scattering package files over the project.
 
@@ -80,7 +53,7 @@ Prompt for an AI-assisted maintenance conversation:
 
 ```text
 This is BEYOND installation maintenance. Do not create a PM, Worker, or business task.
-Install or upgrade the current project's beyond-control directory and six global Skills from the official BEYOND 3.2.4 release. If BEYOND-3.2.4.zip.sha256 is present beside the ZIP, verify it; if it is absent, do not block installation, but still complete the in-package manifest and final installed-content checks. Install a v3.2.5 pre-release candidate only through the candidate-root directed test guide; it is not an official Release.
+Install from the supplied BEYOND-3.2.6.zip using its root INSTALL.md. A missing external .sha256 file does not block installation; a mismatch against a supplied trusted value must stop it. Verify the package manifest and installed content.
 The project may be non-Git. Resolve its root from the current Codex project directory and root AGENTS.md; do not run or depend on a git rev-parse gate.
 The fixed entry discovers only the project root itself and exact Git roots that are direct children. Pass every confirmed formal repository that is deeper or outside the project root through --repository-roots. Do not copy beyond-control into each business repository and do not create a worktree for installation.
 For cross-root, multi-repository, or existing-worktree use, obtain the actual hostId and Codex projectId from the current Codex project and pass --host-id and --codex-project-id during first fusion; never guess them. Later upgrades preserve registered external roots and platform bindings when those flags are omitted. Stop and request a decision if a path, exact Git root, or origin remote has drifted.
@@ -101,7 +74,7 @@ Use BEYOND to initialize this new project.
 
 The PM investigates first and asks one currently necessary question at a time. Confirm entry fusion with:
 
-Before initialization closes, run `worker-policy --action show --project-id <current-project>` and show the user the concrete model and reasoning parameters for both platform defaults and the BEYOND Worker matrix. Save only the user's explicit choice in the managed project-overview block. If the user does not choose, keep platform defaults without blocking other initialization or ordinary work.
+Before initialization closes, run `worker-policy --action show --project-id <current-project>` and show the concrete combinations and scopes: platform defaults apply no overrides; v1 covers new Workers only; sweet-spots v2 also permits stage-based combination changes in the same Worker conversation. Save only the user's explicit choice in the managed project-overview block. An upgrade must not change an existing approval's matrix or scope. Without approval, keep platform defaults without blocking ordinary work.
 
 ```text
 Confirm BEYOND-led AGENTS.md fusion while preserving the project's native rules.

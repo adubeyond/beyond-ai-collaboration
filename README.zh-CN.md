@@ -7,11 +7,11 @@
 > **Beyond Chat. Build Reality.**
 > 让 Codex 不只回答问题，而是持续完成真实项目目标。
 
-BEYOND 是一套面向 **Codex Desktop 本地项目**的开源 AI 工程协同系统。它用一个 PM 管理主线与验收，让每个 Worker 对一个业务结果连续负责，并把项目事实、权限边界、当前证据和任务状态放回可恢复的正式入口。
+BEYOND 是一套面向 **Codex Desktop 本地项目**的开源 AI 工程协同系统。可以由一个 PM 管理全局，也可以由多个 PM 在理解全局目标的基础上分管明确范围；每个 Worker 对一个业务结果连续负责。项目事实、权限边界、当前证据和任务状态保存在可恢复的正式入口。
 
 它适合已经在用 Codex 做真实开发，但正在被这些问题困扰的人：新对话反复失忆、任务完成后无人收口、阶段过多需要人工续推、测试通过却无法判断能否发布，以及多个任务并行时责任和写入边界混乱。
 
-[下载 BEYOND v3.2.5](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.5) · [Gitee 镜像](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90 秒真实案例](docs/真实案例与90秒演示.md) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [3.2.5 升级说明](docs/releases/v3.2.5.md) · [系统架构](docs/系统架构与运行机制.md)
+[下载 BEYOND v3.2.6](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.6) · [Gitee 镜像](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90 秒真实案例](docs/真实案例与90秒演示.md) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [3.2.6 升级说明](docs/releases/v3.2.6.md) · [系统架构](docs/系统架构与运行机制.md)
 
 ## BEYOND 带来什么
 
@@ -24,7 +24,7 @@ BEYOND 是一套面向 **Codex Desktop 本地项目**的开源 AI 工程协同�
 | 测试通过、允许改文件、允许提交和允许发布被混为一谈 | 文件、Git、网络、服务器、数据和生产权限分别判断 |
 | 多个任务并行时互相覆盖或重复验收 | PM登记唯一Worker和写入边界；同一结果只验收、归档一次 |
 
-## 3.2.4 的核心能力
+## 3.2.6 的核心能力
 
 - **多结果同回合派发**：一条明确指令批准多个独立结果时，PM逐个创建并登记，不在中间等待或轮询Worker。
 - **控制仓隔离**：终态runtime只取当前项目根映射；错误项目编号在写入pending前被拒绝，不能跨项目误写。
@@ -53,14 +53,14 @@ flowchart LR
     PM --> S["验收·归档·项目事实更新"]
 ```
 
-PM不会代替Worker写代码，也不会为了“掌控进度”持续读取和轮询Worker。Worker完成全部业务动作后冻结final、保存短期回执、执行一次轻量回调并结束；PM醒来后扫描正式任务与待处理回执，核对证据并幂等收口。
+PM负责理解目标、分析问题、设计任务和纠偏，不只是转发任务，也不会为了“掌控进度”持续轮询Worker。Worker连续完成授权范围内的工作；如果执行回合结束但任务未完，向来源PM回报尚未完成的结果，PM按原授权指导同一Worker继续。正常完成或真实暂停时，Worker冻结final、保存短期回执、执行一次回调；PM核对本轮结束状态、正式结果和证据后收口。回调到达不等于Worker已经结束。
 
 ## 三步开始
 
 ### 1. 下载正式版本
 
-- [BEYOND-3.2.4.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.5/BEYOND-3.2.4.zip)
-- [BEYOND-3.2.4.zip.sha256（可选校验文件）](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.5/BEYOND-3.2.4.zip.sha256)
+- [BEYOND-3.2.6-R3.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.6/BEYOND-3.2.6-R3.zip)
+- [BEYOND-3.2.6-R3.zip.sha256（可选校验文件）](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.6/BEYOND-3.2.6-R3.zip.sha256)
 
 ZIP即可安装；`.sha256`缺失或下载失败不阻断安装。若提供了校验文件而哈希不一致，则必须停止。完整命令见[安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md)。
 
@@ -70,7 +70,7 @@ ZIP即可安装；`.sha256`缺失或下载失败不阻断安装。若提供了�
 
 ```text
 这是BEYOND安装维护请求，不建立PM、Worker或业务任务。
-请使用我已下载并验真通过的BEYOND 3.2.4正式发布包，安装或升级当前项目的beyond-control和六个全局Skill。
+请使用我已下载并验真通过的BEYOND 3.2.6正式发布包，安装或升级当前项目的beyond-control和六个全局Skill。
 先精确备份；保留项目原生规则以及local、projects、shared中的真实内容，不用空模板覆盖。
 完成项目入口融合和安装验真后停止，等待我重启Codex。不要启动、恢复或修改业务任务。
 ```
@@ -83,7 +83,7 @@ task-design      task-dev
 task-test        task-ops
 ```
 
-BEYOND 3.2.4不安装身份Hook、notify分支、守护进程或额外Codex CLI。
+BEYOND 3.2.6不安装身份Hook、notify分支、守护进程或额外Codex CLI。
 
 ### 3. 重启并接手项目
 
@@ -135,9 +135,10 @@ $identity-pm
 
 ## 当前边界
 
-- 当前正式版本是`v3.2.5`，主要面向Codex Desktop本地项目。
+- 当前正式版本是`v3.2.6`，主要面向Codex Desktop本地项目。
 - 标准安装与运行路径已在真实Windows项目中验证；公开脚本同时覆盖内容、安装结构和最小示例。
 - 不同平台对任务创建、线程回调和持久权限的支持不同，不能把一个平台的通过结论外推到所有环境。
+- 本版针对已结束但平台正文不可读的本机任务增加只读补读；不保证所有宿主版本兼容，也不宣称彻底解决长上下文中的目标漂移。
 - BEYOND不收集安装遥测；GitHub Release下载量只能统计发布资产下载，不能代表全部安装或实际活跃用户。
 
 ## 文档入口
@@ -148,7 +149,7 @@ $identity-pm
 | 安装、升级或回退 | [安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md) |
 | 在干净示例中体验 | [快速开始](docs/快速开始.md) |
 | 理解PM、Worker、文档和运行时 | [系统架构与运行机制](docs/系统架构与运行机制.md) |
-| 查看3.2.4变化 | [升级说明](docs/releases/v3.2.5.md) · [CHANGELOG](CHANGELOG.md) |
+| 查看3.2.6变化 | [升级说明](docs/releases/v3.2.6.md) · [CHANGELOG](CHANGELOG.md) |
 | 阅读控制仓结构 | [模板交付包说明](模板交付包/README.md) |
 | 提交问题或改进 | [Issues](https://github.com/adubeyond/beyond-ai-collaboration/issues) · [贡献指南](CONTRIBUTING.md) |
 | 私密报告安全问题 | [安全政策](SECURITY.md) |

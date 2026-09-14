@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 const MANAGED_BEGIN = '<!-- BEGIN BEYOND MANAGED WORKBENCH -->';
 const MANAGED_END = '<!-- END BEYOND MANAGED WORKBENCH -->';
@@ -405,6 +406,14 @@ export class WorkbenchTransactionStore {
         if (prior.inputDigest !== inputDigest) throw new Error('operation id reused with different input');
         return clone(prior.output);
       }
+      // Replay accepted operations first, including pre-guard requests. New writes
+      // must compare their read basis while holding the same lock as the commit.
+      if (!Object.hasOwn(input, 'expectedSnapshot')) {
+        throw new Error('expectedSnapshot is required; read current workbench-state.json projectSnapshot (null if absent) and recompute the summary before updating');
+      }
+      if (!isDeepStrictEqual(input.expectedSnapshot, state.projectSnapshot)) {
+        throw new Error('project snapshot changed; reread current projectSnapshot and affected facts, then recompute the summary before updating');
+      }
       state.projectSnapshot = {
         mainline: input.mainline,
         status: input.status,
@@ -496,6 +505,7 @@ export class WorkbenchTransactionStore {
           completedAt: terminalAt,
           affectsMainline: false,
           pendingDependencies: [],
+          ...(input.cancelledReceipt ? { cancelledReceipt: clone(input.cancelledReceipt) } : {}),
         } : {
           operationId: input.operationId,
           taskId: input.taskId,
@@ -588,6 +598,15 @@ export class WorkbenchTransactionStore {
         throw new Error('closure reason or traceable locator is missing');
       }
       monthOf(input.closedAt);
+      if (input.pendingReceiptId !== undefined) {
+        const receipt = input.cancelledReceipt;
+        if (!receipt || receipt.receiptId !== input.pendingReceiptId
+          || receipt.taskId !== input.taskId || receipt.projectId !== input.projectId
+          || receipt.sourceThreadId !== input.closedBy
+          || (receipt.workerThreadId && receipt.workerThreadId !== input.worker)) {
+          throw new Error('closure must preserve the matching pending receipt');
+        }
+      }
       return;
     }
     if (input.acceptance !== 'accepted' || !validId(input.acceptedBy)

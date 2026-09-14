@@ -31,8 +31,8 @@ const initializationBegin = "<!-- BEGIN BEYOND PROJECT INITIALIZATION -->";
 const initializationEnd = "<!-- END BEYOND PROJECT INITIALIZATION -->";
 const legacyRuntimeGuardRelative = ".codex/beyond-runtime-guard.mjs";
 const codexHooksRelative = ".codex/hooks.json";
-const workerPolicyModes = new Set(["platform-default", "beyond-worker-matrix-v1"]);
-const workerTaskKinds = new Set(["design-analysis", "ordinary-engineering", "bulk-structured", "complex-high-risk"]);
+const workerPolicyModes = new Set(["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2"]);
+const workerTaskKinds = new Set(["design-analysis", "ordinary-engineering", "bulk-structured", "complex-high-risk", "hard-analysis"]);
 const initializationModes = new Set(["full", "on-demand"]);
 const initializationDecisions = new Set(["migrate", "register", "defer"]);
 const initializationGroups = ["overview", "architecture", "development", "testing", "operations", "security", "other"];
@@ -51,6 +51,18 @@ const workerMatrixV1 = {
   "bulk-structured": { model: "gpt-5.6-luna", thinking: "high" },
   "complex-high-risk": { model: "gpt-5.6-sol", thinking: "high" },
 };
+// Keep v1 approvals and their creation-only scope unchanged.
+const workerSweetspotsV2 = {
+  "design-analysis": { model: "gpt-5.6-sol", thinking: "medium" },
+  "ordinary-engineering": { model: "gpt-5.6-terra", thinking: "medium" },
+  "bulk-structured": { model: "gpt-5.6-luna", thinking: "high" },
+  "hard-analysis": { model: "gpt-6-astra", thinking: "medium" },
+  // High-consequence execution has not been covered by the sweet-spot comparison.
+  "complex-high-risk": { ...workerMatrixV1["complex-high-risk"] },
+};
+function workerPolicyScope(mode) {
+  return mode === "beyond-worker-sweetspots-v2" ? "formal-worker-stages" : "new-formal-worker";
+}
 const legacyWorkerPolicyPattern = /(Luna|Terra|Sol|gpt-5\.[0-9]+-(?:luna|terra|sol)|模型矩阵|Worker.{0,20}(?:模型|推理))/i;
 
 function fail(message, code = 1) {
@@ -1223,7 +1235,7 @@ function parseWorkerPolicy(text) {
   } catch {
     fail("Worker运行策略JSON无效，停止读取", 2);
   }
-  if (policy.schemaVersion !== 1 || !workerPolicyModes.has(policy.mode) || policy.scope !== "new-formal-worker" || typeof policy.confirmed !== "boolean") {
+  if (policy.schemaVersion !== 1 || !workerPolicyModes.has(policy.mode) || policy.scope !== workerPolicyScope(policy.mode) || typeof policy.confirmed !== "boolean") {
     fail("Worker运行策略字段无效，停止读取", 2);
   }
   if (policy.confirmed && (!policy.approvedBy || !policy.approvedAt)) {
@@ -1233,7 +1245,7 @@ function parseWorkerPolicy(text) {
 }
 
 function workerPolicySection(policy) {
-  return `## Worker运行策略\n\n本节记录当前项目的新建正式Worker运行策略状态。用户未确认时保持平台默认；任务分类由PM判断，具体模型映射由控制仓固定脚本唯一维护；工作台、任务包和根入口不复制本节。\n\n${renderWorkerPolicy(policy)}\n`;
+  return `## Worker运行策略\n\n本节记录当前项目的Worker运行策略及批准范围。用户未确认时保持平台默认；v1仅用于新建，v2另允许同一Worker按阶段切换组合。任务分类由PM判断，具体映射由固定脚本唯一维护；工作台、任务包和根入口不复制本节。\n\n${renderWorkerPolicy(policy)}\n`;
 }
 
 function ensureWorkerPolicySection(overviewPath) {
@@ -1254,7 +1266,7 @@ function saveWorkerPolicy(projectId, mode, approvedByValue, approvedAtValue = nu
   const overviewPath = join(controlRoot, "projects", projectId, "项目总览.md");
   const overview = readUtf8(overviewPath, "项目总览");
   const current = parseWorkerPolicy(overview);
-  const policy = { schemaVersion: 1, mode, scope: "new-formal-worker", confirmed: true, approvedBy, approvedAt };
+  const policy = { schemaVersion: 1, mode, scope: workerPolicyScope(mode), confirmed: true, approvedBy, approvedAt };
   const rendered = workerPolicySection(policy);
   let updated;
   if (current.configured) {
@@ -1268,6 +1280,11 @@ function saveWorkerPolicy(projectId, mode, approvedByValue, approvedAtValue = nu
       : `${overview.trimEnd()}\n\n${rendered}`;
   }
   const backup = backupControlFile(overviewPath, "worker-policy");
+  // Refresh only this exact generated legacy sentence, never user-authored prose.
+  updated = updated.replace(
+    "本节记录当前项目的新建正式Worker运行策略状态。用户未确认时保持平台默认；任务分类由PM判断，具体模型映射由控制仓固定脚本唯一维护；工作台、任务包和根入口不复制本节。",
+    "本节记录当前项目的Worker运行策略及批准范围。用户未确认时保持平台默认；v1仅用于新建，v2另允许同一Worker按阶段切换组合。任务分类由PM判断，具体映射由固定脚本唯一维护；工作台、任务包和根入口不复制本节。",
+  );
   writeUtf8(overviewPath, updated);
   return { projectId, policy, backup };
 }
@@ -1537,8 +1554,12 @@ ${workerPolicySection(defaultWorkerPolicy())}
 }
 
 function workerPolicy() {
-  ensureControl();
   const action = arg("--action") ?? "show";
+  // Policy queries must not initialize Git, workbench state or directories.
+  if (action === "set") {
+    validateWorkerPolicyApproval(arg("--mode"), arg("--approved-by"), arg("--approved-at"));
+    ensureControl();
+  }
   const projectId = arg("--project-id");
   if (!projectId || !/^(?:project|local)-[a-f0-9]{12}$/.test(projectId)) {
     fail("Worker运行策略需要有效 --project-id", 2);
@@ -1554,7 +1575,9 @@ function workerPolicy() {
       choices: {
         "platform-default": { createParameters: {} },
         "beyond-worker-matrix-v1": workerMatrixV1,
+        "beyond-worker-sweetspots-v2": workerSweetspotsV2,
       },
+      choiceScopes: Object.fromEntries([...workerPolicyModes].map((mode) => [mode, workerPolicyScope(mode)])),
     }, null, 2));
     return;
   }
@@ -1563,17 +1586,23 @@ function workerPolicy() {
     console.log(JSON.stringify({ projectId, policy: saved.policy, backup: display(saved.backup) }, null, 2));
     return;
   }
-  if (action === "resolve") {
+  if (action === "resolve" || action === "resolve-stage") {
     const taskKind = arg("--task-kind");
     if (!workerTaskKinds.has(taskKind)) fail(`Worker任务性质无效：${taskKind}`, 2);
-    const active = current.configured && current.policy.confirmed && current.policy.mode === "beyond-worker-matrix-v1";
+    const stage = action === "resolve-stage";
+    const matrix = current.policy.mode === "beyond-worker-sweetspots-v2" ? workerSweetspotsV2
+      : current.policy.mode === "beyond-worker-matrix-v1" ? workerMatrixV1 : null;
+    const active = current.configured && current.policy.confirmed && matrix !== null
+      && (!stage || current.policy.scope === "formal-worker-stages");
+    if (active && !matrix[taskKind]) fail(`当前Worker策略不包含任务性质：${taskKind}`, 2);
     console.log(JSON.stringify({
       projectId,
       configured: current.configured,
       mode: current.policy.mode,
       taskKind,
-      createParameters: active ? workerMatrixV1[taskKind] : {},
-      decision: active ? "use-approved-project-worker-matrix" : "keep-platform-default",
+      [stage ? "continuationParameters" : "createParameters"]: active ? matrix[taskKind] : {},
+      decision: active ? (stage ? "use-approved-stage-combination" : "use-approved-project-worker-matrix")
+        : (stage ? "keep-current-worker-settings" : "keep-platform-default"),
     }, null, 2));
     return;
   }
@@ -1691,7 +1720,7 @@ function installProjectEntry(project) {
   const workerPolicyMode = arg("--worker-policy-mode");
   const workerPolicyApprovedBy = arg("--worker-policy-approved-by");
   if (project.legacyWorkerPolicyCandidate && !workerPolicyMode) {
-    fail("旧项目覆盖区存在Worker模型策略候选；请向用户展示固定脚本show返回的具体选项，再传入 --worker-policy-mode platform-default|beyond-worker-matrix-v1 和 --worker-policy-approved-by <明确批准依据>，不能静默继承", 2);
+    fail("旧项目覆盖区存在Worker模型策略候选；请向用户展示固定脚本show返回的具体选项及范围，再传入 --worker-policy-mode <所选mode> 和 --worker-policy-approved-by <明确批准依据>，不能静默继承", 2);
   }
   if (workerPolicyMode && !workerPolicyApprovedBy) {
     fail("设置Worker运行策略时必须传入 --worker-policy-approved-by <用户明确批准依据>", 2);
@@ -1931,14 +1960,14 @@ function printHelp() {
     `  init-control [--project-root <当前项目根>]  # 默认项目内模式传入项目根；外置模式省略\n` +
     `  inspect-project --project-root <目录> [--repository-roots <额外正式Git根>] [--host-id <主机>] [--codex-project-id <项目>]\n` +
     `  register-project --project-root <目录> [--name <名称>] [--repository-roots <额外正式Git根>] [--canonical-repositories <每组重复remote选择一个正式路径>] [--host-id <主机>] [--codex-project-id <项目>]\n` +
-    `  install-project-entry --project-root <目录> --confirm-fusion yes [--worker-policy-mode platform-default|beyond-worker-matrix-v1 --worker-policy-approved-by <用户明确批准依据>] [--adopt-legacy-workbench yes] [--repository-roots <额外正式Git根>] [--canonical-repositories <每组重复remote选择一个正式路径>] [--confirm-legacy-skip yes] [--host-id <主机>] [--codex-project-id <项目>]\n` +
+    `  install-project-entry --project-root <目录> --confirm-fusion yes [--worker-policy-mode <show返回的mode> --worker-policy-approved-by <用户明确批准依据>] [--adopt-legacy-workbench yes] [--repository-roots <额外正式Git根>] [--canonical-repositories <每组重复remote选择一个正式路径>] [--confirm-legacy-skip yes] [--host-id <主机>] [--codex-project-id <项目>]\n` +
     `  initialization --action show --project-id <项目编号>\n` +
     `  initialization --action choose --project-id <项目编号> --mode full|on-demand --approved-by <用户明确批准依据>\n` +
     `  initialization --action record --project-id <项目编号> --group overview|architecture|development|testing|operations|security|other --decision migrate|register|defer [--entry <正式入口>]\n` +
     `  initialization --action complete --project-id <项目编号> --root-entry-reviewed yes\n` +
     `  worker-policy --action show --project-id <项目编号>\n` +
-    `  worker-policy --action set --project-id <项目编号> --mode platform-default|beyond-worker-matrix-v1 --approved-by <用户明确批准依据> [--approved-at <ISO时间>]\n` +
-    `  worker-policy --action resolve --project-id <项目编号> --task-kind design-analysis|ordinary-engineering|bulk-structured|complex-high-risk\n` +
+    `  worker-policy --action set --project-id <项目编号> --mode platform-default|beyond-worker-matrix-v1|beyond-worker-sweetspots-v2 --approved-by <用户明确批准依据> [--approved-at <ISO时间>]\n` +
+    `  worker-policy --action resolve|resolve-stage --project-id <项目编号> --task-kind design-analysis|ordinary-engineering|bulk-structured|complex-high-risk|hard-analysis\n` +
     `  list [--git-account <已确认账号> | --all]\n` +
     `  workbench --action list\n` +
     `  workbench --action progress --thread <正式thread> --progress <当前里程碑> [--updated <YYYY-MM-DD>]\n` +
