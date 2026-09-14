@@ -5,8 +5,10 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const packageRoot = join(repositoryRoot, "模板交付包");
+const packageRoot = process.env.BEYOND_TEST_PRODUCT_ROOT
+  ? resolve(process.env.BEYOND_TEST_PRODUCT_ROOT) : join(repositoryRoot, "模板交付包");
 const verifier = join(packageRoot, "scripts", "verify-install-integrity.mjs");
+const releaseVersion = JSON.parse(readFileSync(join(packageRoot, "beyond-release.json"), "utf8")).releaseVersion;
 const scratch = mkdtempSync(join(tmpdir(), "beyond-install-integrity-"));
 let passed = 0;
 const errors = [];
@@ -28,8 +30,8 @@ function copySkills(root) {
 function fusedEntry(controlRelative, projectId) {
   return cpEntry()
     .replace(
-      "<!-- BEYOND-RUNTIME-VERSION: 3.2.5 -->",
-      `<!-- BEYOND-RUNTIME-VERSION: 3.2.5 -->\n<!-- BEYOND-CONTROL-ROOT: ${controlRelative} -->\n<!-- BEYOND-PROJECT-ID: ${projectId} -->`,
+      `<!-- BEYOND-RUNTIME-VERSION: ${releaseVersion} -->`,
+      `<!-- BEYOND-RUNTIME-VERSION: ${releaseVersion} -->\n<!-- BEYOND-CONTROL-ROOT: ${controlRelative} -->\n<!-- BEYOND-PROJECT-ID: ${projectId} -->`,
     )
     .replace(/\]\(docs\//g, `](${controlRelative}/docs/`)
     .replace(/\]\(local\//g, `](${controlRelative}/local/`)
@@ -88,13 +90,66 @@ try {
 
   const controlRoot = join(scratch, "beyond-control");
   cpSync(packageRoot, controlRoot, { recursive: true });
-  writeProjectOverview(controlRoot, "project-demo");
+  const policyProjectId = "project-aabbccddeeff";
+  writeProjectOverview(controlRoot, policyProjectId);
   writeProjectOverview(controlRoot, "project-third-party");
   const fusedRoot = join(scratch, "fused");
   copySkills(fusedRoot);
-  writeLocalRegistration(controlRoot, "project-demo", fusedRoot);
-  writeFileSync(join(fusedRoot, "AGENTS.md"), fusedEntry("../beyond-control", "project-demo"), "utf8");
+  writeLocalRegistration(controlRoot, policyProjectId, fusedRoot);
+  writeFileSync(join(fusedRoot, "AGENTS.md"), fusedEntry("../beyond-control", policyProjectId), "utf8");
   run("完整融合项目入口", 0, join(fusedRoot, "skills"), join(fusedRoot, "AGENTS.md"), "安装验真通过", false);
+
+  // Exercise the real setter and full verifier together, not content-only checks.
+  const policyOverview = join(controlRoot, "projects", policyProjectId, "项目总览.md");
+  const originalOverview = readFileSync(policyOverview, "utf8");
+  const policyCli = join(controlRoot, "scripts", "beyond-control.mjs");
+  const modes = ["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2"];
+  function replacePolicy(policy) {
+    writeFileSync(policyOverview, originalOverview.replace(
+      /(<!-- BEGIN BEYOND WORKER POLICY -->)[\s\S]*?(<!-- END BEYOND WORKER POLICY -->)/,
+      `$1\n\`\`\`json\n${JSON.stringify(policy)}\n\`\`\`\n$2`,
+    ), "utf8");
+  }
+  function verifyPolicy(name, status, expectedText) {
+    const before = readFileSync(policyOverview);
+    run(name, status, join(fusedRoot, "skills"), join(fusedRoot, "AGENTS.md"), expectedText, false);
+    if (!before.equals(readFileSync(policyOverview))) errors.push(`${name}：验真修改了项目策略`);
+  }
+  for (const mode of modes) {
+    writeFileSync(policyOverview, originalOverview);
+    const set = spawnSync(process.execPath, [policyCli, "worker-policy", "--action", "set",
+      "--project-id", policyProjectId, "--mode", mode, "--approved-by", "isolated-test-explicit-approval"],
+    { encoding: "utf8", windowsHide: true });
+    if (set.status !== 0) throw new Error(`策略保存失败：${mode}\n${set.stdout}\n${set.stderr}`);
+    const saved = JSON.parse(set.stdout).policy;
+    const show = spawnSync(process.execPath, [policyCli, "worker-policy", "--action", "show",
+      "--project-id", policyProjectId], { encoding: "utf8", windowsHide: true });
+    if (show.status !== 0 || JSON.parse(show.stdout).policy.mode !== mode) throw new Error(`策略读取失败：${mode}`);
+    verifyPolicy(`${mode}实际set/show后完整验真`, 0, "安装验真通过");
+    for (const [name, patch, expected] of [
+      ["交叉scope", { scope: saved.scope === "formal-worker-stages" ? "new-formal-worker" : "formal-worker-stages" }, "字段无效"],
+      ["缺失scope", { scope: undefined }, "字段无效"],
+      ["缺失批准人", { approvedBy: null }, "缺少有效批准依据或时间"],
+      ["缺失批准时间", { approvedAt: null }, "缺少有效批准依据或时间"],
+      ["无效批准时间", { approvedAt: "invalid-date" }, "缺少有效批准依据或时间"],
+      ["错误confirmed类型", { confirmed: "true" }, "字段无效"],
+      ["错误schema", { schemaVersion: 2 }, "字段无效"],
+    ]) {
+      replacePolicy({ ...saved, ...patch });
+      verifyPolicy(`${mode}${name}`, 1, expected);
+    }
+    writeFileSync(policyOverview, originalOverview);
+    const missingApproval = spawnSync(process.execPath, [policyCli, "worker-policy", "--action", "set",
+      "--project-id", policyProjectId, "--mode", mode], { encoding: "utf8", windowsHide: true });
+    if (missingApproval.status === 0 || !`${missingApproval.stderr}${missingApproval.stdout}`.includes("明确批准依据")
+      || readFileSync(policyOverview, "utf8") !== originalOverview) errors.push(`${mode}无批准set未正确拒绝`);
+    else passed += 1;
+  }
+  for (const mode of ["unknown-policy", "__proto__", "constructor", null]) {
+    replacePolicy({ schemaVersion: 1, mode, scope: "new-formal-worker", confirmed: false });
+    verifyPolicy(`非法模式${mode}`, 1, "字段无效");
+  }
+  writeFileSync(policyOverview, originalOverview);
 
   const wrongRegistrationPathId = "project-wrong-registration-path";
   writeProjectOverview(controlRoot, wrongRegistrationPathId);

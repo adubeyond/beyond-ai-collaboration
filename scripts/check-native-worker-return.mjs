@@ -203,7 +203,10 @@ test('source rules use one frozen final with a short-lived receipt and no experi
   assert.match(worker, /执行一次`worker-result\.enqueue`/);
   assert.match(worker, /直接向唯一来源调用一次/);
   assert.match(worker, /只把已冻结的同一份final作为本轮最后一个动作输出/);
-  assert.match(worker, /工具启动失败、缺失输出、权限或环境异常/);
+  // Correctable command failures are not business terminal states; real blockers
+  // are adjudicated separately. Do not require the superseded catch-all wording.
+  assert.match(worker, /工具启动失败、缺失输出、命令报错本身不构成终态/);
+  assert.match(worker, /尚可安全处理时继续执行/);
   assert.match(worker, /不是第二种业务真值、消息历史或长期证据/);
   assert.match(worker, /检查点先按任务的`结果与验收 \+ 对象与边界`判断/);
   assert.match(worker, /实现、发布或后续动作明确不在本任务范围/);
@@ -224,8 +227,10 @@ test('premature return cannot claim completion or allow later Worker tools', () 
   assert.match(worker, /最后一次业务工具调用已经结束/);
   assert.match(worker, /回源工具必须是本轮最后一次工具调用/);
   assert.match(worker, /回源工具返回后不得继续推理、发送过程消息或调用任何工具/);
-  assert.match(lifecycle, /第一次定点读取仍无平台final且Worker仍显示运行/);
-  assert.match(lifecycle, /只允许调用一次最长30秒的`wait_threads`/);
+  assert.match(lifecycle, /第一次定点读取本轮仍显示运行、尚未确认最终输出结束/);
+  assert.match(lifecycle, /回调对应的本轮turnId、该回合是否已经结束、该回合最终回答是否可读/);
+  assert.match(lifecycle, /三项齐全立即处理，不固定睡满60秒/);
+  assert.match(lifecycle, /只允许调用一次最长60秒的`wait_threads`/);
   assert.match(lifecycle, /不得循环、第二次等待、继续轮询/);
   assert.match(lifecycle, /回执只能恢复同一份冻结正文，不能单独证明业务完成/);
   assert.match(lifecycle, /没有回执的新任务不得沿用原生final绕过终态协议/);
@@ -264,11 +269,15 @@ test('owner-authorized closure is separate from completion, pause and Worker rec
   const runtime = read('模板交付包/scripts/runtime/control-runtime.mjs');
   assert.match(pm, /只有老板明确要求关闭、取消、不再做、以另一任务替代/);
   assert.match(pm, /沉默、闲置、失败、失联、超时或缺少结果都不能推断关闭/);
-  assert.match(lifecycle, /登记Worker已经不在运行/);
-  assert.match(lifecycle, /该任务没有pending回执/);
-  assert.match(lifecycle, /关闭不调用`workbench\.accept`/);
-  assert.match(lifecycle, /不生成或消费Worker回执/);
-  assert.match(runtime, /task closure requires zero pending Worker result receipts/);
+  assert.match(lifecycle, /登记Worker已不在运行/);
+  // Current closure supports a matching pending result without accepting it.
+  // Runtime behavior for both branches is covered in check-cancel-pending.mjs.
+  assert.match(lifecycle, /没有pending时使用下面的原关闭请求/);
+  assert.match(lifecycle, /runtime把该真实回执完整留入关闭历史，不采纳为完成证据/);
+  assert.match(lifecycle, /不调用`workbench\.accept`，不生成Worker回执/);
+  assert.match(lifecycle, /关闭成功后才对该`projectId \+ taskId \+ receiptId`执行一次/);
+  assert.match(lifecycle, /不能先删后关/);
+  assert.match(runtime, /pendingReceiptId/);
 });
 
 test('readable platform final stays authoritative without byte-for-byte receipt equality', () => {
@@ -303,7 +312,7 @@ test('Worker completion always reports its PM while nonterminal supervision stay
   assert.match(worker, /来源PM正在回答老板、暂时忙碌或可能延后处理，都不能成为跳过终态回执或原生回调的理由/);
   assert.match(worker, /该路径不执行`worker-result\.enqueue`/);
   assert.match(worker, /普通里程碑、方法选择和可自行闭环的问题在当前执行turn继续时留在Worker/);
-  assert.match(pm, /来源无回执时只读原Worker一次/);
+  assert.match(pm, /来源无回执时先读原Worker一次/);
   assert.match(pm, /`进行中`按进展/);
 });
 
@@ -327,7 +336,10 @@ test('an unfinished Worker turn reports once and the PM continues the same task 
   assert.match(worker, /平台final必须直接以`进行中`作为第一行/);
   assert.match(worker, /PM不得执行`worker-result\.ack`/);
   assert.match(worker, /这次回源必须是本轮最后一次工具调用/);
-  assert.match(pm, /只读原Worker一次/);
+  assert.match(pm, /先读原Worker一次/);
+  assert.match(lifecycle, /仅当已经收到该登记Worker回调、本次回合仍显示运行且尚未确认最终输出结束时/);
+  assert.match(lifecycle, /随后只再定点读取一次/);
+  assert.match(lifecycle, /不能据旧的运行标记声称Worker仍在执行/);
   assert.match(pm, /按收口reference只执行一次`worker-result\.list`/);
   assert.match(pm, /该来源不做终态事务/);
   assert.match(pm, /无回执，禁止ack/);

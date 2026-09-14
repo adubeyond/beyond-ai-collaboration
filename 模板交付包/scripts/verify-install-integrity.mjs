@@ -231,8 +231,10 @@ function validateWorkerPolicy(text, label) {
   }
   const policy = parseJson(encoded, `${label}的Worker运行策略`);
   if (!policy) return;
-  if (policy.schemaVersion !== 1 || !["platform-default", "beyond-worker-matrix-v1"].includes(policy.mode)
-    || policy.scope !== "new-formal-worker" || typeof policy.confirmed !== "boolean") {
+  const expectedScope = policy.mode === "beyond-worker-sweetspots-v2"
+    ? "formal-worker-stages" : "new-formal-worker";
+  if (policy.schemaVersion !== 1 || !["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2"].includes(policy.mode)
+    || policy.scope !== expectedScope || typeof policy.confirmed !== "boolean") {
     errors.push(`${label}的Worker运行策略字段无效`);
   }
   if (policy.confirmed && (!policy.approvedBy || !policy.approvedAt || Number.isNaN(Date.parse(policy.approvedAt)))) {

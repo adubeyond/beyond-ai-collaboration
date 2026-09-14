@@ -251,7 +251,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "PM keeps the workbench as a dashboard",
-    value: "当前工作台是PM的团队仪表盘，不是业务执行许可证、过程日志或Git真值副本",
+    value: "工作台是PM的仪表盘，不是业务执行许可证、过程日志或Git真值副本",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
@@ -456,7 +456,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/task-design/SKILL.md",
     label: "PM uses design only for the business task contract",
-    value: "PM只用下述轻量模式形成业务任务契约",
+    value: "PM轻量任务设计只进入任务包，不形成项目文档",
   },
   {
     path: "模板交付包/skills/task-design/SKILL.md",
@@ -486,7 +486,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/task-dev/SKILL.md",
     label: "PM does not execute development",
-    value: "PM不得读取本 Skill并直接实现",
+    value: "不因使用本方法而接替Worker实施",
   },
   {
     path: "模板交付包/skills/task-dev/SKILL.md",
@@ -551,12 +551,12 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/task-test/SKILL.md",
     label: "PM does not execute complete testing",
-    value: "PM不得读取本 Skill并直接运行完整测试",
+    value: "不因使用本方法而接替Worker运行完整测试",
   },
   {
     path: "模板交付包/skills/task-test/SKILL.md",
     label: "local development with existing tests does not select the testing skill",
-    value: "清晰局部开发任务附带运行现有测试时由 task-dev 直接完成，不单独触发本 Skill",
+    value: "清晰局部开发附带验证留在task-dev",
   },
   {
     path: "模板交付包/AGENTS.md",

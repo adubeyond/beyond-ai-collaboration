@@ -119,6 +119,26 @@ function inspectWorkbench(config, rawInput) {
   const recovery = store.recoveryStatus();
   const records = pending.records.map((receipt) => {
     const activeTask = state.tasks?.[receipt.taskId] ?? null;
+    const closureId = `close-${receipt.receiptId}`;
+    const closure = state.operations?.[closureId];
+    const closureTransaction = workbenchTransaction(config, closureId);
+    const closureHistory = closureTransaction?.kind === 'closed' && closureTransaction.phase === 'completed'
+      ? store.history(closureTransaction.completedAt.slice(0, 7)).records
+        .find((record) => record.operationId === closureId) : null;
+    const cancelled = closureHistory?.cancelledReceipt;
+    const closedReceiptMatches = Boolean(!activeTask && closureTransaction?.kind === 'closed'
+      && closureTransaction.phase === 'completed'
+      && (!closure || (closure.inputDigest === closureTransaction.inputDigest
+        && isDeepStrictEqual(closure.output, closureTransaction.output)
+        && isDeepStrictEqual(closureHistory, closure.historyRecord)))
+      && closureTransaction.output?.status === '已关闭'
+      && closureTransaction.output.taskId === receipt.taskId
+      && closureHistory?.taskId === receipt.taskId && closureHistory.status === '已关闭'
+      && closureHistory.worker === closureTransaction.output.worker
+      && (!receipt.workerThreadId || receipt.workerThreadId === closureHistory.worker)
+      && closureHistory.completedAt === closureTransaction.completedAt
+      && isDeepStrictEqual(cancelled, receipt)
+    );
     const operationKind = receipt.businessState === '已完成' ? 'accept' : 'pause';
     const operationId = `${operationKind}-${receipt.receiptId}`;
     const operation = state.operations?.[operationId] ?? null;
@@ -140,6 +160,11 @@ function inspectWorkbench(config, rawInput) {
     let disposition = 'review-active-task';
     let reason = 'active-task-and-pending-receipt';
 
+    if (closedReceiptMatches) {
+      return { ...receipt, activeStatus: null, registeredWorker: closureTransaction.output.worker,
+        expectedOperationId: closureId, disposition: 'ack-committed-receipt',
+        reason: 'owner-closed-task-with-preserved-receipt' };
+    }
     if (transaction && transaction.phase !== 'completed') {
       disposition = 'preserve-conflict';
       reason = 'matching-workbench-transaction-incomplete';
@@ -216,10 +241,29 @@ function execute(action, request, config) {
   if (action === 'worker-result.ack') return workerResults(config).acknowledge(object(request.input, 'Worker result receipt acknowledgement'));
   if (action === 'workbench.close') {
     const input = object(request.input, 'task closure');
+    if ('cancelledReceipt' in input) throw new Error('cancelledReceipt is supplied only by the runtime');
     const projectId = nonEmpty(input.projectId, 'projectId');
     projectIdentity(config).validateControlProject(projectId);
     const pending = workerResults(config).list({ projectId, taskId: nonEmpty(input.taskId, 'taskId') });
-    if (pending.count !== 0) throw new Error('task closure requires zero pending Worker result receipts');
+    if (input.pendingReceiptId !== undefined) {
+      const receiptId = nonEmpty(input.pendingReceiptId, 'pendingReceiptId');
+      if (input.operationId !== `close-${receiptId}`) throw new Error('pending closure operationId must be close-<receiptId>');
+      // Preserve the actual result in the close transaction, never accept it as completed work.
+      // After ack, a retry reconstructs the same input from durable history.
+      const store = workbench(config);
+      const saved = pending.count === 0 && typeof input.closedAt === 'string'
+        ? store.history(input.closedAt.slice(0, 7)).records
+          .find((record) => record.operationId === input.operationId && record.status === '已关闭')?.cancelledReceipt
+        : null;
+      const receipt = pending.records[0] ?? saved;
+      if (!receipt || receipt.receiptId !== receiptId || receipt.projectId !== projectId
+        || receipt.taskId !== input.taskId || receipt.sourceThreadId !== input.closedBy
+        || (receipt.workerThreadId && receipt.workerThreadId !== input.worker)) {
+        throw new Error('pending closure receipt identity mismatch');
+      }
+      return store.closeTask({ ...input, cancelledReceipt: receipt });
+    }
+    if (pending.count !== 0) throw new Error('task closure requires pendingReceiptId for explicit cancellation with a pending result');
     return workbench(config).closeTask(input);
   }
   const store = workbench(config);
@@ -230,8 +274,11 @@ function execute(action, request, config) {
   if (action === 'workbench.accept') return store.consumeAcceptedResult(object(request.input, 'Worker final acceptance'));
   if (action === 'workbench.recover') return store.recover();
   const input = object(request.input, 'pause acceptance');
-  if (input.businessState !== '已暂停' || input.status !== '已暂停') {
-    throw new Error('pause action requires a paused Worker final');
+  if (input.businessState !== '已暂停') {
+    throw new Error('workbench.pause input.businessState must be 已暂停; this is a request field error, not a Worker final lookup failure');
+  }
+  if (input.status !== '已暂停') {
+    throw new Error('workbench.pause input.status must be 已暂停 (in addition to businessState); this is a request field error, not a Worker final lookup failure. Use the task update fields operationId, taskId, expectedStatus, progress, pause, result and updatedAt (ISO timestamp)');
   }
   return store.updateTask(input);
 }

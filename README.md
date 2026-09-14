@@ -7,11 +7,11 @@
 > **Beyond Chat. Build Reality.**
 > Help Codex finish real project outcomes instead of stopping at answers.
 
-BEYOND is an open-source AI engineering collaboration system for **local Codex Desktop projects**. One PM governs the main line and acceptance, each Worker continuously owns one business result, and durable project facts, authorization boundaries, current evidence, and task state return to recoverable project-owned sources.
+BEYOND is an open-source AI engineering collaboration system for **local Codex Desktop projects**. One PM can manage the whole project, or several PMs can own explicit scopes while understanding the overall objective. Each Worker continuously owns one business result, with durable project facts, authorization boundaries, evidence, and task state kept in recoverable project-owned sources.
 
 It is built for people already using Codex on real repositories who are tired of repeated context loss, finished Workers that never return to the PM, stage-heavy workflows that require constant “continue” prompts, ambiguous claims such as “tests passed” versus “released,” and conflicting writes across parallel tasks.
 
-[Download BEYOND v3.2.5](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.5) · [Gitee mirror](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90-second real case](docs/en/real-case-and-90-second-demo.md) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [3.2.5 Upgrade Guide](docs/en/releases/v3.2.5.md) · [Architecture](docs/en/architecture.md)
+[Download BEYOND v3.2.6](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.6) · [Gitee mirror](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90-second real case](docs/en/real-case-and-90-second-demo.md) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [3.2.6 Upgrade Guide](docs/en/releases/v3.2.6.md) · [Architecture](docs/en/architecture.md)
 
 ## What BEYOND changes
 
@@ -24,7 +24,7 @@ It is built for people already using Codex on real repositories who are tired of
 | “Tests passed,” “may commit,” and “may release” collapse into one permission | Files, Git, network, servers, data, and production remain separate evidence and authorization domains |
 | Parallel tasks overwrite one another or close twice | The PM registers one owner and write boundary per result; acceptance and archival are idempotent |
 
-## Core capabilities in 3.2.5
+## Core capabilities in 3.2.6
 
 - **Same-turn multi-result dispatch:** when one explicit instruction approves several independent results, the PM creates and registers each without waiting for or polling Workers between them.
 - **Control-root isolation:** terminal runtime resolution stays with the current project-root mapping; an unregistered project ID is rejected before pending data can be written.
@@ -53,14 +53,14 @@ flowchart LR
     PM --> S["Acceptance · archive · reusable facts"]
 ```
 
-The PM does not become the developer and does not continuously poll Workers for control. After all business actions finish, a Worker freezes its final, stores one short-lived receipt, performs one lightweight callback as its last tool call, and ends. The awakened PM scans registered tasks and pending receipts, verifies the evidence, and closes the result idempotently.
+The PM understands objectives, analyzes problems, designs tasks, and corrects course rather than merely forwarding work or continuously polling Workers. A Worker continuously performs authorized work; if its execution turn ends before the task is done, it reports the remaining result so the PM can guide the same Worker within the existing authorization. On completion or genuine pause, the Worker freezes its final, stores a short-lived receipt, and sends one callback. The PM verifies that the current turn has ended and checks the formal result and evidence before closeout. A callback alone does not prove that the Worker has finished.
 
 ## Start in three steps
 
 ### 1. Download the official release
 
-- [BEYOND-3.2.4.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.5/BEYOND-3.2.4.zip)
-- [BEYOND-3.2.4.zip.sha256 (optional checksum)](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.5/BEYOND-3.2.4.zip.sha256)
+- [BEYOND-3.2.6-R3.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.6/BEYOND-3.2.6-R3.zip)
+- [BEYOND-3.2.6-R3.zip.sha256 (optional checksum)](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.6/BEYOND-3.2.6-R3.zip.sha256)
 
 The ZIP is sufficient for installation. A missing or unavailable `.sha256` file does not block installation; if a checksum file is supplied and does not match, stop. See the [Installation, Upgrade, and Project Initialization Guide](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) for exact commands.
 
@@ -70,7 +70,7 @@ Open a new ordinary Codex task in the target project and send this prompt withou
 
 ```text
 This is BEYOND installation maintenance. Do not create a PM, Worker, or business task.
-Use the verified official BEYOND 3.2.4 package I downloaded to install or upgrade this project's beyond-control directory and six global Skills.
+Use the verified official BEYOND 3.2.6 package I downloaded to install or upgrade this project's beyond-control directory and six global Skills.
 Create a precise backup first. Preserve native project rules and real content under local, projects, and shared; never replace them with empty templates.
 Fuse the project entry, run installation verification, then stop and wait for me to restart Codex. Do not start, resume, or modify business tasks.
 ```
@@ -83,7 +83,7 @@ task-design      task-dev
 task-test        task-ops
 ```
 
-BEYOND 3.2.4 does not install an identity Hook, notify branch, daemon, or extra Codex CLI.
+BEYOND 3.2.6 does not install an identity Hook, notify branch, daemon, or extra Codex CLI.
 
 ### 3. Restart and adopt the project
 
@@ -135,9 +135,10 @@ It is not currently a good fit for:
 
 ## Current boundaries
 
-- The current stable release is `v3.2.5`, primarily for local Codex Desktop projects.
+- The current stable release is `v3.2.6`, primarily for local Codex Desktop projects.
 - Standard installation and operation have been validated in real Windows projects; public checks also cover package contents, installation structure, and the minimal fixture.
 - Task creation, callbacks, and persistent permissions vary across platforms. Evidence from one platform is not a universal compatibility claim.
+- This release adds a read-only local fallback for completed tasks whose final text is unavailable through the platform. It does not guarantee compatibility with every host version or eliminate long-context goal drift.
 - BEYOND collects no installation telemetry. GitHub Release download counts measure release-asset downloads only, not every installation or active user.
 
 ## Documentation
@@ -148,7 +149,7 @@ It is not currently a good fit for:
 | Install, upgrade, or roll back | [Installation, Upgrade, and Project Initialization](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) |
 | Try a clean fixture | [Quick Start](docs/en/quick-start.md) |
 | Understand PM, Worker, documents, and runtime | [Architecture](docs/en/architecture.md) |
-| Review 3.2.4 changes | [Upgrade Guide](docs/en/releases/v3.2.5.md) · [CHANGELOG](CHANGELOG.md) |
+| Review 3.2.6 changes | [Upgrade Guide](docs/en/releases/v3.2.6.md) · [CHANGELOG](CHANGELOG.md) |
 | Inspect the control repository | [Template Package](模板交付包/README.md) |
 | Report a problem or propose an improvement | [Issues](https://github.com/adubeyond/beyond-ai-collaboration/issues) · [Contributing](CONTRIBUTING.en.md) |
 | Report a vulnerability privately | [Security Policy](SECURITY.en.md) |

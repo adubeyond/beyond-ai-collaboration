@@ -3,13 +3,16 @@ import {
   cpSync,
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const scratch = mkdtempSync(join(tmpdir(), "beyond-worker-policy-"));
@@ -17,6 +20,18 @@ const project = join(scratch, "legacy-project");
 const control = join(project, "beyond-control");
 const errors = [];
 let passed = 0;
+function snapshot(root) {
+  const out = {};
+  function visit(directory, prefix = "") {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const key = `${prefix}${entry.name}`;
+      if (entry.isDirectory()) { out[`${key}/`] = "directory"; visit(join(directory, entry.name), `${key}/`); }
+      else out[key] = createHash("sha256").update(readFileSync(join(directory, entry.name))).digest("hex");
+    }
+  }
+  visit(root);
+  return JSON.stringify(out);
+}
 
 function check(name, condition, detail = "") {
   if (condition) passed += 1;
@@ -42,6 +57,9 @@ function json(args, expectedStatus = 0) {
 }
 
 try {
+  const entryText = readFileSync(join(repositoryRoot, "模板交付包", "AGENTS.md"), "utf8");
+  check("根入口不把所有已批准策略限制为仅新建", !entryText.includes("只适用于当前项目新建Worker"));
+  check("根入口将策略及批准范围交给唯一项目所有者", entryText.includes("运行策略及其适用范围由项目总览受管小节唯一承载"));
   cpSync(join(repositoryRoot, "examples", "minimal-project"), project, { recursive: true });
   cpSync(join(repositoryRoot, "模板交付包"), control, { recursive: true });
   writeFileSync(join(project, "AGENTS.md"), `# 原项目规则
@@ -97,6 +115,10 @@ try {
   }
   check("show与resolve不改写项目策略", readFileSync(overviewPath, "utf8") === overviewBeforeResolve);
   check("策略仍只作用于新建正式Worker", shown.policy.scope === "new-formal-worker");
+  const stageArgs = ["worker-policy", "--action", "resolve-stage", "--project-id", projectId];
+  const legacyStage = json([...stageArgs, "--task-kind", "design-analysis"]).value;
+  check("旧v1批准不扩张为任务内切换", legacyStage.decision === "keep-current-worker-settings" && Object.keys(legacyStage.continuationParameters).length === 0);
+  check("旧v1不偷偷使用v2难题映射", command(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", "hard-analysis"], 2).output.includes("当前Worker策略不包含"));
 
   const migrated = json([
     "install-project-entry", "--project-root", project, "--confirm-fusion", "yes",
@@ -134,6 +156,65 @@ try {
   check("未知策略拒绝且不改文件", invalidMode.output.includes("Worker运行策略无效") && readFileSync(overviewPath, "utf8") === beforeInvalid, invalidMode.output);
   const invalidKind = command(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", "unknown"], 2);
   check("未知任务性质拒绝默认猜测", invalidKind.output.includes("Worker任务性质无效"), invalidKind.output);
+
+  const defaultStage = json([...stageArgs, "--task-kind", "bulk-structured"]).value;
+  check("平台默认续接不重置原Worker", defaultStage.decision === "keep-current-worker-settings" && Object.keys(defaultStage.continuationParameters).length === 0);
+  const v2Args = ["worker-policy", "--action", "set", "--project-id", projectId, "--mode", "beyond-worker-sweetspots-v2"];
+  check("v2没有批准依据不生效", command(v2Args, 2).output.includes("明确批准依据") && readFileSync(overviewPath, "utf8") === beforeInvalid);
+  const legacyIntro = "本节记录当前项目的新建正式Worker运行策略状态。用户未确认时保持平台默认；任务分类由PM判断，具体模型映射由控制仓固定脚本唯一维护；工作台、任务包和根入口不复制本节。";
+  writeFileSync(overviewPath, readFileSync(overviewPath, "utf8").replace(/本节记录当前项目的Worker运行策略及批准范围。[^\n]+/, legacyIntro) + "\n用户自有说明必须保留。\n");
+  const v2 = json([...v2Args, "--approved-by", "批准新建及同一Worker阶段切换"]).value;
+  check("v2显式登记阶段适用范围", v2.policy.scope === "formal-worker-stages" && v2.policy.confirmed && existsSync(v2.backup));
+  check("升级只刷新旧生成说明不删用户正文", !readFileSync(overviewPath,"utf8").includes(legacyIntro) && readFileSync(overviewPath,"utf8").includes("用户自有说明必须保留。"));
+  const sweetspots = {
+    "design-analysis": { model: "gpt-5.6-sol", thinking: "medium" },
+    "ordinary-engineering": { model: "gpt-5.6-terra", thinking: "medium" },
+    "bulk-structured": { model: "gpt-5.6-luna", thinking: "high" },
+    "hard-analysis": { model: "gpt-6-astra", thinking: "medium" },
+    "complex-high-risk": expected["complex-high-risk"],
+  };
+  const v2BeforeRead = readFileSync(overviewPath, "utf8");
+  const v2Show = json(["worker-policy", "--action", "show", "--project-id", projectId]).value;
+  check("展示新旧映射和范围", JSON.stringify(v2Show.choices["beyond-worker-matrix-v1"]) === JSON.stringify(expected)
+    && JSON.stringify(v2Show.choices["beyond-worker-sweetspots-v2"]) === JSON.stringify(sweetspots)
+    && v2Show.choiceScopes["beyond-worker-sweetspots-v2"] === "formal-worker-stages");
+  for (const [kind, pair] of Object.entries(sweetspots)) {
+    const creation = json(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", kind]).value;
+    const continuation = json([...stageArgs, "--task-kind", kind]).value;
+    check(`v2 ${kind}新建与续接完整组合相同`, JSON.stringify(creation.createParameters) === JSON.stringify(pair)
+      && JSON.stringify(continuation.continuationParameters) === JSON.stringify(pair));
+    check(`v2 ${kind}续接只包含两个模型字段`, Object.keys(continuation.continuationParameters).sort().join(",") === "model,thinking" && !("createParameters" in continuation));
+  }
+  let currentPair = sweetspots["bulk-structured"];
+  for (const kind of ["design-analysis", "ordinary-engineering", "hard-analysis", "bulk-structured"]) {
+    const params = json([...stageArgs, "--task-kind", kind]).value.continuationParameters;
+    currentPair = { ...currentPair, ...params };
+    check(`往返阶段${kind}不残留上个模型强度`, JSON.stringify(currentPair) === JSON.stringify(sweetspots[kind]));
+  }
+  check("阶段解析不写策略或切换台账", readFileSync(overviewPath, "utf8") === v2BeforeRead);
+  command([...stageArgs, "--task-kind", "unknown"], 2);
+  json(["register-project", "--project-root", project]);
+  check("重复登记保留v2批准及范围", readFileSync(overviewPath, "utf8").includes('"scope":"formal-worker-stages"'));
+  // Corrupt only the isolated fixture: a scope cannot be broadened by changing its label.
+  const validV2 = readFileSync(overviewPath, "utf8");
+  writeFileSync(overviewPath, validV2.replace('"scope":"formal-worker-stages"', '"scope":"new-formal-worker"'));
+  check("不接受v2窄授权冒充阶段授权", command([...stageArgs, "--task-kind", "bulk-structured"], 2).output.includes("字段无效"));
+  writeFileSync(overviewPath, validV2.replace('"confirmed":true', '"confirmed":false'));
+  const unconfirmedStage = json([...stageArgs, "--task-kind", "hard-analysis"]).value;
+  check("未批准v2保持原设置", Object.keys(unconfirmedStage.continuationParameters).length === 0);
+  writeFileSync(overviewPath, validV2);
+  json(["worker-policy", "--action", "set", "--project-id", projectId, "--mode", "beyond-worker-matrix-v1", "--approved-by", "恢复原策略"]);
+  check("可退回v1且停止自动切换", Object.keys(json([...stageArgs, "--task-kind", "hard-analysis"]).value.continuationParameters).length === 0);
+
+  const queryRoot = join(scratch, "query-only");
+  cpSync(join(repositoryRoot, "模板交付包"), queryRoot, { recursive: true });
+  mkdirSync(join(queryRoot, "projects", projectId), { recursive: true });
+  writeFileSync(join(queryRoot, "projects", projectId, "项目总览.md"), validV2);
+  const queryBefore = snapshot(queryRoot);
+  for (const action of ["show", "resolve", "resolve-stage"]) {
+    const result = spawnSync(process.execPath, [join(queryRoot, "scripts/beyond-control.mjs"), "worker-policy", "--action", action, "--project-id", projectId, "--task-kind", "bulk-structured"], { cwd: queryRoot, encoding: "utf8", windowsHide: true });
+    check(`${action}不初始化Git或工作台且不写文件`, result.status === 0 && snapshot(queryRoot) === queryBefore, result.stderr);
+  }
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }

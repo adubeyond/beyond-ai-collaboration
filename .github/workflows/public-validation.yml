@@ -33,6 +33,8 @@ jobs:
         run: node --test scripts/check-project-runtime-routing.mjs
       - name: Validate terminal receipts
         run: node --test scripts/check-worker-result-receipts.mjs
+      - name: Validate exact local final recovery
+        run: node scripts/check-local-worker-final.mjs
       - name: Validate existing-project adoption
         run: node scripts/check-existing-project-adoption.mjs
       - name: Validate install integrity

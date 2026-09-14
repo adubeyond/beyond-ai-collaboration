@@ -1,7 +1,7 @@
 interface:
   display_name: "架构/设计"
   short_description: "收敛业务任务契约、架构与落地路径"
-  default_prompt: "$task-design：PM只把短提示和当前事实收敛成紧凑业务任务契约，不做技术设计；Worker或基础智能体用清楚的业务语言说明实现、测试和发布/回退路径。复杂设计才写入唯一活动文档，不把设计写成已经开发或发布。"
+  default_prompt: "$task-design：PM把短提示和当前事实收敛成紧凑业务任务契约；Worker或基础智能体用清楚的业务语言说明实现、测试和发布/回退路径。复杂设计才写入唯一活动文档，不把设计写成已经开发或发布。"
 
 policy:
   allow_implicit_invocation: true

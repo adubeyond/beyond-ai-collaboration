@@ -121,7 +121,7 @@ test('canonical project route accepts a single-repository or non-Git project roo
   assert.equal(pendingCount(f.controlRoot), 2);
 });
 
-test('workbench.close rejects pending results and archives only an explicitly authorized stopped task', () => {
+test('workbench.close requires explicit pending selection and archives only an authorized stopped task', () => {
   const f = fixture('close');
   const context = { controlRoot: f.controlRoot, executionRoot: f.projectRoot };
   executeRuntimeRequest({
@@ -154,7 +154,14 @@ test('workbench.close rejects pending results and archives only an explicitly au
       closedAt: '2026-08-31T10:05:00+08:00',
     },
   };
-  assert.throws(() => executeRuntimeRequest(blockedCloseRequest, context), /zero pending/);
+  const stateFile = path.join(f.controlRoot, 'local', 'runtime', 'workbench', 'workbench-state.json');
+  const viewFile = path.join(f.controlRoot, 'local', '当前工作台.md');
+  const beforeFiles = [stateFile, viewFile].map(file => fs.readFileSync(file, 'utf8'));
+  const listPending = () => executeRuntimeRequest({ schemaVersion: 1, action: 'worker-result.list', input: { projectId: f.projectId } }, context).result;
+  const beforePending = listPending();
+  assert.throws(() => executeRuntimeRequest(blockedCloseRequest, context), /requires pendingReceiptId for explicit cancellation with a pending result/);
+  assert.deepEqual([stateFile, viewFile].map(file => fs.readFileSync(file, 'utf8')), beforeFiles);
+  assert.deepEqual(listPending(), beforePending);
   executeRuntimeRequest({
     schemaVersion: 1,
     requestId: 'register-clean-close-task',
