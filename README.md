@@ -7,7 +7,9 @@
 > **Beyond Chat. Build Reality.**
 > Help Codex finish real project outcomes instead of stopping at answers.
 
-BEYOND is an open-source AI engineering collaboration system for **local Codex Desktop projects**. One PM can manage the whole project, or several PMs can own explicit scopes while understanding the overall objective. Each Worker continuously owns one business result, with durable project facts, authorization boundaries, evidence, and task state kept in recoverable project-owned sources.
+BEYOND is an open-source AI project collaboration system for **local Codex Desktop projects**. It helps AI organize, advance, and deliver real outcomes beyond a single conversation. PMs understand the project, analyze product and technical questions, plan work, and verify results; Workers continuously perform the design, development, testing, and authorized operations needed for their assigned outcome.
+
+Use one PM for the whole project or several PMs for explicit scopes. With a user-approved model policy, PMs select model-and-reasoning combinations by task, upgrade for harder problems, and downgrade when the remaining work becomes simpler, preserving the same Worker's context and results. Reusable project knowledge, focused context loading, callbacks, pause/resume, and evidence-based acceptance help reduce repeated explanations, manual chasing, and unnecessary rework.
 
 It is built for people already using Codex on real repositories who are tired of repeated context loss, finished Workers that never return to the PM, stage-heavy workflows that require constant “continue” prompts, ambiguous claims such as “tests passed” versus “released,” and conflicting writes across parallel tasks.
 
@@ -26,18 +28,51 @@ It is built for people already using Codex on real repositories who are tired of
 
 ## Core capabilities in 3.2.6
 
-- **Same-turn multi-result dispatch:** when one explicit instruction approves several independent results, the PM creates and registers each without waiting for or polling Workers between them.
-- **Control-root isolation:** terminal runtime resolution stays with the current project-root mapping; an unregistered project ID is rejected before pending data can be written.
-- **Bounded terminal recovery:** native callbacks remain primary; if the host omits a runnable closeout turn, the next natural PM turn performs one bounded pending read for active tasks.
-- **Lightweight installation:** non-Git projects are valid targets, and Windows backups compare the same hidden-aware path, byte, and hash inventory on both sides.
-- **Goal-first execution:** the user's current objective, boundary, and authorization take priority over ordinary BEYOND preferences and stale habits.
-- **Meaningful clarification only:** investigate facts available in code, configuration, Git, tests, and environments; ask the user only when the answer changes the business result.
-- **One result, one Worker:** the PM manages the portfolio while one Worker continuously owns and delivers each business result.
-- **Continuous task execution:** design, development, testing, and operations are methods selected inside one task, not four agents waiting on one another.
-- **Evidence-based conclusions:** generated code is not proof of testing, and passing tests are not proof of commit, release, deployment, or production usability.
-- **Reliable terminal return:** a Worker stores a short-lived receipt matching its formal final before the callback; the PM removes it after the workbench transaction succeeds.
-- **CLI-first, instruction-aware:** use a CLI when capabilities are equivalent; use a browser when the user requests it or the task depends on an existing signed-in session, extension, or visible UI state.
-- **Real authorization boundaries:** current authorization may override an execution preference, but it does not silently expand into credentials, production, shared data, or destructive operations.
+### 1. Select models by task, adjust them by stage
+
+Neither the most expensive model for everything nor a mandatory trial of the cheapest one. Once the user enables the sweet-spot policy, PMs choose a capable combination based on the task, available plan, and delivery evidence.
+
+| Current work | 3.2.6 sweet-spot policy starting point |
+| --- | --- |
+| Rule-bound repetitive processing, batch conversion, structured checks | Luna · high |
+| Clearly planned implementation, repair, integration, local verification | Terra · medium |
+| Requirements tradeoffs, design, architecture, cause analysis | Sol · medium |
+| Demonstrably difficult reasoning beyond ordinary analysis | Astra · medium |
+| Cross-system consistency implementation or direct high-consequence actions | Keep Sol · high; ordinary-work downgrade evidence does not apply |
+
+A task can move between combinations as its work changes: upgrade when routine work encounters a reasoning problem, then downgrade once that problem is resolved and the remaining work is clear. Changes may be gradual or go directly to a justified combination; there is no requirement to exhaust every lower tier. They occur at normal continuation points after the original Worker's turn ends, preserving its task, directory, results, and context rather than interrupting work or creating another Worker.
+
+**Priority: correct, complete delivery; total completion time; then allowance cost.** Cost includes failures and rework, not just one call. These are tested starting points, not officially optimal settings or a guaranteed savings percentage. The policy requires user approval; otherwise platform defaults remain. It does not automatically change the PM's own configuration. User-locked settings, adjustment restrictions, budgets, and platform availability still apply.
+
+### 2. PM judgment, with whole-project or scoped responsibility
+
+PMs interpret objectives using project context, make product and technical judgments, and turn brief requests into an outcome, boundary, and acceptance criteria. When work drifts, they identify the gap and guide the original Worker rather than merely rejecting completion and stopping.
+
+One PM can manage a small project; several PMs can manage explicit scopes with a shared understanding of the overall objective. Independent results run in parallel and real dependencies are coordinated directly. Each result keeps one responsible owner and one formal Worker, without an extra supervisory layer or requiring the user to relay messages.
+
+### 3. One Worker continuously delivers one outcome
+
+Design, development, testing, and operations are methods selected as needed, not four mandatory handoffs. Ordinary errors, repair, and retesting stay in the same task. Checkpoints, rework, and missing evidence keep the same Worker rather than repeatedly creating new conversations.
+
+If an execution turn ends before the task is complete, the Worker reports what is done, what remains, and the next step so the PM can guide continuation within existing authority. Genuine business choices, additional high-risk authorization, unresolved shared conflicts, or unavailable essential resources can require a pause; the original Worker resumes when the condition is resolved.
+
+### 4. Reusable project knowledge, context supplied on demand
+
+Goals, architecture, development conventions, tests, operational entry points, and user corrections have identifiable project sources. New PMs learn the overall project before dispatching work; Workers load facts relevant to their result instead of receiving every project document.
+
+Existing documents can stay in place with registered entry points. Stale documents must be checked against current evidence rather than treated as unquestionable instructions. Missing documentation is not a new gate when safe investigation can establish the needed facts.
+
+### 5. Reporting, verification, and recovery close the loop
+
+On completion or genuine pause, Workers save a short-lived receipt and call their PM back. The PM checks the current turn's completion, formal result, and acceptance evidence before updating the workbench and acknowledging the receipt. Repeated notifications do not duplicate acceptance. User-cancelled work can close with history without pretending it was completed.
+
+Busy PMs handle injected callbacks at safe tool boundaries and then continue the original user request, retaining both foreground and background results. Visibility races have a bounded wait of up to one minute and a strictly scoped, read-only local final fallback. If the host does not start a processing turn, pending results can be checked on the next natural PM turn. These are recovery paths, not a guarantee that every callback will always be processed automatically.
+
+### 6. Lightweight adoption with real boundaries
+
+Project entry files, six Skills, and local control scripts work without a new daemon, Hook, or second background scheduler. Non-Git projects, single repositories, multiple repositories, and platform-provided worktrees are supported; project identity and execution location are verified separately to prevent cross-project writes.
+
+Current explicit goals and authorization override ordinary workflow preferences. Tools follow the actual task rather than making either CLI or browser the only route; permission to edit code does not imply permission to change production. Installation replaces manifest-owned product content while preserving project knowledge and runtime state. External checksum files are optional, but a supplied mismatch still requires stopping.
 
 ## How it works
 
