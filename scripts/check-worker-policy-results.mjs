@@ -206,10 +206,82 @@ try {
   json(["worker-policy", "--action", "set", "--project-id", projectId, "--mode", "beyond-worker-matrix-v1", "--approved-by", "恢复原策略"]);
   check("可退回v1且停止自动切换", Object.keys(json([...stageArgs, "--task-kind", "hard-analysis"]).value.continuationParameters).length === 0);
 
+  const resolveArgs = ["worker-policy", "--action", "resolve", "--project-id", projectId];
+  const chosen = ["--model", "gpt-6-luna", "--thinking", "max"];
+  check("旧批准不能借显式选档越权", command([...resolveArgs, "--task-kind", "bulk-structured", ...chosen], 2).output.includes("仅适用于已批准"));
+  const v3Args = ["worker-policy", "--action", "set", "--project-id", projectId, "--mode", "beyond-worker-gpt6-v3"];
+  const beforeV3 = snapshot(control);
+  command(v3Args, 2);
+  check("v3缺批准不写任何文件", snapshot(control) === beforeV3);
+  const v3 = json([...v3Args, "--approved-by", "老板批准GPT-6模型与强度自主选择及同线程调整"]).value;
+  check("v3批准可恢复且包含续接范围", existsSync(v3.backup) && v3.policy.scope === "formal-worker-stages");
+  const defaultsV3 = {
+    "design-analysis": { model: "gpt-6-sol", thinking: "high" },
+    "ordinary-engineering": { model: "gpt-6-sol", thinking: "high" },
+    "bulk-structured": { model: "gpt-6-luna", thinking: "high" },
+    "hard-analysis": { model: "gpt-6-astra", thinking: "low" },
+    "complex-high-risk": { model: "gpt-6-sol", thinking: "high" },
+  };
+  const optionsV3 = {
+    "gpt-6-luna": ["high", "max"],
+    "gpt-6-sol": ["high", "xhigh", "max", "ultra"],
+    "gpt-6-astra": ["low", "ultra"],
+  };
+  const v3Snapshot = snapshot(control);
+  const showV3 = json(["worker-policy", "--action", "show", "--project-id", projectId]).value;
+  check("v3展示唯一候选及推荐而不改旧表", showV3.recommendedMode === "beyond-worker-gpt6-v3"
+    && JSON.stringify(showV3.selectionOptions["beyond-worker-gpt6-v3"]) === JSON.stringify(optionsV3)
+    && JSON.stringify(showV3.choices["beyond-worker-gpt6-v3"]) === JSON.stringify(defaultsV3)
+    && JSON.stringify(showV3.choices["beyond-worker-matrix-v1"]) === JSON.stringify(expected)
+    && JSON.stringify(showV3.choices["beyond-worker-sweetspots-v2"]) === JSON.stringify(sweetspots));
+  for (const [kind, pair] of Object.entries(defaultsV3)) {
+    for (const [args, field] of [[resolveArgs, "createParameters"], [stageArgs, "continuationParameters"]]) {
+      check(`v3 ${kind} ${field}默认完整组合`, JSON.stringify(json([...args, "--task-kind", kind]).value[field]) === JSON.stringify(pair));
+    }
+  }
+  for (const [model, efforts] of Object.entries(optionsV3)) {
+    for (const thinking of efforts) {
+      for (const [args, field] of [[resolveArgs, "createParameters"], [stageArgs, "continuationParameters"]]) {
+        const value = json([...args, "--task-kind", "ordinary-engineering", "--model", model, "--thinking", thinking]).value;
+        check(`PM选择 ${model}/${thinking} ${field}原样通过`, JSON.stringify(value[field]) === JSON.stringify({ model, thinking }));
+      }
+    }
+  }
+  for (const invalid of [
+    ["--model", "gpt-6-luna"], ["--thinking", "max"], ["--model"], ["--thinking"],
+    ["--model", "gpt-5.6-terra", "--thinking", "high"],
+    ["--model", "gpt-5.6-luna", "--thinking", "high"],
+    ["--model", "gpt-6-luna", "--thinking", "xhigh"],
+    ["--model", "gpt-6-luna", "--thinking", "ultra"],
+    ["--model", "gpt-6-sol", "--thinking", "low"],
+    ["--model", "gpt-6-astra", "--thinking", "medium"],
+    ["--model", "__proto__", "--thinking", "high"],
+  ]) {
+    check(`拒绝不成对或非候选组合 ${invalid.join(" ")}`, command([...stageArgs, "--task-kind", "bulk-structured", ...invalid], 2).output.includes("须成对提供"));
+  }
+  check("v3所有解析与拒绝均无写入", snapshot(control) === v3Snapshot);
+  let previous = { model: "gpt-6-astra", thinking: "ultra" };
+  for (const pair of [defaultsV3["bulk-structured"], defaultsV3["ordinary-engineering"], defaultsV3["hard-analysis"], { model: "gpt-6-luna", thinking: "max" }]) {
+    previous = { ...previous, ...json([...stageArgs, "--task-kind", "ordinary-engineering", "--model", pair.model, "--thinking", pair.thinking]).value.continuationParameters };
+    check(`v3往返不继承旧参数 ${pair.model}/${pair.thinking}`, JSON.stringify(previous) === JSON.stringify(pair));
+  }
+  json(["register-project", "--project-root", project]);
+  const validV3 = readFileSync(overviewPath, "utf8");
+  check("重复登记不丢v3批准", validV3.includes('"mode":"beyond-worker-gpt6-v3"') && validV3.includes('"confirmed":true'));
+  writeFileSync(overviewPath, validV3.replace('"confirmed":true', '"confirmed":false'));
+  for (const [args, field] of [[resolveArgs, "createParameters"], [stageArgs, "continuationParameters"]]) {
+    check(`未批准v3不覆盖 ${field}`, Object.keys(json([...args, "--task-kind", "bulk-structured"]).value[field]).length === 0);
+    command([...args, "--task-kind", "bulk-structured", ...chosen], 2);
+  }
+  writeFileSync(overviewPath, validV3);
+  json(["worker-policy", "--action", "set", "--project-id", projectId, "--mode", "platform-default", "--approved-by", "退出v3"]);
+  check("v3可退回平台默认", Object.keys(json([...stageArgs, "--task-kind", "bulk-structured"]).value.continuationParameters).length === 0);
+  command([...resolveArgs, "--task-kind", "bulk-structured", ...chosen], 2);
+
   const queryRoot = join(scratch, "query-only");
   cpSync(join(repositoryRoot, "模板交付包"), queryRoot, { recursive: true });
   mkdirSync(join(queryRoot, "projects", projectId), { recursive: true });
-  writeFileSync(join(queryRoot, "projects", projectId, "项目总览.md"), validV2);
+  writeFileSync(join(queryRoot, "projects", projectId, "项目总览.md"), validV3);
   const queryBefore = snapshot(queryRoot);
   for (const action of ["show", "resolve", "resolve-stage"]) {
     const result = spawnSync(process.execPath, [join(queryRoot, "scripts/beyond-control.mjs"), "worker-policy", "--action", action, "--project-id", projectId, "--task-kind", "bulk-structured"], { cwd: queryRoot, encoding: "utf8", windowsHide: true });

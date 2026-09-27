@@ -231,13 +231,14 @@ function validateWorkerPolicy(text, label) {
   }
   const policy = parseJson(encoded, `${label}的Worker运行策略`);
   if (!policy) return;
-  const expectedScope = policy.mode === "beyond-worker-sweetspots-v2"
+  const expectedScope = ["beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3"].includes(policy.mode)
     ? "formal-worker-stages" : "new-formal-worker";
-  if (policy.schemaVersion !== 1 || !["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2"].includes(policy.mode)
+  if (policy.schemaVersion !== 1 || !["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3"].includes(policy.mode)
     || policy.scope !== expectedScope || typeof policy.confirmed !== "boolean") {
     errors.push(`${label}的Worker运行策略字段无效`);
   }
-  if (policy.confirmed && (!policy.approvedBy || !policy.approvedAt || Number.isNaN(Date.parse(policy.approvedAt)))) {
+  if (policy.confirmed && (typeof policy.approvedBy !== "string" || !policy.approvedBy.trim()
+    || typeof policy.approvedAt !== "string" || !policy.approvedAt.trim() || Number.isNaN(Date.parse(policy.approvedAt)))) {
     errors.push(`${label}的已确认Worker运行策略缺少有效批准依据或时间`);
   }
 }

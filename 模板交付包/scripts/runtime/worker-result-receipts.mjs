@@ -94,6 +94,32 @@ function retryTransientFileOperation(operation, attempts = 20) {
   return undefined;
 }
 
+function processAlive(pid) {
+  try { process.kill(pid, 0); return true; }
+  catch (error) { return error?.code !== 'ESRCH'; }
+}
+
+function removeEmptyLockDirectory(directory) {
+  try { retryTransientFileOperation(() => {
+    try { fs.rmdirSync(directory); }
+    catch (error) {
+      // Windows may report EPERM for a nonempty directory, rather than
+      // ENOTEMPTY. A newly acquired owner must be left untouched in either case.
+      if (['EPERM', 'EACCES'].includes(error?.code) && fs.readdirSync(directory).length > 0) return;
+      throw error;
+    }
+  }); }
+  catch (error) { if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error?.code)) throw error; }
+}
+
+function removeLockOwner(directory, ownerName) {
+  try { retryTransientFileOperation(() => fs.unlinkSync(path.join(directory, ownerName))); }
+  catch (error) { if (error?.code !== 'ENOENT') throw error; }
+  // Never recursively remove a lock: another process may already have acquired
+  // this name with its own, different owner file.
+  removeEmptyLockDirectory(directory);
+}
+
 export class WorkerResultReceiptStore {
   constructor({ runtimeRoot, readOnly = false }) {
     this.runtimeRoot = path.resolve(text(runtimeRoot, 'runtimeRoot', 4096));
@@ -110,6 +136,53 @@ export class WorkerResultReceiptStore {
     return path.join(this.pendingRoot, `${digest(identifier(taskId, 'taskId'))}.json`);
   }
 
+  #withReceiptLock(projectId, taskId, action) {
+    const lockRoot = path.join(this.runtimeRoot, 'locks');
+    fs.mkdirSync(lockRoot, { recursive: true });
+    const name = path.basename(this.receiptPath(projectId, taskId), '.json');
+    const nonce = crypto.randomUUID();
+    const ownerName = `owner-${process.pid}-${nonce}.json`;
+    const candidate = path.join(lockRoot, `${name}.candidate-${nonce}`);
+    const lock = path.join(lockRoot, `${name}.lock`);
+    fs.mkdirSync(candidate);
+    let acquired = false;
+    try {
+      fs.writeFileSync(path.join(candidate, ownerName), JSON.stringify({ pid: process.pid, nonce }), { flag: 'wx' });
+      const started = Date.now();
+      while (!acquired) {
+        if (Date.now() - started >= 5_000) throw new Error('Worker result receipt lock timeout');
+        try {
+          // Publish the nonempty owner directory atomically. A releaser can
+          // remove only its unique file and an empty directory, never our lock.
+          fs.renameSync(candidate, lock);
+          acquired = true;
+        } catch (error) {
+          if (!['EEXIST', 'ENOTEMPTY', 'EPERM', 'EACCES'].includes(error?.code)) throw error;
+          let owners;
+          try { owners = fs.readdirSync(lock); }
+          catch (readError) { if (readError?.code === 'ENOENT') continue; throw readError; }
+          if (owners.length === 0) {
+            removeEmptyLockDirectory(lock);
+          } else if (owners.length === 1 && /^owner-\d+-[0-9a-f-]+\.json$/i.test(owners[0])) {
+            let owner;
+            try { owner = JSON.parse(fs.readFileSync(path.join(lock, owners[0]), 'utf8')); }
+            catch (readError) { if (readError?.code !== 'ENOENT') throw readError; }
+            if (Number.isInteger(owner?.pid) && owner.pid > 0
+              && owners[0] === `owner-${owner.pid}-${owner.nonce}.json` && !processAlive(owner.pid)) {
+              removeLockOwner(lock, owners[0]);
+            }
+          }
+          // Age alone cannot make a live owner stale (slow I/O or scheduling
+          // pauses must not allow overlapping writers).
+          waitForFileUnlock();
+        }
+      }
+      return action();
+    } finally {
+      removeLockOwner(acquired ? lock : candidate, ownerName);
+    }
+  }
+
   migratePendingLayout() {
     if (!fs.existsSync(this.pendingRoot)) return;
     const files = fs.readdirSync(this.pendingRoot, { withFileTypes: true })
@@ -120,28 +193,34 @@ export class WorkerResultReceiptStore {
       if (!record) continue;
       const target = this.receiptPath(record.projectId, record.taskId);
       if (path.resolve(file) === path.resolve(target)) continue;
-      try {
-        fs.linkSync(file, target);
-      } catch (error) {
-        if (['EXDEV', 'ENOTSUP', 'EPERM'].includes(error?.code)) {
-          try {
-            retryTransientFileOperation(() => fs.copyFileSync(file, target, fs.constants.COPYFILE_EXCL));
-          } catch (copyError) {
-            if (!['EEXIST', 'ENOENT'].includes(copyError?.code)) throw copyError;
-          }
-        } else if (!['EEXIST', 'ENOENT'].includes(error?.code)) throw error;
-      }
-      const namespaced = this.readPathIfPresent(target);
-      if (!namespaced) {
-        throw new Error(`namespaced Worker result receipt disappeared during migration for ${record.projectId}/${record.taskId}`);
-      }
-      if (namespaced.receiptId !== record.receiptId) {
-        throw new Error(`conflicting legacy and namespaced Worker result receipts for ${record.projectId}/${record.taskId}`);
-      }
-      try { retryTransientFileOperation(() => fs.unlinkSync(file)); }
-      catch (error) {
-        if (error?.code !== 'ENOENT') throw error;
-      }
+      this.#withReceiptLock(record.projectId, record.taskId, () => {
+        // Another reader may have migrated the same legacy file while we waited.
+        const current = this.readPathIfPresent(file);
+        if (!current) return;
+        if (current.receiptId !== record.receiptId) throw new Error('legacy Worker result receipt changed during migration');
+        try {
+          fs.linkSync(file, target);
+        } catch (error) {
+          if (['EXDEV', 'ENOTSUP', 'EPERM'].includes(error?.code)) {
+            try {
+              retryTransientFileOperation(() => fs.copyFileSync(file, target, fs.constants.COPYFILE_EXCL));
+            } catch (copyError) {
+              if (!['EEXIST', 'ENOENT'].includes(copyError?.code)) throw copyError;
+            }
+          } else if (!['EEXIST', 'ENOENT'].includes(error?.code)) throw error;
+        }
+        const namespaced = this.readPathIfPresent(target);
+        if (!namespaced) {
+          throw new Error(`namespaced Worker result receipt disappeared during migration for ${record.projectId}/${record.taskId}`);
+        }
+        if (namespaced.receiptId !== record.receiptId) {
+          throw new Error(`conflicting legacy and namespaced Worker result receipts for ${record.projectId}/${record.taskId}`);
+        }
+        try { retryTransientFileOperation(() => fs.unlinkSync(file)); }
+        catch (error) {
+          if (error?.code !== 'ENOENT') throw error;
+        }
+      });
     }
   }
 
@@ -174,22 +253,24 @@ export class WorkerResultReceiptStore {
     const record = validateInput(raw);
     fs.mkdirSync(this.pendingRoot, { recursive: true });
     this.migratePendingLayout();
-    const target = this.receiptPath(record.projectId, record.taskId);
-    const existing = fs.existsSync(target) ? this.readPath(target) : null;
-    if (existing?.receiptId === record.receiptId) return { mode: 'existing', record: existing };
-    const temporary = `${target}.tmp`;
-    try {
-      if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
-      fs.writeFileSync(temporary, `${JSON.stringify(record, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
-      fs.renameSync(temporary, target);
-    } finally {
-      if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
-    }
-    return {
-      mode: existing ? 'replaced' : 'created',
-      supersededReceiptId: existing?.receiptId ?? null,
-      record,
-    };
+    return this.#withReceiptLock(record.projectId, record.taskId, () => {
+      const target = this.receiptPath(record.projectId, record.taskId);
+      const existing = fs.existsSync(target) ? this.readPath(target) : null;
+      if (existing?.receiptId === record.receiptId) return { mode: 'existing', record: existing };
+      const temporary = `${target}.tmp`;
+      try {
+        if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+        fs.writeFileSync(temporary, `${JSON.stringify(record, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+        fs.renameSync(temporary, target);
+      } finally {
+        if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+      }
+      return {
+        mode: existing ? 'replaced' : 'created',
+        supersededReceiptId: existing?.receiptId ?? null,
+        record,
+      };
+    });
   }
 
   list(raw = {}) {
@@ -202,7 +283,9 @@ export class WorkerResultReceiptStore {
     if (!this.readOnly) this.migratePendingLayout();
     const scanned = fs.readdirSync(this.pendingRoot, { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
-      .map((entry) => this.readPath(path.join(this.pendingRoot, entry.name)))
+      // A concurrent acknowledgement may remove an enumerated receipt.
+      .map((entry) => this.readPathIfPresent(path.join(this.pendingRoot, entry.name)))
+      .filter((record) => record !== null)
       .filter((record) => Object.entries(filters).every(([key, value]) => record[key] === value));
     const records = this.readOnly ? [...scanned.reduce((unique, record) => {
       const key = `${record.projectId}\0${record.taskId}`;
@@ -225,15 +308,17 @@ export class WorkerResultReceiptStore {
     const receiptId = identifier(input.receiptId, 'receiptId');
     const workerThreadId = optionalIdentifier(input.workerThreadId, 'workerThreadId');
     this.migratePendingLayout();
-    const target = this.receiptPath(projectId, taskId);
-    if (!fs.existsSync(target)) throw new Error('pending Worker result receipt not found');
-    const record = this.readPath(target);
-    if (record.projectId !== projectId) throw new Error('Worker result receipt project mismatch');
-    if (record.receiptId !== receiptId) throw new Error('stale acknowledgement cannot remove a newer Worker result receipt');
-    if (workerThreadId && record.workerThreadId && record.workerThreadId !== workerThreadId) {
-      throw new Error('Worker result receipt owner mismatch');
-    }
-    fs.unlinkSync(target);
-    return { acknowledged: receiptId, projectId, taskId, workerThreadId: record.workerThreadId, removed: true };
+    return this.#withReceiptLock(projectId, taskId, () => {
+      const target = this.receiptPath(projectId, taskId);
+      if (!fs.existsSync(target)) throw new Error('pending Worker result receipt not found');
+      const record = this.readPath(target);
+      if (record.projectId !== projectId) throw new Error('Worker result receipt project mismatch');
+      if (record.receiptId !== receiptId) throw new Error('stale acknowledgement cannot remove a newer Worker result receipt');
+      if (workerThreadId && record.workerThreadId && record.workerThreadId !== workerThreadId) {
+        throw new Error('Worker result receipt owner mismatch');
+      }
+      fs.unlinkSync(target);
+      return { acknowledged: receiptId, projectId, taskId, workerThreadId: record.workerThreadId, removed: true };
+    });
   }
 }
