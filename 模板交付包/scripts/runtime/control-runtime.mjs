@@ -143,16 +143,33 @@ function inspectWorkbench(config, rawInput) {
     const operationId = `${operationKind}-${receipt.receiptId}`;
     const operation = state.operations?.[operationId] ?? null;
     const transaction = operationKind === 'accept' ? workbenchTransaction(config, operationId) : null;
-    const historyRecord = transaction?.phase === 'completed' && typeof transaction.completedAt === 'string'
+    const matchingHistory = transaction?.phase === 'completed' && typeof transaction.completedAt === 'string'
       ? store.history(transaction.completedAt.slice(0, 7)).records
-        .find((record) => record.operationId === operationId) ?? null
-      : null;
-    const committedAcceptanceMatches = Boolean(operation && transaction?.phase === 'completed'
-      && operation.inputDigest === transaction.inputDigest
-      && JSON.stringify(operation.output) === JSON.stringify(transaction.output)
-      && isDeepStrictEqual(historyRecord, operation.historyRecord)
+        .filter((record) => record.operationId === operationId)
+      : [];
+    const historyRecord = matchingHistory.length === 1 ? matchingHistory[0] : null;
+    // operations is a bounded cache. A naturally evicted acceptance remains
+    // provable by its completed transaction and unique durable history entry.
+    // If either cache index still names it, however, all cached evidence must agree.
+    const acceptanceStillCached = Object.hasOwn(state.operations ?? {}, operationId)
+      || (state.operationOrder ?? []).includes(operationId);
+    const committedAcceptanceMatches = Boolean(transaction?.phase === 'completed'
+      && transaction.operationId === operationId
+      && transaction.output?.operationId === operationId
+      && transaction.output.archived === true
+      && typeof transaction.inputDigest === 'string' && /^[a-f0-9]{64}$/.test(transaction.inputDigest)
+      && Number.isInteger(transaction.output.stateRevision)
+      && transaction.output.stateRevision > 0 && transaction.output.stateRevision <= state.revision
+      && (!acceptanceStillCached || (operation
+        && operation.inputDigest === transaction.inputDigest
+        && isDeepStrictEqual(operation.output, transaction.output)
+        && isDeepStrictEqual(historyRecord, operation.historyRecord)))
       && historyRecord?.taskId === receipt.taskId
+      && historyRecord.operationId === operationId
       && historyRecord.worker === transaction.output?.worker
+      && typeof historyRecord.worker === 'string' && historyRecord.worker.length > 0
+      && historyRecord.completedAt === transaction.completedAt
+      && Number.isFinite(Date.parse(transaction.completedAt))
       && historyRecord.status === '已完成');
     const workerMatches = !receipt.workerThreadId
       || activeTask?.worker === receipt.workerThreadId

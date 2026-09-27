@@ -33,6 +33,16 @@ jobs:
         run: node --test scripts/check-project-runtime-routing.mjs
       - name: Validate terminal receipts
         run: node --test scripts/check-worker-result-receipts.mjs
+      - name: Validate concurrent receipt replacement and acknowledgement
+        run: node --test scripts/check-receipt-write-concurrency.mjs
+      - name: Validate receipt listing during concurrent acknowledgement
+        run: node --test scripts/check-receipt-list-concurrency.mjs
+      - name: Validate durable acceptance after cache eviction
+        run: node --test scripts/check-accept-receipt-cache-expiry.mjs
+      - name: Validate Worker model policy and approval evidence
+        run: |
+          node scripts/check-worker-policy-results.mjs
+          node scripts/check-worker-policy-approval.mjs
       - name: Validate exact local final recovery
         run: node scripts/check-local-worker-final.mjs
       - name: Validate existing-project adoption

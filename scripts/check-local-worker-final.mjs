@@ -4,6 +4,7 @@ import os from 'node:os';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 const productRoot = path.resolve(process.env.BEYOND_TEST_PRODUCT_ROOT ?? '模板交付包');
 const { readLocalWorkerFinal } = await import(pathToFileURL(path.join(productRoot,'scripts/read-local-worker-final.mjs')));
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-local-final-'));
@@ -48,4 +49,44 @@ const cli = path.join(productRoot,'scripts/read-local-worker-final.mjs');
 const args=Object.entries({'--thread-id':threadId,'--turn-id':turnId,'--expected-cwd':expectedCwd,'--host-id':'local','--turn-status':'completed','--final-unavailable':'yes','--codex-home':scratch}).flat();
 const cliResult=spawnSync(process.execPath,[cli,...args],{encoding:'utf8',windowsHide:true});assert.equal(cliResult.status,0,cliResult.stderr);assert.equal(JSON.parse(cliResult.stdout).finalText,text);results.push({name:'actual CLI returns exact text'});
 const rejected=spawnSync(process.execPath,[cli,...args,'--turn-id',otherTurn],{encoding:'utf8',windowsHide:true});assert.equal(rejected.status,2);results.push({name:'duplicate CLI option rejected'});
+
+// Reproduce the long-lived Worker incident with valid JSONL, not sparse bytes or
+// a mocked stat. Keep the model conversation and production sessions untouched.
+try {
+const fd=fs.openSync(file,'w');
+const historyLine=JSON.stringify({type:'response_item',payload:{type:'message',role:'assistant',content:[{type:'output_text',text:'x'.repeat(65536)}]}})+'\n';
+const block=Buffer.from(historyLine.repeat(16));
+try {
+  fs.writeSync(fd,JSON.stringify(rows[0])+'\n');
+  // The observed long session also contains multi-megabyte compaction records.
+  fs.writeSync(fd,JSON.stringify({type:'compacted',payload:{message:'x'.repeat(3*1024*1024)}})+'\n');
+  for(let i=0;i<512;i++)fs.writeSync(fd,block);
+  fs.writeSync(fd,rows.slice(1).map(r=>JSON.stringify(r)).join('\n')+'\n');
+} finally {fs.closeSync(fd);}
+assert.ok(fs.statSync(file).size>512*1024*1024);
+const digest=async()=>{const hash=createHash('sha256');for await(const b of fs.createReadStream(file))hash.update(b);return hash.digest('hex');};
+const largeBefore=await digest();
+if(process.env.BEYOND_TEST_BASELINE_READER){
+  const baseline=await import(pathToFileURL(path.resolve(process.env.BEYOND_TEST_BASELINE_READER)));
+  assert.equal((await baseline.readLocalWorkerFinal(options)).reason,'session-read-limit');
+  results.push({name:'pre-fix reader reproduces size-limit failure on identical fixture'});
+}
+const largeStarted=performance.now();
+// A whole-file read would exceed this heap; the reader must keep streaming.
+const largeCli=spawnSync(process.execPath,['--max-old-space-size=128',cli,...args],{encoding:'utf8',windowsHide:true,timeout:60000});
+assert.equal(largeCli.status,0,largeCli.stderr);
+const largeResult=JSON.parse(largeCli.stdout);
+assert.equal(largeResult.finalText,text);
+assert.equal(largeResult.finalSha256,createHash('sha256').update(text).digest('hex'));
+assert.equal(largeResult.locator.line,512*16+4);
+assert.equal(await digest(),largeBefore);
+results.push({name:'over 512 MiB current final recovered read-only with 128 MiB heap',bytes:fs.statSync(file).size,elapsedMs:Math.round(performance.now()-largeStarted)});
+const changedRead=readLocalWorkerFinal(options);
+fs.appendFileSync(file,JSON.stringify({type:'event_msg',payload:{type:'task_started',turn_id:otherTurn}})+'\n');
+assert.equal((await changedRead).reason,'session-changed-during-read');
+results.push({name:'large session appended during read rejected'});
+assert.equal((await readLocalWorkerFinal(options)).reason,'turn-superseded-or-missing');
+results.push({name:'large session with newer turn rejects old final'});
+// Only remove the generated large fixture, not its directory or any live record.
+} finally { if(fs.existsSync(file))fs.unlinkSync(file); }
 console.log(JSON.stringify({passed:results.length,results,scratch,liveWrites:false},null,2));

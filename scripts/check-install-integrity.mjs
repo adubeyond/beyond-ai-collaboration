@@ -103,7 +103,7 @@ try {
   const policyOverview = join(controlRoot, "projects", policyProjectId, "项目总览.md");
   const originalOverview = readFileSync(policyOverview, "utf8");
   const policyCli = join(controlRoot, "scripts", "beyond-control.mjs");
-  const modes = ["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2"];
+  const modes = ["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3"];
   function replacePolicy(policy) {
     writeFileSync(policyOverview, originalOverview.replace(
       /(<!-- BEGIN BEYOND WORKER POLICY -->)[\s\S]*?(<!-- END BEYOND WORKER POLICY -->)/,

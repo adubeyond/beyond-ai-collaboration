@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.7] - 2026-09-27
+
+- Add the opt-in GPT-6 Worker policy: PMs select both model and reasoning effort within approved Luna, Sol and Astra combinations; preserve older approvals and explicit user choices.
+- Distinguish the still-finishing callback turn from a genuinely newer running turn, retaining bounded recovery and unfinished foreground requests.
+- Stream large local task records without rejecting an otherwise valid final solely because the session file exceeds 256 MiB; retain identity and completion checks.
+- Serialize receipt replacement and acknowledgement per project/task so an old acknowledgement cannot delete a concurrent replacement; tolerate concurrent deletion during receipt listing without hiding corrupt records or permission errors.
+- Recover acknowledgement from matching durable acceptance transactions and history after the bounded operation cache expires; preserve conflicts.
+- Reject malformed model-policy approval evidence consistently during use and installation verification.
+
+See [release notes](docs/en/releases/v3.2.7.md) and [Chinese release notes](docs/releases/v3.2.7.md).
+
 ## [3.2.6] - 2026-09-14
 
 - Promote the validated R3 artifact unchanged; preserve previous versions and build provenance.

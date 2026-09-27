@@ -13,7 +13,7 @@ BEYOND 是面向 **Codex Desktop 本地项目**的开源 AI 项目协作系统�
 
 它适合已经在用 Codex 做真实开发，但正在被这些问题困扰的人：新对话反复失忆、任务完成后无人收口、阶段过多需要人工续推、测试通过却无法判断能否发布，以及多个任务并行时责任和写入边界混乱。
 
-[下载 BEYOND v3.2.6](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.6) · [Gitee 镜像](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90 秒真实案例](docs/真实案例与90秒演示.md) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [3.2.6 升级说明](docs/releases/v3.2.6.md) · [系统架构](docs/系统架构与运行机制.md)
+[下载 BEYOND v3.2.7](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.7) · [Gitee 镜像](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90 秒真实案例](docs/真实案例与90秒演示.md) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [3.2.7 升级说明](docs/releases/v3.2.7.md) · [系统架构](docs/系统架构与运行机制.md)
 
 ## BEYOND 带来什么
 
@@ -26,21 +26,23 @@ BEYOND 是面向 **Codex Desktop 本地项目**的开源 AI 项目协作系统�
 | 测试通过、允许改文件、允许提交和允许发布被混为一谈 | 文件、Git、网络、服务器、数据和生产权限分别判断 |
 | 多个任务并行时互相覆盖或重复验收 | PM登记唯一Worker和写入边界；同一结果只验收、归档一次 |
 
-## 3.2.6 的核心能力
+## 3.2.7 的核心能力
 
 ### 1. 按任务选模型，按阶段升降档
 
 不是所有工作都用最贵的模型，也不是一律从最低档开始试。用户启用甜品位策略后，PM 根据任务难度、已有方案和交付证据，为执行者选择有把握胜任的组合。
 
-| 当前工作 | 3.2.6 甜品位策略起点 |
+| 当前工作 | 3.2.7 甜品位策略起点 |
 | --- | --- |
-| 规则明确的重复处理、批量转换、结构化核对 | Luna · 高 |
-| 方案清楚的开发、修复、集成和局部核验 | Terra · 中 |
-| 需求取舍、方案设计、架构和原因分析 | Sol · 中 |
-| 有证据表明常规分析不足的综合推理难题 | Astra · 中 |
+| 规则明确的重复处理、批量转换、结构化核对 | GPT-6 Luna · 高 |
+| 方案清楚的开发、修复、集成和局部核验 | GPT-6 Sol · 高 |
+| 需求取舍、方案设计、架构和原因分析 | GPT-6 Sol · 高 |
+| 有证据表明常规分析不足的综合推理难题 | GPT-6 Astra · 轻量 |
 | 跨系统一致性实现或直接执行高后果动作 | 保留 Sol · 高，不套用普通工作降档结论 |
 
 同一任务可以在不同阶段切换组合：重复工作遇到分析难点时升档，难点解决后转为明确实现或重复处理时再降档。可以逐级调整，也可以在证据充分时直接选更合适的档位，不要求把所有低档模型试一遍。切换发生在原执行者回合结束后的正常续接点，不打断正在进行的工作，不新建执行者；任务、目录、成果和上下文保留。
+
+新启用的 `beyond-worker-gpt6-v3` 由 PM 同时选择模型和推理强度：Luna 支持高/极高（`high/max`），Sol 支持高/超高/极高/Ultra（`high/xhigh/max/ultra`），Astra 支持轻量/Ultra（`low/ultra`）。这是 BEYOND 的项目策略范围，不是模型平台的全部选项。旧版已批准的策略继续有效，不会升级后自动替换；用户当轮明确指定的组合优先于平台默认。发送切换参数不等于已证实宿主实际切换。
 
 **优先顺序是完整正确交付、总完成时间、再考虑额度。** 成本包含失败和返工，而不只是单次调用价格。“甜品位”是测试支持的配置起点，不是官方最佳配置或固定节省比例。启用策略需用户批准；默认保留平台设置，不自动改变 PM 自身配置。用户指定的模型、禁止调整和预算限制优先，实际可用组合仍以平台支持为准。
 
@@ -94,8 +96,8 @@ PM负责理解目标、分析问题、设计任务和纠偏，不只是转发任
 
 ### 1. 下载正式版本
 
-- [BEYOND-3.2.6-R3.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.6/BEYOND-3.2.6-R3.zip)
-- [BEYOND-3.2.6-R3.zip.sha256（可选校验文件）](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.6/BEYOND-3.2.6-R3.zip.sha256)
+- [BEYOND-3.2.7.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.7/BEYOND-3.2.7.zip)
+- [BEYOND-3.2.7.zip.sha256（可选校验文件）](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.7/BEYOND-3.2.7.zip.sha256)
 
 ZIP即可安装；`.sha256`缺失或下载失败不阻断安装。若提供了校验文件而哈希不一致，则必须停止。完整命令见[安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md)。
 
@@ -105,7 +107,7 @@ ZIP即可安装；`.sha256`缺失或下载失败不阻断安装。若提供了�
 
 ```text
 这是BEYOND安装维护请求，不建立PM、Worker或业务任务。
-请使用我已下载并验真通过的BEYOND 3.2.6正式发布包，安装或升级当前项目的beyond-control和六个全局Skill。
+请使用我已下载并验真通过的BEYOND 3.2.7正式发布包，安装或升级当前项目的beyond-control和六个全局Skill。
 先精确备份；保留项目原生规则以及local、projects、shared中的真实内容，不用空模板覆盖。
 完成项目入口融合和安装验真后停止，等待我重启Codex。不要启动、恢复或修改业务任务。
 ```
@@ -118,7 +120,7 @@ task-design      task-dev
 task-test        task-ops
 ```
 
-BEYOND 3.2.6不安装身份Hook、notify分支、守护进程或额外Codex CLI。
+BEYOND 3.2.7不安装身份Hook、notify分支、守护进程或额外Codex CLI。
 
 ### 3. 重启并接手项目
 
@@ -170,7 +172,7 @@ $identity-pm
 
 ## 当前边界
 
-- 当前正式版本是`v3.2.6`，主要面向Codex Desktop本地项目。
+- 当前正式版本是`v3.2.7`，主要面向Codex Desktop本地项目。
 - 标准安装与运行路径已在真实Windows项目中验证；公开脚本同时覆盖内容、安装结构和最小示例。
 - 不同平台对任务创建、线程回调和持久权限的支持不同，不能把一个平台的通过结论外推到所有环境。
 - 本版针对已结束但平台正文不可读的本机任务增加只读补读；不保证所有宿主版本兼容，也不宣称彻底解决长上下文中的目标漂移。
@@ -184,7 +186,7 @@ $identity-pm
 | 安装、升级或回退 | [安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md) |
 | 在干净示例中体验 | [快速开始](docs/快速开始.md) |
 | 理解PM、Worker、文档和运行时 | [系统架构与运行机制](docs/系统架构与运行机制.md) |
-| 查看3.2.6变化 | [升级说明](docs/releases/v3.2.6.md) · [CHANGELOG](CHANGELOG.md) |
+| 查看3.2.7变化 | [升级说明](docs/releases/v3.2.7.md) · [CHANGELOG](CHANGELOG.md) |
 | 阅读控制仓结构 | [模板交付包说明](模板交付包/README.md) |
 | 提交问题或改进 | [Issues](https://github.com/adubeyond/beyond-ai-collaboration/issues) · [贡献指南](CONTRIBUTING.md) |
 | 私密报告安全问题 | [安全政策](SECURITY.md) |

@@ -31,7 +31,7 @@ const initializationBegin = "<!-- BEGIN BEYOND PROJECT INITIALIZATION -->";
 const initializationEnd = "<!-- END BEYOND PROJECT INITIALIZATION -->";
 const legacyRuntimeGuardRelative = ".codex/beyond-runtime-guard.mjs";
 const codexHooksRelative = ".codex/hooks.json";
-const workerPolicyModes = new Set(["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2"]);
+const workerPolicyModes = new Set(["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3"]);
 const workerTaskKinds = new Set(["design-analysis", "ordinary-engineering", "bulk-structured", "complex-high-risk", "hard-analysis"]);
 const initializationModes = new Set(["full", "on-demand"]);
 const initializationDecisions = new Set(["migrate", "register", "defer"]);
@@ -60,8 +60,22 @@ const workerSweetspotsV2 = {
   // High-consequence execution has not been covered by the sweet-spot comparison.
   "complex-high-risk": { ...workerMatrixV1["complex-high-risk"] },
 };
+// Version the new selection contract instead of changing previously approved maps.
+const workerGpt6V3 = {
+  "design-analysis": { model: "gpt-6-sol", thinking: "high" },
+  "ordinary-engineering": { model: "gpt-6-sol", thinking: "high" },
+  "bulk-structured": { model: "gpt-6-luna", thinking: "high" },
+  "hard-analysis": { model: "gpt-6-astra", thinking: "low" },
+  "complex-high-risk": { model: "gpt-6-sol", thinking: "high" },
+};
+// Codex task-tool values; these are not API pricing or performance guarantees.
+const workerGpt6Options = {
+  "gpt-6-luna": ["high", "max"],
+  "gpt-6-sol": ["high", "xhigh", "max", "ultra"],
+  "gpt-6-astra": ["low", "ultra"],
+};
 function workerPolicyScope(mode) {
-  return mode === "beyond-worker-sweetspots-v2" ? "formal-worker-stages" : "new-formal-worker";
+  return ["beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3"].includes(mode) ? "formal-worker-stages" : "new-formal-worker";
 }
 const legacyWorkerPolicyPattern = /(Luna|Terra|Sol|gpt-5\.[0-9]+-(?:luna|terra|sol)|模型矩阵|Worker.{0,20}(?:模型|推理))/i;
 
@@ -1238,14 +1252,15 @@ function parseWorkerPolicy(text) {
   if (policy.schemaVersion !== 1 || !workerPolicyModes.has(policy.mode) || policy.scope !== workerPolicyScope(policy.mode) || typeof policy.confirmed !== "boolean") {
     fail("Worker运行策略字段无效，停止读取", 2);
   }
-  if (policy.confirmed && (!policy.approvedBy || !policy.approvedAt)) {
+  if (policy.confirmed && (typeof policy.approvedBy !== "string" || !policy.approvedBy.trim()
+    || typeof policy.approvedAt !== "string" || !policy.approvedAt.trim() || Number.isNaN(Date.parse(policy.approvedAt)))) {
     fail("已确认的Worker运行策略缺少批准依据或时间", 2);
   }
   return { configured: true, policy };
 }
 
 function workerPolicySection(policy) {
-  return `## Worker运行策略\n\n本节记录当前项目的Worker运行策略及批准范围。用户未确认时保持平台默认；v1仅用于新建，v2另允许同一Worker按阶段切换组合。任务分类由PM判断，具体映射由固定脚本唯一维护；工作台、任务包和根入口不复制本节。\n\n${renderWorkerPolicy(policy)}\n`;
+  return `## Worker运行策略\n\n本节记录当前项目的Worker运行策略及批准范围。用户未确认时保持平台默认；旧v1仅用于新建，旧v2允许阶段切换，GPT-6 v3允许PM选择模型与强度并在同一Worker正常续接时调整。具体候选和起点以worker-policy show为准，旧批准不自动迁移；工作台、任务包和根入口不复制本节。\n\n${renderWorkerPolicy(policy)}\n`;
 }
 
 function ensureWorkerPolicySection(overviewPath) {
@@ -1283,7 +1298,11 @@ function saveWorkerPolicy(projectId, mode, approvedByValue, approvedAtValue = nu
   // Refresh only this exact generated legacy sentence, never user-authored prose.
   updated = updated.replace(
     "本节记录当前项目的新建正式Worker运行策略状态。用户未确认时保持平台默认；任务分类由PM判断，具体模型映射由控制仓固定脚本唯一维护；工作台、任务包和根入口不复制本节。",
+    workerPolicySection(policy).split("\n")[2],
+  );
+  updated = updated.replace(
     "本节记录当前项目的Worker运行策略及批准范围。用户未确认时保持平台默认；v1仅用于新建，v2另允许同一Worker按阶段切换组合。任务分类由PM判断，具体映射由固定脚本唯一维护；工作台、任务包和根入口不复制本节。",
+    workerPolicySection(policy).split("\n")[2],
   );
   writeUtf8(overviewPath, updated);
   return { projectId, policy, backup };
@@ -1576,7 +1595,11 @@ function workerPolicy() {
         "platform-default": { createParameters: {} },
         "beyond-worker-matrix-v1": workerMatrixV1,
         "beyond-worker-sweetspots-v2": workerSweetspotsV2,
+        "beyond-worker-gpt6-v3": workerGpt6V3,
       },
+      recommendedMode: "beyond-worker-gpt6-v3",
+      legacyModes: ["beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2"],
+      selectionOptions: { "beyond-worker-gpt6-v3": workerGpt6Options },
       choiceScopes: Object.fromEntries([...workerPolicyModes].map((mode) => [mode, workerPolicyScope(mode)])),
     }, null, 2));
     return;
@@ -1590,17 +1613,30 @@ function workerPolicy() {
     const taskKind = arg("--task-kind");
     if (!workerTaskKinds.has(taskKind)) fail(`Worker任务性质无效：${taskKind}`, 2);
     const stage = action === "resolve-stage";
-    const matrix = current.policy.mode === "beyond-worker-sweetspots-v2" ? workerSweetspotsV2
+    const matrix = current.policy.mode === "beyond-worker-gpt6-v3" ? workerGpt6V3
+      : current.policy.mode === "beyond-worker-sweetspots-v2" ? workerSweetspotsV2
       : current.policy.mode === "beyond-worker-matrix-v1" ? workerMatrixV1 : null;
     const active = current.configured && current.policy.confirmed && matrix !== null
       && (!stage || current.policy.scope === "formal-worker-stages");
     if (active && !matrix[taskKind]) fail(`当前Worker策略不包含任务性质：${taskKind}`, 2);
+    let parameters = active ? matrix[taskKind] : {};
+    if (has("--model") || has("--thinking")) {
+      if (!active || current.policy.mode !== "beyond-worker-gpt6-v3") {
+        fail("PM自主选档仅适用于已批准的 beyond-worker-gpt6-v3；不覆盖平台默认或旧策略", 2);
+      }
+      const model = arg("--model");
+      const thinking = arg("--thinking");
+      if (!Object.hasOwn(workerGpt6Options, model ?? "") || !workerGpt6Options[model].includes(thinking)) {
+        fail("模型与推理强度须成对提供，并属于show返回的GPT-6 selectionOptions", 2);
+      }
+      parameters = { model, thinking };
+    }
     console.log(JSON.stringify({
       projectId,
       configured: current.configured,
       mode: current.policy.mode,
       taskKind,
-      [stage ? "continuationParameters" : "createParameters"]: active ? matrix[taskKind] : {},
+      [stage ? "continuationParameters" : "createParameters"]: parameters,
       decision: active ? (stage ? "use-approved-stage-combination" : "use-approved-project-worker-matrix")
         : (stage ? "keep-current-worker-settings" : "keep-platform-default"),
     }, null, 2));
@@ -1966,8 +2002,8 @@ function printHelp() {
     `  initialization --action record --project-id <项目编号> --group overview|architecture|development|testing|operations|security|other --decision migrate|register|defer [--entry <正式入口>]\n` +
     `  initialization --action complete --project-id <项目编号> --root-entry-reviewed yes\n` +
     `  worker-policy --action show --project-id <项目编号>\n` +
-    `  worker-policy --action set --project-id <项目编号> --mode platform-default|beyond-worker-matrix-v1|beyond-worker-sweetspots-v2 --approved-by <用户明确批准依据> [--approved-at <ISO时间>]\n` +
-    `  worker-policy --action resolve|resolve-stage --project-id <项目编号> --task-kind design-analysis|ordinary-engineering|bulk-structured|complex-high-risk|hard-analysis\n` +
+    `  worker-policy --action set --project-id <项目编号> --mode platform-default|beyond-worker-matrix-v1|beyond-worker-sweetspots-v2|beyond-worker-gpt6-v3 --approved-by <用户明确批准依据> [--approved-at <ISO时间>]\n` +
+    `  worker-policy --action resolve|resolve-stage --project-id <项目编号> --task-kind design-analysis|ordinary-engineering|bulk-structured|complex-high-risk|hard-analysis [--model <show返回的模型> --thinking <该模型允许的强度>]\n` +
     `  list [--git-account <已确认账号> | --all]\n` +
     `  workbench --action list\n` +
     `  workbench --action progress --thread <正式thread> --progress <当前里程碑> [--updated <YYYY-MM-DD>]\n` +

@@ -25,7 +25,9 @@ export async function readLocalWorkerFinal({ threadId, turnId, expectedCwd, host
     const matches = dirs.flatMap(dir => fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile() && !e.isSymbolicLink() && e.name.startsWith('rollout-') && e.name.endsWith(`-${threadId}.jsonl`)).map(e => path.join(dir, e.name)));
     if (matches.length !== 1) return unavailable(matches.length ? 'ambiguous-session-file' : 'session-file-missing');
     const file = matches[0], before = fs.statSync(file);
-    if (before.size > 256 * 1024 * 1024) return unavailable('session-read-limit');
+    // Long-lived Workers can exceed 256 MiB. Stream the existing snapshot instead
+    // of rejecting by total size; retain the identity, ordering and post-read
+    // mutation checks below. Only the requested turn's evidence is retained.
     let meta = null, latestTurn = null, started = false, completed = null, final = null, invalid = false;
     const stream = fs.createReadStream(file, { encoding: 'utf8', end: Math.max(0, before.size - 1) });
     const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
