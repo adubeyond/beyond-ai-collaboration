@@ -5,6 +5,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { ProjectIdentityProvider } from './project-identity-provider.mjs';
 import { WorkerResultReceiptStore } from './worker-result-receipts.mjs';
 import { WorkbenchTransactionStore } from './workbench-transaction.mjs';
+import { CliTaskStore } from '../cli/cli-task-store.mjs';
 
 const ACTIONS = new Set([
   'project.resolve',
@@ -15,6 +16,7 @@ const ACTIONS = new Set([
   'workbench.snapshot',
   'workbench.inspect',
   'workbench.accept',
+  'workbench.accept-cli',
   'workbench.close',
   'workbench.recover',
   'worker-result.enqueue',
@@ -32,11 +34,12 @@ function nonEmpty(value, label) {
   return value;
 }
 
-function roots(controlRoot, request, executionRoot) {
+function roots(controlRoot, request, executionRoot, ownerThreadId) {
   const localRuntime = path.join(controlRoot, 'local', 'runtime');
   const codexHome = path.resolve(request.codexHome ?? process.env.CODEX_HOME ?? path.join(os.homedir(), '.codex'));
   return {
     controlRoot,
+    ownerThreadId,
     executionRoot: executionRoot ? path.resolve(executionRoot) : null,
     codexHome,
     projectIdentityRoot: path.join(localRuntime, 'project-identity'),
@@ -73,6 +76,7 @@ function activeWorkbenchTask(config, taskId) {
 function validateReceiptTaskIdentity(config, input) {
   const task = activeWorkbenchTask(config, input.taskId);
   if (!task) return;
+  if (task.execution?.kind === 'cli') throw new Error('CLI intermediate results cannot use Worker receipts');
   if (input.sourceThreadId === task.worker) {
     throw new Error('sourceThreadId cannot equal the registered Worker');
   }
@@ -236,6 +240,27 @@ function inspectWorkbench(config, rawInput) {
 }
 
 function execute(action, request, config) {
+  if (action === 'workbench.register' && request.input?.execution?.kind === 'cli') {
+    const input = object(request.input, 'CLI registration');
+    projectIdentity(config).validateControlProject(nonEmpty(input.projectId, 'projectId'));
+    if (input.execution.ownerThreadId !== config.ownerThreadId) throw new Error('CLI registered owner identity mismatch');
+    const locator = new CliTaskStore({ controlRoot: config.controlRoot }).locator({ ...input, ownerThreadId: input.execution.ownerThreadId });
+    if (input.execution.stateLocator !== locator) throw new Error('CLI state locator identity mismatch');
+    return workbench(config).registerTask(input);
+  }
+  if (action === 'workbench.accept-cli') {
+    const input = object(request.input, 'CLI result acceptance');
+    projectIdentity(config).validateControlProject(nonEmpty(input.projectId, 'projectId'));
+    if (input.ownerThreadId !== config.ownerThreadId) throw new Error('CLI acceptance owner identity mismatch');
+    return workbench(config).consumeAcceptedCliResult(input);
+  }
+  if (['workbench.update', 'workbench.pause'].includes(action)) {
+    const task = activeWorkbenchTask(config, request.input?.taskId);
+    if (task?.execution?.kind === 'cli') {
+      projectIdentity(config).validateControlProject(request.input.projectId);
+      if (request.input.ownerThreadId !== config.ownerThreadId || request.input.ownerThreadId !== task.execution.ownerThreadId || request.input.projectId !== task.projectId) throw new Error('CLI update owner/project identity mismatch');
+    }
+  }
   if (action === 'project.resolve') {
     const input = object(request.input, 'project identity input');
     const executionRoot = nonEmpty(config.executionRoot, 'runtime executionRoot');
@@ -261,6 +286,15 @@ function execute(action, request, config) {
     if ('cancelledReceipt' in input) throw new Error('cancelledReceipt is supplied only by the runtime');
     const projectId = nonEmpty(input.projectId, 'projectId');
     projectIdentity(config).validateControlProject(projectId);
+    const active = activeWorkbenchTask(config, input.taskId);
+    const prior = !active && typeof input.closedAt === 'string'
+      ? workbench(config).history(input.closedAt.slice(0, 7)).records.find(record => record.operationId === input.operationId) : null;
+    const cliTask = active?.execution?.kind === 'cli' ? active : prior?.execution?.kind === 'cli' ? prior : null;
+    if (cliTask) {
+      if (input.ownerThreadId !== config.ownerThreadId || input.ownerThreadId !== cliTask.execution.ownerThreadId || projectId !== cliTask.projectId) throw new Error('CLI closure owner identity mismatch');
+      if (input.pendingReceiptId !== undefined) throw new Error('CLI closure does not use Worker pending');
+      return workbench(config).closeTask({ ...input, execution: cliTask.execution });
+    }
     const pending = workerResults(config).list({ projectId, taskId: nonEmpty(input.taskId, 'taskId') });
     if (input.pendingReceiptId !== undefined) {
       const receiptId = nonEmpty(input.pendingReceiptId, 'pendingReceiptId');
@@ -318,7 +352,7 @@ export function executeRuntimeRequest(rawRequest, context) {
     requestId,
     action,
     ok: true,
-    result: execute(action, request, roots(controlRoot, request, context?.executionRoot)),
+    result: execute(action, request, roots(controlRoot, request, context?.executionRoot, context?.ownerThreadId ?? process.env.CODEX_THREAD_ID)),
   };
 }
 

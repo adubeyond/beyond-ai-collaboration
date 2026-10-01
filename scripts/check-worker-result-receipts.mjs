@@ -793,6 +793,7 @@ test('fixed beyond-control CLI enqueues, lists and acknowledges the same receipt
   fs.mkdirSync(path.join(controlRoot, 'scripts'), { recursive: true });
   registerProject(controlRoot);
   fs.cpSync(path.join(import.meta.dirname, '..', '模板交付包', 'scripts', 'runtime'), path.join(controlRoot, 'scripts', 'runtime'), { recursive: true });
+  fs.cpSync(path.join(import.meta.dirname, '..', '模板交付包', 'scripts', 'cli'), path.join(controlRoot, 'scripts', 'cli'), { recursive: true });
   fs.copyFileSync(path.join(import.meta.dirname, '..', '模板交付包', 'scripts', 'beyond-control.mjs'), path.join(controlRoot, 'scripts', 'beyond-control.mjs'));
   const invoke = (name, action, input, includeRequestId = true) => {
     const request = path.join(root, `${name}.json`);
@@ -821,6 +822,7 @@ test('fixed beyond-control CLI exposes workbench.inspect without mutating contro
   fs.mkdirSync(path.join(controlRoot, 'scripts'), { recursive: true });
   registerProject(controlRoot);
   fs.cpSync(path.join(import.meta.dirname, '..', '模板交付包', 'scripts', 'runtime'), path.join(controlRoot, 'scripts', 'runtime'), { recursive: true });
+  fs.cpSync(path.join(import.meta.dirname, '..', '模板交付包', 'scripts', 'cli'), path.join(controlRoot, 'scripts', 'cli'), { recursive: true });
   fs.copyFileSync(path.join(import.meta.dirname, '..', '模板交付包', 'scripts', 'beyond-control.mjs'), path.join(controlRoot, 'scripts', 'beyond-control.mjs'));
   const invoke = (name, action, input) => {
     const request = path.join(root, `${name}.json`);
