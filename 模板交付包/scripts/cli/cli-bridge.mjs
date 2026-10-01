@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { CliTaskStore, digest, validIdentifier } from './cli-task-store.mjs';
 import { runNativeCli, processStart } from './native-cli-runner.mjs';
 import { ProjectIdentityProvider } from '../runtime/project-identity-provider.mjs';
+import { createDesktopHost } from './desktop-host.mjs';
+import { notifyWhenReady } from './cli-notify.mjs';
 
 export function readProfile(file) {
   if (!path.isAbsolute(file)) throw new Error('CLI profile absolute path required');
@@ -100,9 +102,16 @@ if (process.argv[2] === '--manager' && process.send) {
     const store = new CliTaskStore({ controlRoot: payload.controlRoot });
     try {
       const identity = { pid: process.pid, startedAt: processStart(process.pid), token: crypto.randomUUID() };
+      const abort = new AbortController();
+      const host = payload.hostSpec ? createDesktopHost(payload.hostSpec) : null;
+      // Attach the observer before CLI start; the promise is consumed after result persistence.
+      const sourceEnd = host ? host.waitForSourceTurnEnd({ ownerThreadId: payload.run.ownerThreadId, ownerTurnId: payload.run.ownerTurnId, signal: abort.signal }) : null;
+      sourceEnd?.catch(() => {});
       store.setProcess(payload.run, identity);
       process.send({ type: 'accepted' });
-      await runNativeCli({ ...payload, store });
+      try {
+        await runNativeCli({ ...payload, store, onTerminal: host ? () => notifyWhenReady({ store, identity: payload.run, runNumber: payload.run.runNumber, host, sourceEnd }) : undefined });
+      } finally { abort.abort(); }
     } catch (error) { if (process.connected) process.send({ type: 'rejected', error: error.message }); process.exitCode = 1; }
   });
 } else if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -110,7 +119,15 @@ if (process.argv[2] === '--manager' && process.send) {
     const index = process.argv.indexOf('--request');
     if (index < 0) throw new Error('--request must name a JSON file');
     const request = JSON.parse(fs.readFileSync(process.argv[index + 1], 'utf8'));
-    const context = { controlRoot: path.resolve(fileURLToPath(new URL('../../', import.meta.url))), executionRoot: process.cwd(), ownerThreadId: process.env.CODEX_THREAD_ID, ownerTurnId: process.env.CODEX_TURN_ID };
+    const host = createDesktopHost();
+    const source = host.currentSource();
+    if (!(await host.checkCapability()).available) throw new Error('Desktop original-owner notification capability unavailable');
+    const context = { controlRoot: path.resolve(fileURLToPath(new URL('../../', import.meta.url))), executionRoot: process.cwd(), ownerThreadId: source.ownerThreadId, ownerTurnId: source.ownerTurnId, hostSpec: host.descriptor };
+    if (request.action === 'cli.start') {
+      if (request.input.ownerThreadId && request.input.ownerThreadId !== source.ownerThreadId) throw new Error('CLI source identity mismatch');
+      if (request.input.ownerTurnId && request.input.ownerTurnId !== source.ownerTurnId) throw new Error('CLI source turn mismatch');
+      request.input.ownerThreadId = source.ownerThreadId; request.input.ownerTurnId = source.ownerTurnId;
+    }
     const result = await launchCliRequest(request, context); process.stdout.write(JSON.stringify({ ok: true, result }) + '\n');
   } catch (error) { process.stderr.write(`CLI bridge failed: ${error.message}\n`); process.exitCode = 1; }
 }
