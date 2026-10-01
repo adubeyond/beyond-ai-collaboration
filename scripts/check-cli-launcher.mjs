@@ -48,6 +48,7 @@ test('resume-uses-exact-session and second round really reads first artifact', a
   await until(() => fs.existsSync(second.resultPath));
   const args = JSON.parse(fs.readFileSync(path.join(f.executionRoot, 'args.json'))).args;
   assert.deepEqual(args.slice(0, 3), ['exec', 'resume', 'cli-session']);
+  assert.equal(args.includes('--skip-git-repo-check'), true);
   assert.equal(args.includes('--last'), false);
   assert.equal(f.store.readResult(f.binding, 2).finalText, 'first+second');
 });

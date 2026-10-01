@@ -355,6 +355,24 @@ try {
   );
 
   const mixedRoot = join(scratch, "mixed");
+  for (const file of [
+    "scripts/cli/cli-task-store.mjs", "scripts/cli/native-cli-runner.mjs",
+    "scripts/cli/cli-bridge.mjs", "scripts/cli/desktop-host.mjs", "scripts/cli/cli-notify.mjs",
+    "scripts/cli/process-identity.mjs",
+    "docs/AI编程协同机制/机制/04-CLI目标协作机制.md",
+  ]) {
+    const missingCliControl = join(scratch, "missing-cli-control");
+    cpSync(packageRoot, missingCliControl, { recursive: true });
+    writeProjectOverview(missingCliControl, "project-missing-cli");
+    rmSync(join(missingCliControl, file));
+    const missingCliRoot = join(scratch, "missing-cli-project");
+    mkdirSync(missingCliRoot, { recursive: true }); copySkills(missingCliRoot);
+    writeLocalRegistration(missingCliControl, "project-missing-cli", missingCliRoot);
+    writeFileSync(join(missingCliRoot, "AGENTS.md"), fusedEntry("../missing-cli-control", "project-missing-cli"), "utf8");
+    run(`可选CLI产品文件缺失${file}`, 1, join(missingCliRoot, "skills"), join(missingCliRoot, "AGENTS.md"), `项目映射的CLI产品文件${file}不存在`, false);
+    rmSync(missingCliControl, { recursive: true, force: true });
+    rmSync(missingCliRoot, { recursive: true, force: true });
+  }
   copySkills(mixedRoot);
   cpSync(join(packageRoot, "AGENTS.md"), join(mixedRoot, "AGENTS.md"));
   writeFileSync(join(mixedRoot, "skills", "identity-pm", "SKILL.md"), `${readFileSync(join(mixedRoot, "skills", "identity-pm", "SKILL.md"), "utf8")}\n<!-- stale -->\n`, "utf8");

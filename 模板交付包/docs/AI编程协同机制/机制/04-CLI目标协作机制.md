@@ -19,7 +19,7 @@
 
 不得在该文件放密钥、认证参数或隐式`--last`。CLI使用自己的平台权限；第三方API能响应不等于具有命令、文件、网络或生产授权。专业方法与项目资料沿用原任务授权，CLI按当前问题读一个匹配Action Skill及相关事实，不全量加载桌面历史；它不以`identity-worker`身份直接回PM。
 
-固定入口是`node <当前controlRoot>/scripts/cli/cli-bridge.mjs --request <JSON请求文件>`，工作目录必须是本任务真实`executionRoot`。入口从当前桌面进程和本轮记录核对真实调用者、回合与消息工具；不能从聊天猜线程或从其他项目寻找入口。初次启动前消息能力不可用就不启动CLI、不声称它会自动回来。原路径照常可用。
+固定入口是`node <当前controlRoot>/scripts/cli/cli-bridge.mjs --request <JSON请求文件>`，工作目录必须是本任务真实`executionRoot`。启动、续跑入口从当前桌面进程和本轮记录核对真实调用者、回合与消息工具；不能从聊天猜线程或从其他项目寻找入口。消息能力不可用就不启动或续跑CLI、不声称它会自动回来。本地状态、结果、核验、停止与恢复仍可由继承身份匹配的原负责人调用，不依赖已经失效的消息通道。原路径照常可用。
 
 直接CLI正式任务先通过原固定runtime执行`workbench.register`：
 
@@ -51,7 +51,7 @@
 {"schemaVersion":1,"requestId":"review-goal-1","action":"cli.review","input":{"projectId":"<项目>","taskId":"<任务>","ownerThreadId":"<调用者>","runNumber":1,"resultSha256":"<本轮result.json的SHA256>","decision":"continue","evidenceLocator":"<当前主证据>","conclusion":"<实际缺口或验收结论>","reviewedAt":"<ISO时间>"}}
 ```
 
-`decision`仅为`continue / accept / pause / close`。这是负责人的核验记录，不自行改变工作台。每轮核验不可改写；普通失败或部分完成选择continue，不把进程exitCode=0当成业务完成。要继续原目标时：
+`decision`仅为`continue / accept / pause / close`。这是负责人的核验记录，不自行改变工作台。每轮原始核验不可改写；普通失败或部分完成选择continue，不把进程exitCode=0当成业务完成。真实暂停后恢复时，在同一轮补交`decision=continue`的核验，附原`review.json`的`supersedesReviewSha256`与当前授权的`authorizationLocator`；另存续做依据，原暂停记录保留。工作台原暂停任务仍由负责人按既有恢复路径处理。要继续原目标时：
 
 ```json
 {"schemaVersion":1,"requestId":"cli-goal-run-2","action":"cli.resume","input":{"projectId":"<项目>","taskId":"<任务>","ownerThreadId":"<调用者>","expectedRunNumber":1,"expectedSessionId":"<保存的真实会话>","prompt":"<依据缺口的纠偏与剩余验收>"}}
@@ -71,7 +71,7 @@
 
 runtime从受管结果及核验读取正式证据和验收结论；一次事务完成验收、活动区回收、历史及视图，重放同一请求不重复归档。不能用原`workbench.accept`伪装Worker、用陈旧轮次验收或以CLI文本自行授权发布。真正的外部资源/取舍阻断才由负责人用`workbench.pause`并带`projectId / taskId / ownerThreadId`保留原因与恢复条件；普通失败继续原会话。
 
-老板明确停止运行对象时，先读当前状态，用`cli.stop`带`projectId / taskId / ownerThreadId / stateSha256 / expectedSessionId / reason`，指纹为`task.json`解析对象经`JSON.stringify`后的SHA256。后台只停止本轮保存并核验启动时间的CLI进程；不能按名称全机杀进程。停止请求不等于已经停止，状态不明不能启动第二个实例；CLI启动的外部服务或远端动作仍按业务自己的停止路径核对。后台失去控制时，`cli.recover`使用同样身份与指纹，仅核验已退出的管理进程并保存unknown，不重新启动。
+老板明确停止运行对象时，先读当前状态，用`cli.stop`带`projectId / taskId / ownerThreadId / stateSha256 / expectedSessionId / reason`，指纹为`task.json`解析对象经`JSON.stringify`后的SHA256。后台只停止本轮保存并核验启动时间的CLI进程；不能按名称全机杀进程。首次会话尚未绑定时提交的停止请求仍只作用于那一轮。停止请求不等于已经停止，状态不明不能启动第二个实例；CLI启动的外部服务或远端动作仍按业务自己的停止路径核对。后台失去控制时，`cli.recover`使用同样身份与指纹，分别核对管理进程、实际CLI及锁的保存PID与启动时间；PID被复用不操作新进程。确认原进程均已退出后，只修复已有稳定结果的状态索引，或保存unknown。实际CLI仍存活或启动后进程证明缺失时拒绝恢复，不把后台退出等同CLI退出，也不自动重启。
 
 老板明确关闭整个CLI任务时，仍用原`workbench.close`；input带`projectId / taskId / ownerThreadId / operationId / expectedStatus / businessState=已关闭 / ownerDirective=explicit-owner-instruction / closedBy / closedAt / closureReason / taskLocator / authorizationLocator / stateSha256`。必须有稳定退出状态，无未结束的CLI进程；未启动的登记用`stateSha256=not-started`。关闭不是完成，不删业务现场、不生成或消费Worker pending。用户换目标不自动改写旧任务或让旧结果验收新目标。
 

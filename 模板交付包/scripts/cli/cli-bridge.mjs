@@ -3,10 +3,11 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { CliTaskStore, digest, validIdentifier } from './cli-task-store.mjs';
+import { CliTaskStore, atomicJson, digest, validIdentifier } from './cli-task-store.mjs';
 import { runNativeCli, processStart } from './native-cli-runner.mjs';
+import { currentProcessIdentity, processIsGone } from './process-identity.mjs';
 import { ProjectIdentityProvider } from '../runtime/project-identity-provider.mjs';
-import { createDesktopHost } from './desktop-host.mjs';
+import { createDesktopHost, desktopHome } from './desktop-host.mjs';
 import { notifyWhenReady } from './cli-notify.mjs';
 
 export function readProfile(file) {
@@ -14,7 +15,9 @@ export function readProfile(file) {
   const profile = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (Object.keys(profile).some(key => !['schemaVersion', 'runner', 'codexHome', 'model'].includes(key)) || Object.keys(profile.runner ?? {}).some(key => !['command', 'args'].includes(key))) throw new Error('CLI profile cannot contain credentials or undocumented overrides');
   if (profile.schemaVersion !== 1 || !path.isAbsolute(profile.runner?.command ?? '') || !fs.statSync(profile.runner.command).isFile() || !Array.isArray(profile.runner.args) || profile.runner.args.some(a => typeof a !== 'string' || /(?:api[_-]?key|auth|provider|--last|--config|--ephemeral)/i.test(a)) || !path.isAbsolute(profile.codexHome ?? '') || !fs.statSync(profile.codexHome).isDirectory() || typeof profile.model !== 'string' || !profile.model.trim()) throw new Error('invalid CLI profile');
-  if (process.env.CODEX_HOME && fs.realpathSync(profile.codexHome) === fs.realpathSync(process.env.CODEX_HOME)) throw new Error('CLI profile must not reuse Desktop authentication home');
+  const normalized = file => { const physical = fs.realpathSync(file); return process.platform === 'win32' ? physical.toLowerCase() : physical; };
+  const home = desktopHome();
+  if (fs.existsSync(home) && normalized(profile.codexHome) === normalized(home)) throw new Error('CLI profile must not reuse Desktop authentication home');
   return profile;
 }
 function validateBinding(binding, context, store) {
@@ -44,7 +47,7 @@ async function startManager(store, binding, run, profile, prompt, context) {
   // Exclusive claim prevents an idempotent start request from spawning a second manager.
   const claim = store.checkedPath(path.join(store.runDir(run, run.runNumber), 'manager-claim.json'));
   let fd; try { fd = fs.openSync(claim, 'wx', 0o600); } catch (error) { if (error.code === 'EEXIST') return { ...run, status: store.read(run).status }; throw error; }
-  fs.writeFileSync(fd, JSON.stringify({ requestId: run.requestId, claimedAt: new Date().toISOString() })); fs.closeSync(fd);
+  try { fs.writeFileSync(fd, JSON.stringify({ requestId: run.requestId, caller: currentProcessIdentity(), claimedAt: new Date().toISOString() })); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
   return new Promise((resolve, reject) => {
     const child = fork(fileURLToPath(import.meta.url), ['--manager'], { detached: true, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], execArgv: [] });
     const timer = setTimeout(() => { child.disconnect(); child.unref(); reject(new Error('CLI manager startup unconfirmed; inspect this run before recovery')); }, 15000);
@@ -54,7 +57,14 @@ async function startManager(store, binding, run, profile, prompt, context) {
       clearTimeout(timer); child.disconnect(); child.unref();
       if (message.type === 'rejected') reject(new Error(message.error)); else resolve({ ...run, status: 'running', stateLocator: store.locator(run) });
     });
-    child.send({ binding, run, profile, prompt, controlRoot: context.controlRoot, hostSpec: context.hostSpec ?? null });
+    child.once('spawn', () => {
+      try {
+        const managerIdentity = { pid: child.pid, startedAt: processStart(child.pid), token: crypto.randomUUID() };
+        atomicJson(store.checkedPath(path.join(store.runDir(run, run.runNumber), 'manager-process.json')), managerIdentity);
+        // The child cannot launch a CLI until its durable process proof precedes this payload.
+        child.send({ binding, run, profile, prompt, managerIdentity, controlRoot: context.controlRoot, hostSpec: context.hostSpec ?? null });
+      } catch (error) { clearTimeout(timer); child.disconnect(); child.unref(); reject(error); }
+    });
   });
 }
 export async function launchCliRequest(request, context) {
@@ -83,25 +93,35 @@ export async function launchCliRequest(request, context) {
     if (digest(binding) !== input.stateSha256) throw new Error('CLI state fingerprint mismatch');
     if (binding.sessionId !== input.expectedSessionId || !input.reason) throw new Error('CLI recovery session and reason required');
     if (request.action === 'cli.stop') {
-      if (!binding.processIdentity || processStart(binding.managerPid) !== binding.processIdentity.startedAt) throw new Error('CLI process ownership could not be verified');
+      if (!binding.processIdentity || processIsGone(binding.processIdentity)) throw new Error('CLI process ownership could not be verified');
       return store.requestStop(input, { ...input, requestId: request.requestId });
     }
-    if (binding.processIdentity) {
-      try { process.kill(binding.managerPid, 0); } catch (error) { if (error.code !== 'ESRCH') throw new Error('CLI manager liveness is unknown');
-        const run = store.readJson(path.join(store.runDir(input, binding.runNumber), 'run.json'));
-        return store.finishRun(run, { status: 'unknown', exitCode: null, error: 'Verified manager exit; inspect saved session and effects before continuation' });
-      }
-      throw new Error('CLI manager still exists; recovery cannot restart it');
-    }
-    throw new Error('CLI recovery requires saved process proof; no automatic restart');
+    if (!binding.runNumber) throw new Error('CLI recovery requires a saved run');
+    const directory = store.runDir(input, binding.runNumber), saved = leaf => {
+      const file = store.checkedPath(path.join(directory, leaf)); return fs.existsSync(file) ? store.readJson(file) : null;
+    };
+    const manager = saved('manager-process.json') ?? binding.processIdentity, cli = saved('cli-process.json'), claim = saved('manager-claim.json');
+    if (manager && !processIsGone(manager)) throw new Error('CLI manager still exists; recovery cannot restart it');
+    if (cli && !processIsGone(cli)) throw new Error('CLI process still exists; recovery cannot clear a running CLI');
+    if (!manager && claim && !processIsGone(claim.caller)) throw new Error('CLI startup caller still exists; manager launch is unconfirmed');
+    if (!cli && saved('cli-launch-intent.json')) throw new Error('CLI child process proof unavailable after launch intent; exit cannot be verified');
+    store.recoverLock(input, input.stateSha256);
+    if (digest(store.read(input)) !== input.stateSha256) throw new Error('CLI state fingerprint mismatch');
+    if (fs.existsSync(path.join(directory, 'result.json'))) return store.reconcileResult(input, input.stateSha256);
+    const run = store.readJson(path.join(directory, 'run.json'));
+    return store.finishRun(run, { status: 'unknown', exitCode: null, error: 'Verified saved processes exited; inspect session and effects before explicit continuation' }, { stateSha256: input.stateSha256 });
   }
   throw new Error('unsupported CLI action');
 }
 if (process.argv[2] === '--manager' && process.send) {
+  let received = false;
+  process.once('disconnect', () => { if (!received) process.exitCode = 1; });
   process.once('message', async payload => {
+    received = true;
     const store = new CliTaskStore({ controlRoot: payload.controlRoot });
     try {
-      const identity = { pid: process.pid, startedAt: processStart(process.pid), token: crypto.randomUUID() };
+      const identity = payload.managerIdentity;
+      if (identity?.pid !== process.pid || identity.startedAt !== processStart(process.pid)) throw new Error('CLI manager inherited process proof mismatch');
       const abort = new AbortController();
       const host = payload.hostSpec ? createDesktopHost(payload.hostSpec) : null;
       // Attach the observer before CLI start; the promise is consumed after result persistence.
@@ -119,10 +139,13 @@ if (process.argv[2] === '--manager' && process.send) {
     const index = process.argv.indexOf('--request');
     if (index < 0) throw new Error('--request must name a JSON file');
     const request = JSON.parse(fs.readFileSync(process.argv[index + 1], 'utf8'));
-    const host = createDesktopHost();
-    const source = host.currentSource();
-    if (!(await host.checkCapability()).available) throw new Error('Desktop original-owner notification capability unavailable');
-    const context = { controlRoot: path.resolve(fileURLToPath(new URL('../../', import.meta.url))), executionRoot: process.cwd(), ownerThreadId: source.ownerThreadId, ownerTurnId: source.ownerTurnId, hostSpec: host.descriptor };
+    let source = { ownerThreadId: validIdentifier(process.env.CODEX_THREAD_ID) }, host;
+    // Local recovery and inspection do not depend on the message transport that may have failed.
+    if (['cli.start', 'cli.resume'].includes(request.action)) {
+      host = createDesktopHost(); source = host.currentSource();
+      if (!(await host.checkCapability()).available) throw new Error('Desktop original-owner notification capability unavailable');
+    }
+    const context = { controlRoot: path.resolve(fileURLToPath(new URL('../../', import.meta.url))), executionRoot: process.cwd(), ownerThreadId: source.ownerThreadId, ownerTurnId: source.ownerTurnId, hostSpec: host?.descriptor };
     if (request.action === 'cli.start') {
       if (request.input.ownerThreadId && request.input.ownerThreadId !== source.ownerThreadId) throw new Error('CLI source identity mismatch');
       if (request.input.ownerTurnId && request.input.ownerTurnId !== source.ownerTurnId) throw new Error('CLI source turn mismatch');

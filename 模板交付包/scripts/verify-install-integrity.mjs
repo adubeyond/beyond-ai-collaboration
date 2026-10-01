@@ -47,6 +47,12 @@ const expectedControlRuntimeFiles = [
   "scripts/runtime/worker-result-receipts.mjs",
   "scripts/runtime/workbench-transaction.mjs",
 ];
+const expectedCliProductFiles = [
+  "scripts/cli/cli-task-store.mjs", "scripts/cli/native-cli-runner.mjs",
+  "scripts/cli/cli-bridge.mjs", "scripts/cli/desktop-host.mjs", "scripts/cli/cli-notify.mjs",
+  "scripts/cli/process-identity.mjs",
+  "docs/AI编程协同机制/机制/04-CLI目标协作机制.md",
+];
 
 function display(path) {
   return path.split(sep).join("/");
@@ -409,6 +415,7 @@ function normalizeProjectEntry(text, label) {
 }
 
 if (manifest) {
+  for (const file of expectedCliProductFiles) readUtf8(join(candidateRoot, file), `候选CLI产品文件${file}`);
   if (manifest.schemaVersion !== 3 || !/^3\.\d+\.\d+$/.test(manifest.releaseVersion)) {
     errors.push("候选版本清单字段无效");
   }
@@ -474,6 +481,11 @@ if (manifest) {
       if (mappedRuntime && candidateRuntime && mappedRuntime !== candidateRuntime) {
         errors.push(`项目映射的控制运行文件与当前候选不一致：${relativePath}`);
       }
+    }
+    for (const file of expectedCliProductFiles) {
+      const mapped = readUtf8(join(mappedControlRoot, file), `项目映射的CLI产品文件${file}`);
+      const candidate = readUtf8(join(candidateRoot, file), `候选CLI产品文件${file}`);
+      if (mapped && candidate && mapped !== candidate) errors.push(`项目映射的CLI产品文件与当前候选不一致：${file}`);
     }
     if (!projectMatch) {
       errors.push("项目入口缺少BEYOND项目编号映射");

@@ -6,6 +6,11 @@ import { validIdentifier } from './cli-task-store.mjs';
 import { redact } from './native-cli-runner.mjs';
 
 const tailLimit = 16 * 1024 * 1024;
+export function desktopHome(env = process.env) {
+  const home = env.CODEX_HOME || path.join(env.USERPROFILE || env.HOME || '', '.codex');
+  if (!path.isAbsolute(home)) throw new Error('Desktop home absolute path required');
+  return home;
+}
 function readRegion(file, start, length) {
   const fd = fs.openSync(file, 'r'), buffer = Buffer.alloc(length);
   try { return buffer.subarray(0, fs.readSync(fd, buffer, 0, length, start)); } finally { fs.closeSync(fd); }
@@ -27,7 +32,7 @@ function sourceFacts(file, ownerThreadId) {
 }
 function findSource(env) {
   const owner = validIdentifier(env.CODEX_THREAD_ID);
-  const home = env.CODEX_HOME || path.join(env.USERPROFILE || env.HOME || '', '.codex');
+  const home = desktopHome(env);
   const root = path.join(home, 'sessions');
   const matches = [];
   function walk(directory, depth) {
@@ -65,7 +70,7 @@ function validMessageTool(tool) {
 }
 export function createDesktopHost({ env = process.env, pluginRoot, sourceRecordPath, requestTimeoutMs = 20000 } = {}) {
   const environment = { ...env }, owner = validIdentifier(environment.CODEX_THREAD_ID);
-  const home = environment.CODEX_HOME || path.join(environment.USERPROFILE || environment.HOME || '', '.codex');
+  const home = desktopHome(environment);
   const source = sourceRecordPath || findSource(environment);
   const plugins = pluginRoot || path.join(home, 'plugins/cache/openai-bundled');
   async function withMcp(callback) {

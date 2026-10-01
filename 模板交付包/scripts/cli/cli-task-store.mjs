@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { currentProcessIdentity, processIsGone } from './process-identity.mjs';
 
 export const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const sha256File = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -60,9 +61,26 @@ export class CliTaskStore {
   withLock(identity, action) {
     const dir = this.checkedPath(this.taskDir(identity), { createDirectory: true });
     const lock = this.checkedPath(path.join(dir, '.lock'));
-    try { fs.mkdirSync(lock); } catch (error) { if (error.code === 'EEXIST') throw new Error('CLI lock conflict; owner verification required'); throw error; }
-    try { atomicJson(path.join(lock, 'owner.json'), { pid: process.pid, acquiredAt: now() }); return action(); }
+    const prepared = `${lock}.${process.pid}.${crypto.randomUUID()}`;
+    fs.mkdirSync(prepared);
+    try {
+      atomicJson(path.join(prepared, 'owner.json'), { ...currentProcessIdentity(), token: crypto.randomUUID(), acquiredAt: now() });
+      if (fs.existsSync(lock)) throw new Error('CLI lock conflict; owner verification required');
+      try { fs.renameSync(prepared, lock); } catch (error) { if (['EEXIST', 'ENOTEMPTY', 'EPERM'].includes(error.code)) throw new Error('CLI lock conflict; owner verification required'); throw error; }
+    } catch (error) { if (fs.existsSync(prepared)) { const owner = path.join(prepared, 'owner.json'); if (fs.existsSync(owner)) fs.unlinkSync(owner); fs.rmdirSync(prepared); } throw error; }
+    try { return action(); }
     finally { fs.unlinkSync(path.join(lock, 'owner.json')); fs.rmdirSync(lock); }
+  }
+  recoverLock(identity, stateSha256) {
+    if (digest(this.read(identity)) !== stateSha256) throw new Error('CLI state fingerprint mismatch');
+    const lock = this.checkedPath(path.join(this.taskDir(identity), '.lock'));
+    if (!fs.existsSync(lock)) return;
+    const owner = this.readJson(path.join(lock, 'owner.json'));
+    if (!processIsGone(owner)) throw new Error('CLI lock owner still exists');
+    const retired = `${lock}.recovered.${crypto.randomUUID()}`;
+    fs.renameSync(lock, retired);
+    if (digest(this.readJson(path.join(retired, 'owner.json'))) !== digest(owner)) throw new Error('CLI lock ownership changed; retired lock preserved');
+    fs.unlinkSync(path.join(retired, 'owner.json')); fs.rmdirSync(retired);
   }
   create(binding) {
     validIdentifier(binding.ownerTurnId);
@@ -73,7 +91,7 @@ export class CliTaskStore {
       const file = this.locator(binding);
       if (fs.existsSync(file)) {
         const stored = this.read(binding);
-        for (const [key, value] of Object.entries(binding)) if (digest(stored[key]) !== digest(value)) throw new Error('CLI binding conflict');
+        for (const [key, value] of Object.entries(binding)) if (key !== 'ownerTurnId' && digest(stored[key]) !== digest(value)) throw new Error('CLI binding conflict');
         return stored;
       }
       const state = { schemaVersion: 1, ...clone(binding), sessionId: null, runNumber: 0, status: 'starting', currentResultPath: null, managerPid: null, processIdentity: null, updatedAt: now() };
@@ -86,17 +104,19 @@ export class CliTaskStore {
     if (state.currentResultPath && state.currentResultPath !== path.join(this.runDir(identity, state.runNumber), 'result.json')) throw new Error('CLI result path mismatch');
     return state;
   }
-  beginRun(identity, { requestId, prompt, expectedRunNumber, expectedSessionId, ownerTurnId }) {
+  beginRun(identity, { requestId, prompt, expectedRunNumber, expectedSessionId, ownerTurnId, faultAt = null }) {
     validIdentifier(requestId);
     if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('CLI prompt required');
     if (ownerTurnId !== undefined) validIdentifier(ownerTurnId);
     return this.withLock(identity, () => {
       const state = this.read(identity), requestFile = this.checkedPath(path.join(this.taskDir(identity), 'requests', `${requestId}.json`));
-      const fingerprint = digest({ requestId, prompt, expectedRunNumber, expectedSessionId, ownerTurnId });
+      const fingerprint = digest({ requestId, prompt, expectedRunNumber, expectedSessionId });
+      let run;
       if (fs.existsSync(requestFile)) {
         const previous = this.readJson(requestFile);
         if (previous.fingerprint !== fingerprint) throw new Error('CLI request conflict');
-        return previous.run;
+        run = previous.run;
+        if (state.runNumber >= run.runNumber) return run;
       }
       if (expectedSessionId !== state.sessionId) throw new Error('CLI session mismatch');
       if (expectedRunNumber !== state.runNumber) throw new Error('CLI stale run conflict');
@@ -106,11 +126,16 @@ export class CliTaskStore {
         if (this.readReview(identity, state.runNumber)?.decision !== 'continue') throw new Error('CLI continuation review required');
       }
       const number = state.runNumber + 1, dir = this.checkedPath(this.runDir(identity, number), { createDirectory: true });
-      const run = { ...Object.fromEntries(['projectId', 'taskId', 'ownerThreadId'].map(k => [k, identity[k]])), runNumber: number, requestId, sessionId: state.sessionId, ownerTurnId: ownerTurnId ?? state.ownerTurnId, status: 'starting', resultPath: path.join(dir, 'result.json') };
-      atomicJson(path.join(dir, 'run.json'), run);
-      atomicJson(path.join(dir, 'input.json'), { prompt, fingerprint });
+      run ??= { ...Object.fromEntries(['projectId', 'taskId', 'ownerThreadId'].map(k => [k, identity[k]])), runNumber: number, requestId, sessionId: state.sessionId, ownerTurnId: ownerTurnId ?? state.ownerTurnId, status: 'starting', resultPath: path.join(dir, 'result.json') };
+      if (run.runNumber !== number || run.sessionId !== state.sessionId) throw new Error('CLI replay intent mismatch');
+      const immutable = (file, value) => { if (fs.existsSync(file)) { if (digest(this.readJson(file)) !== digest(value)) throw new Error('CLI run intent conflict'); } else atomicJson(file, value); };
       this.checkedPath(path.dirname(requestFile), { createDirectory: true });
-      atomicJson(requestFile, { fingerprint, run });
+      immutable(requestFile, { fingerprint, run });
+      if (faultAt === 'afterRequest') throw new Error('injected fault afterRequest');
+      immutable(path.join(dir, 'run.json'), run);
+      if (faultAt === 'afterRun') throw new Error('injected fault afterRun');
+      immutable(path.join(dir, 'input.json'), { prompt, fingerprint });
+      if (faultAt === 'afterInput') throw new Error('injected fault afterInput');
       atomicJson(this.locator(identity), { ...state, runNumber: number, status: 'starting', ownerTurnId: run.ownerTurnId, currentResultPath: null, managerPid: null, processIdentity: null, updatedAt: now() });
       return run;
     });
@@ -136,8 +161,20 @@ export class CliTaskStore {
       const state = this.currentRun(run);
       if (terminal.has(state.status) || state.processIdentity) throw new Error('CLI process binding conflict');
       if (!Number.isSafeInteger(processIdentity.pid) || processIdentity.pid < 1 || !processIdentity.startedAt || !processIdentity.token) throw new Error('invalid CLI process identity');
+      const proof = this.checkedPath(path.join(this.runDir(run, run.runNumber), 'manager-process.json'));
+      if (fs.existsSync(proof)) { if (digest(this.readJson(proof)) !== digest(processIdentity)) throw new Error('CLI manager process proof conflict'); }
+      else atomicJson(proof, processIdentity);
       const updated = { ...state, status: 'running', managerPid: processIdentity.pid, processIdentity, updatedAt: now() };
       atomicJson(this.locator(run), updated); return updated;
+    });
+  }
+  setChildProcess(run, identity) {
+    return this.withLock(run, () => {
+      const state = this.currentRun(run);
+      if (terminal.has(state.status) || !Number.isSafeInteger(identity.pid) || identity.pid < 1 || !identity.startedAt || !identity.token) throw new Error('invalid CLI child process identity');
+      const file = this.checkedPath(path.join(this.runDir(run, run.runNumber), 'cli-process.json'));
+      if (fs.existsSync(file)) throw new Error('CLI child process binding conflict');
+      atomicJson(file, { ...clone(identity), runNumber: run.runNumber, requestId: run.requestId });
     });
   }
   requestStop(identity, { stateSha256, expectedSessionId, reason, requestId }) {
@@ -147,14 +184,15 @@ export class CliTaskStore {
       if (expectedSessionId !== state.sessionId) throw new Error('CLI session mismatch');
       if (!reason || !state.processIdentity || terminal.has(state.status)) throw new Error('CLI active process proof required');
       const file = path.join(this.runDir(identity, state.runNumber), 'stop.json'); this.checkedPath(file);
-      const value = { requestId: validIdentifier(requestId), reason: String(reason), processIdentity: state.processIdentity, sessionId: state.sessionId, requestedAt: now() };
+      const value = { requestId: validIdentifier(requestId), reason: String(reason), processIdentity: state.processIdentity, runNumber: state.runNumber, sessionId: state.sessionId, requestedAt: now() };
       if (fs.existsSync(file)) throw new Error('CLI stop already requested');
       atomicJson(file, value); return { status: 'stop-requested', runNumber: state.runNumber };
     });
   }
-  finishRun(run, result) {
+  finishRun(run, result, { faultAt = null, stateSha256 = null } = {}) {
     return this.withLock(run, () => {
       const state = this.currentRun(run), dir = this.runDir(run, run.runNumber);
+      if (stateSha256 && digest(state) !== stateSha256) throw new Error('CLI state fingerprint mismatch');
       if (!terminal.has(result.status)) throw new Error('invalid CLI terminal status');
       if (result.sessionId !== undefined && result.sessionId !== state.sessionId) throw new Error('CLI session mismatch');
       for (const key of ['projectId', 'taskId', 'ownerThreadId']) if (result[key] !== undefined && result[key] !== state[key]) throw new Error('CLI result identity mismatch');
@@ -162,8 +200,19 @@ export class CliTaskStore {
       const file = path.join(dir, 'result.json'); this.checkedPath(file);
       if (fs.existsSync(file)) throw new Error('CLI result already stable; stale write rejected');
       atomicJson(file, normalized);
+      if (faultAt === 'afterResult') throw new Error('injected fault afterResult');
       atomicJson(this.locator(run), { ...state, status: normalized.status, currentResultPath: file, managerPid: null, processIdentity: null, updatedAt: now() });
       return normalized;
+    });
+  }
+  reconcileResult(identity, stateSha256) {
+    return this.withLock(identity, () => {
+      const state = this.read(identity);
+      if (digest(state) !== stateSha256) throw new Error('CLI state fingerprint mismatch');
+      const result = this.readResult(identity, state.runNumber);
+      if (result.sessionId !== state.sessionId) throw new Error('CLI saved result session mismatch');
+      atomicJson(this.locator(identity), { ...state, status: result.status, currentResultPath: path.join(this.runDir(identity, state.runNumber), 'result.json'), managerPid: null, processIdentity: null, updatedAt: now() });
+      return result;
     });
   }
   readResult(identity, number) {
@@ -177,7 +226,12 @@ export class CliTaskStore {
     this.readResult(identity, number);
     const file = path.join(this.runDir(identity, number), 'review.json'); this.checkedPath(file);
     if (!fs.existsSync(file)) return null;
-    const value = this.readJson(file); sameIdentity(value, identity); return value;
+    const value = this.readJson(file); sameIdentity(value, identity);
+    const continuation = path.join(this.runDir(identity, number), 'resume-review.json');
+    if (!fs.existsSync(continuation)) return value;
+    const next = this.readJson(continuation); sameIdentity(next, identity);
+    if (value.decision !== 'pause' || next.decision !== 'continue' || next.supersedesReviewSha256 !== sha256File(file) || next.resultSha256 !== value.resultSha256 || !next.authorizationLocator) throw new Error('CLI continuation review conflict');
+    return next;
   }
   recordReview(review) {
     return this.withLock(review, () => {
@@ -187,7 +241,15 @@ export class CliTaskStore {
       if (!['continue', 'accept', 'pause', 'close'].includes(review.decision) || !review.evidenceLocator || !review.conclusion) throw new Error('CLI review evidence required');
       validTime(review.reviewedAt);
       const file = path.join(this.runDir(review, review.runNumber), 'review.json');
-      if (fs.existsSync(file)) { if (digest(this.readJson(file)) !== digest(review)) throw new Error('CLI review conflict'); return clone(review); }
+      if (fs.existsSync(file)) {
+        const previous = this.readJson(file);
+        if (digest(previous) === digest(review)) return clone(review);
+        if (previous.decision !== 'pause' || review.decision !== 'continue' || review.supersedesReviewSha256 !== sha256File(file) || !review.authorizationLocator) throw new Error('CLI review conflict');
+        const continuation = path.join(this.runDir(review, review.runNumber), 'resume-review.json');
+        if (fs.existsSync(continuation)) { if (digest(this.readJson(continuation)) !== digest(review)) throw new Error('CLI review conflict'); }
+        else atomicJson(continuation, review);
+        return clone(review);
+      }
       atomicJson(file, review); return clone(review);
     });
   }
