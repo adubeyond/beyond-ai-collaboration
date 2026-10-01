@@ -131,6 +131,27 @@ export class CliTaskStore {
       const updated = { ...state, sessionId, updatedAt: now() }; atomicJson(this.locator(run), updated); return updated;
     });
   }
+  setProcess(run, processIdentity) {
+    return this.withLock(run, () => {
+      const state = this.currentRun(run);
+      if (terminal.has(state.status) || state.processIdentity) throw new Error('CLI process binding conflict');
+      if (!Number.isSafeInteger(processIdentity.pid) || processIdentity.pid < 1 || !processIdentity.startedAt || !processIdentity.token) throw new Error('invalid CLI process identity');
+      const updated = { ...state, status: 'running', managerPid: processIdentity.pid, processIdentity, updatedAt: now() };
+      atomicJson(this.locator(run), updated); return updated;
+    });
+  }
+  requestStop(identity, { stateSha256, expectedSessionId, reason, requestId }) {
+    return this.withLock(identity, () => {
+      const state = this.read(identity);
+      if (digest(state) !== stateSha256) throw new Error('CLI state fingerprint mismatch');
+      if (expectedSessionId !== state.sessionId) throw new Error('CLI session mismatch');
+      if (!reason || !state.processIdentity || terminal.has(state.status)) throw new Error('CLI active process proof required');
+      const file = path.join(this.runDir(identity, state.runNumber), 'stop.json'); this.checkedPath(file);
+      const value = { requestId: validIdentifier(requestId), reason: String(reason), processIdentity: state.processIdentity, sessionId: state.sessionId, requestedAt: now() };
+      if (fs.existsSync(file)) throw new Error('CLI stop already requested');
+      atomicJson(file, value); return { status: 'stop-requested', runNumber: state.runNumber };
+    });
+  }
   finishRun(run, result) {
     return this.withLock(run, () => {
       const state = this.currentRun(run), dir = this.runDir(run, run.runNumber);
