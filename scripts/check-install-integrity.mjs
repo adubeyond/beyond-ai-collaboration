@@ -103,7 +103,7 @@ try {
   const policyOverview = join(controlRoot, "projects", policyProjectId, "项目总览.md");
   const originalOverview = readFileSync(policyOverview, "utf8");
   const policyCli = join(controlRoot, "scripts", "beyond-control.mjs");
-  const modes = ["platform-default", "beyond-worker-gpt61-v4", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3"];
+  const modes = ["platform-default", "beyond-worker-gpt61-v5", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3", "beyond-worker-gpt61-v4"];
   function replacePolicy(policy) {
     writeFileSync(policyOverview, originalOverview.replace(
       /(<!-- BEGIN BEYOND WORKER POLICY -->)[\s\S]*?(<!-- END BEYOND WORKER POLICY -->)/,
@@ -117,7 +117,7 @@ try {
   }
   for (const mode of modes) {
     writeFileSync(policyOverview, originalOverview);
-    const historical = !["platform-default", "beyond-worker-gpt61-v4"].includes(mode);
+    const historical = !["platform-default", "beyond-worker-gpt61-v5"].includes(mode);
     const set = historical ? null : spawnSync(process.execPath, [policyCli, "worker-policy", "--action", "set",
       "--project-id", policyProjectId, "--mode", mode, "--approved-by", "isolated-test-explicit-approval"],
     { encoding: "utf8", windowsHide: true });

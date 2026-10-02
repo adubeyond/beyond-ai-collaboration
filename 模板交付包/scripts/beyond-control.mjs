@@ -31,9 +31,9 @@ const initializationBegin = "<!-- BEGIN BEYOND PROJECT INITIALIZATION -->";
 const initializationEnd = "<!-- END BEYOND PROJECT INITIALIZATION -->";
 const legacyRuntimeGuardRelative = ".codex/beyond-runtime-guard.mjs";
 const codexHooksRelative = ".codex/hooks.json";
-const workerPolicyModes = new Set(["platform-default", "beyond-worker-gpt61-v4"]);
+const workerPolicyModes = new Set(["platform-default", "beyond-worker-gpt61-v5"]);
 // Decode historical records for upgrade only; never expose or execute old maps.
-const legacyWorkerPolicyModes = new Set(["beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3"]);
+const legacyWorkerPolicyModes = new Set(["beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3", "beyond-worker-gpt61-v4"]);
 const workerTaskKinds = new Set(["design-analysis", "ordinary-engineering", "bulk-structured", "complex-high-risk", "hard-analysis"]);
 const initializationModes = new Set(["full", "on-demand"]);
 const initializationDecisions = new Set(["migrate", "register", "defer"]);
@@ -48,12 +48,12 @@ const initializationGroupLabels = {
   other: "其他专属资料",
 };
 // New defaults are opt-in: an upgrade must not reinterpret a previous approval.
-const workerGpt61V4 = {
-  "design-analysis": { model: "gpt-6.1-sol", thinking: "medium" },
-  "ordinary-engineering": { model: "gpt-6.1-sol", thinking: "medium" },
-  "bulk-structured": { model: "gpt-6-luna", thinking: "low" },
-  "hard-analysis": { model: "gpt-6-astra", thinking: "medium" },
-  "complex-high-risk": { model: "gpt-6.1-sol", thinking: "high" },
+const workerGpt61V5 = {
+  "design-analysis": { model: "gpt-6.1-sol", thinking: "high" },
+  "ordinary-engineering": { model: "gpt-6.1-sol", thinking: "high" },
+  "bulk-structured": { model: "gpt-6-luna", thinking: "high" },
+  "hard-analysis": { model: "gpt-6.1-sol", thinking: "xhigh" },
+  "complex-high-risk": { model: "gpt-6.1-sol", thinking: "xhigh" },
 };
 const workerGpt61Options = {
   "gpt-6-luna": ["low", "medium", "high", "xhigh", "max"],
@@ -61,7 +61,7 @@ const workerGpt61Options = {
   "gpt-6-astra": ["low", "medium", "high", "xhigh", "max", "ultra"],
 };
 function workerPolicyScope(mode) {
-  return ["beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3", "beyond-worker-gpt61-v4"].includes(mode) ? "formal-worker-stages" : "new-formal-worker";
+  return ["beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3", "beyond-worker-gpt61-v4", "beyond-worker-gpt61-v5"].includes(mode) ? "formal-worker-stages" : "new-formal-worker";
 }
 const legacyWorkerPolicyPattern = /(Luna|Terra|Sol|gpt-5\.[0-9]+-(?:luna|terra|sol)|模型矩阵|Worker.{0,20}(?:模型|推理))/i;
 
@@ -1590,11 +1590,11 @@ function workerPolicy() {
       policy: current.policy,
       choices: {
         "platform-default": { createParameters: {} },
-        "beyond-worker-gpt61-v4": workerGpt61V4,
+        "beyond-worker-gpt61-v5": workerGpt61V5,
       },
-      recommendedMode: "beyond-worker-gpt61-v4",
+      recommendedMode: "beyond-worker-gpt61-v5",
       requiresSelection: legacyWorkerPolicyModes.has(current.policy.mode),
-      selectionOptions: { "beyond-worker-gpt61-v4": workerGpt61Options },
+      selectionOptions: { "beyond-worker-gpt61-v5": workerGpt61Options },
       choiceScopes: Object.fromEntries([...workerPolicyModes].map((mode) => [mode, workerPolicyScope(mode)])),
     }, null, 2));
     return;
@@ -1608,15 +1608,15 @@ function workerPolicy() {
     const taskKind = arg("--task-kind");
     if (!workerTaskKinds.has(taskKind)) fail(`Worker任务性质无效：${taskKind}`, 2);
     const stage = action === "resolve-stage";
-    const matrix = current.policy.mode === "beyond-worker-gpt61-v4" ? workerGpt61V4 : null;
+    const matrix = current.policy.mode === "beyond-worker-gpt61-v5" ? workerGpt61V5 : null;
     const active = current.configured && current.policy.confirmed && matrix !== null
       && (!stage || current.policy.scope === "formal-worker-stages");
     if (active && !matrix[taskKind]) fail(`当前Worker策略不包含任务性质：${taskKind}`, 2);
     let parameters = active ? matrix[taskKind] : {};
     if (has("--model") || has("--thinking")) {
-      const options = current.policy.mode === "beyond-worker-gpt61-v4" ? workerGpt61Options : null;
+      const options = current.policy.mode === "beyond-worker-gpt61-v5" ? workerGpt61Options : null;
       if (!active || !options) {
-        fail("PM自主选档仅适用于已批准的 beyond-worker-gpt61-v4；不覆盖平台默认或沿用已退役矩阵", 2);
+        fail("PM自主选档仅适用于已批准的 beyond-worker-gpt61-v5；不覆盖平台默认或沿用已退役矩阵", 2);
       }
       const model = arg("--model");
       const thinking = arg("--thinking");
@@ -1997,7 +1997,7 @@ function printHelp() {
     `  initialization --action record --project-id <项目编号> --group overview|architecture|development|testing|operations|security|other --decision migrate|register|defer [--entry <正式入口>]\n` +
     `  initialization --action complete --project-id <项目编号> --root-entry-reviewed yes\n` +
     `  worker-policy --action show --project-id <项目编号>\n` +
-    `  worker-policy --action set --project-id <项目编号> --mode platform-default|beyond-worker-gpt61-v4 --approved-by <用户明确批准依据> [--approved-at <ISO时间>]\n` +
+    `  worker-policy --action set --project-id <项目编号> --mode platform-default|beyond-worker-gpt61-v5 --approved-by <用户明确批准依据> [--approved-at <ISO时间>]\n` +
     `  worker-policy --action resolve|resolve-stage --project-id <项目编号> --task-kind design-analysis|ordinary-engineering|bulk-structured|complex-high-risk|hard-analysis [--model <show返回的模型> --thinking <该模型允许的强度>]\n` +
     `  list [--git-account <已确认账号> | --all]\n` +
     `  workbench --action list\n` +

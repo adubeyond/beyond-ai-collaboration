@@ -34,7 +34,7 @@ try {
   const projectId = registration.project.projectId;
   required(["install-project-entry", "--project-root", project, "--confirm-fusion", "yes"]);
   const overview = join(control, "projects", projectId, "项目总览.md");
-  const modes = ["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3", "beyond-worker-gpt61-v4"];
+  const modes = ["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3", "beyond-worker-gpt61-v4", "beyond-worker-gpt61-v5"];
   const validAt = "2026-09-27T06:00:00.000Z";
   const scenarios = [
     { name: "valid-iso", patch: { approvedAt: validAt }, expected: 0 },
@@ -47,15 +47,15 @@ try {
     { name: "blank-approver", patch: { approvedBy: "   " }, expected: 2 },
   ];
   for (const mode of modes) {
-    const saved = ["platform-default", "beyond-worker-gpt61-v4"].includes(mode)
+    const saved = ["platform-default", "beyond-worker-gpt61-v5"].includes(mode)
       ? required(["worker-policy", "--action", "set", "--project-id", projectId,
         "--mode", mode, "--approved-by", "isolated-test-approval", "--approved-at", validAt])
       : { policy: { schemaVersion: 1, mode,
         scope: mode.endsWith("v1") ? "new-formal-worker" : "formal-worker-stages",
         confirmed: true, approvedBy: "historical-approval", approvedAt: validAt } };
     const clean = readFileSync(overview, "utf8");
-    // Preserve malformed-record coverage on v3 and validate the new approval too.
-    for (const scenario of ["beyond-worker-gpt6-v3", "beyond-worker-gpt61-v4"].includes(mode) ? scenarios : scenarios.slice(0, 2)) {
+    // Preserve malformed-record coverage on retired policies and the new approval.
+    for (const scenario of ["beyond-worker-gpt6-v3", "beyond-worker-gpt61-v4", "beyond-worker-gpt61-v5"].includes(mode) ? scenarios : scenarios.slice(0, 2)) {
       const policy = { ...saved.policy, ...scenario.patch };
       writeFileSync(overview, clean.replace(
         /(<!-- BEGIN BEYOND WORKER POLICY -->)[\s\S]*?(<!-- END BEYOND WORKER POLICY -->)/,

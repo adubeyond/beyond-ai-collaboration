@@ -13,7 +13,7 @@ Use one PM for the whole project or several PMs for explicit scopes. With a user
 
 It is built for people already using Codex on real repositories who are tired of repeated context loss, finished Workers that never return to the PM, stage-heavy workflows that require constant “continue” prompts, ambiguous claims such as “tests passed” versus “released,” and conflicting writes across parallel tasks.
 
-[Download BEYOND v3.2.8](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.8) · [Gitee mirror](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90-second real case](docs/en/real-case-and-90-second-demo.md) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [3.2.8 Upgrade Guide](docs/en/releases/v3.2.8.md) · [Architecture](docs/en/architecture.md)
+[Download BEYOND v3.2.9](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.9) · [Gitee mirror](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90-second real case](docs/en/real-case-and-90-second-demo.md) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [3.2.9 Upgrade Guide](docs/en/releases/v3.2.9.md) · [Architecture](docs/en/architecture.md)
 
 ## What BEYOND changes
 
@@ -26,25 +26,27 @@ It is built for people already using Codex on real repositories who are tired of
 | “Tests passed,” “may commit,” and “may release” collapse into one permission | Files, Git, network, servers, data, and production remain separate evidence and authorization domains |
 | Parallel tasks overwrite one another or close twice | The PM registers one owner and write boundary per result; acceptance and archival are idempotent |
 
-## Core capabilities in 3.2.8
+## Core capabilities in 3.2.9
 
 ### 1. Select models by task, adjust them by stage
 
-Neither the most expensive model for everything nor a mandatory trial of the cheapest one. Once the user enables the sweet-spot policy, PMs choose a capable combination based on the task, available plan, and delivery evidence.
+Neither the most expensive model for everything nor a mandatory trial of the cheapest one. Once the user enables the model policy, PMs select combinations from the task, available plan, and actual delivery evidence. Sol is the mainstay; generic benchmark scores do not stand in for task completion.
+
+Version 3.2.9 uses the following defaults; the published 3.2.8 package remains unchanged.
 
 | Current work | Recommended starting point |
 | --- | --- |
-| Clear extraction, classification, conversion, repetitive processing | GPT-6 Luna · low; high for demanding checks |
-| Routine implementation, repair, documentation, ordinary plans | GPT-6.1 Sol · medium; high for denser logic |
-| Polished complete UI, cross-module design, conflicting evidence | GPT-6.1 Sol · xhigh; ordinary UI is not automatically promoted |
-| Architecture problems, complex diagnosis, key decisions | GPT-6 Astra · medium, raise when justified |
-| Cross-system consistency or direct high-consequence execution | GPT-6.1 Sol · high; authorization and acceptance remain unchanged |
+| PM project judgment and advancement | GPT-6.1 Sol · xhigh, configured by the user |
+| Routine implementation, repair, documentation, ordinary plans | GPT-6.1 Sol · high |
+| Difficult tasks, complex diagnosis, cross-module design, direct high-consequence work | GPT-6.1 Sol · xhigh; ordinary UI is not automatically promoted |
+| Clear batch extraction, classification, conversion, repetitive processing | GPT-6 Luna · high |
+| A demonstrated Sol reasoning bottleneck, or user-requested breakthrough work | GPT-6 Astra; task-specific effort, never the ordinary or difficult-task default |
 
-Only `beyond-worker-gpt61-v4` and platform defaults are selectable. Historical matrices remain in Git history, not as active runtime options. Upgrades recognize old approvals but require an explicit current selection; they do not reconfigure running tasks or existing threads.
+The current source offers only `beyond-worker-gpt61-v5` and platform defaults. Historical matrices, including v4, remain in Git history, not as active runtime options. Upgrades recognize old approvals but require an explicit current selection; they do not reconfigure running tasks or existing threads. `v5` identifies the model policy, not a product release version.
 
 The PM adjusts the same Worker at normal continuation points. First supply missing facts or guidance, then judge whether a reasoning bottleneck warrants promotion. Downgrade when the difficult part is resolved and remaining work is clear. Do not force trials of every cheaper tier or interrupt useful work to save allowance. Pass model and effort together instead of inheriting the PM's or previous stage's effort. An accepted request is not proof the host applied it.
 
-**Priority: complete, correct delivery; total completion time; then allowance cost including rework.** Recommendations combine official starting points with product-rule verification, not guaranteed optimal settings, model benchmarks, or fixed savings. Defaults remain unless enabled; the PM's own configuration is unchanged. User locks, budgets, and host availability take precedence.
+**Priority: complete, correct delivery; total completion time; then allowance cost including rework.** These defaults reflect the user's comparative experience, not guaranteed optimal settings, model benchmarks, or fixed savings. They are neither ceilings nor minimum tiers; task evidence may justify adjustment. Authorization and acceptance remain unchanged. Platform defaults remain unless enabled; the Worker policy does not change the PM's own configuration. User locks, budgets, and host availability take precedence.
 
 ### 2. PM judgment, with whole-project or scoped responsibility
 
@@ -102,8 +104,8 @@ The PM understands objectives, analyzes problems, designs tasks, and corrects co
 
 ### 1. Download the official release
 
-- [BEYOND-3.2.8.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.8/BEYOND-3.2.8.zip)
-- [BEYOND-3.2.8.zip.sha256 (optional checksum)](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.8/BEYOND-3.2.8.zip.sha256)
+- [BEYOND-3.2.9.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.9/BEYOND-3.2.9.zip)
+- [BEYOND-3.2.9.zip.sha256 (optional checksum)](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.9/BEYOND-3.2.9.zip.sha256)
 
 The ZIP is sufficient for installation. A missing or unavailable `.sha256` file does not block installation; if a checksum file is supplied and does not match, stop. See the [Installation, Upgrade, and Project Initialization Guide](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) for exact commands.
 
@@ -113,7 +115,7 @@ Open a new ordinary Codex task in the target project and send this prompt withou
 
 ```text
 This is BEYOND installation maintenance. Do not create a PM, Worker, or business task.
-Use the verified official BEYOND 3.2.8 package I downloaded to install or upgrade this project's beyond-control directory and six global Skills.
+Use the verified official BEYOND 3.2.9 package I downloaded to install or upgrade this project's beyond-control directory and six global Skills.
 Create a precise backup first. Preserve native project rules and real content under local, projects, and shared; never replace them with empty templates.
 Fuse the project entry, run installation verification, then stop and wait for me to restart Codex. Do not start, resume, or modify business tasks.
 ```
@@ -126,7 +128,7 @@ task-design      task-dev
 task-test        task-ops
 ```
 
-BEYOND 3.2.8 does not install an identity Hook, notify branch, persistent daemon, or extra Codex CLI. The optional route uses an existing local CLI with finite per-dispatch background execution and notification; it does not replace the default Desktop route.
+BEYOND 3.2.9 does not install an identity Hook, notify branch, persistent daemon, or extra Codex CLI. The optional route uses an existing local CLI with finite per-dispatch background execution and notification; it does not replace the default Desktop route.
 
 ### 3. Restart and adopt the project
 
@@ -178,7 +180,7 @@ It is not currently a good fit for:
 
 ## Current boundaries
 
-- The current stable release is `v3.2.8`, primarily for local Codex Desktop projects.
+- The current stable release is `v3.2.9`, primarily for local Codex Desktop projects.
 - Standard installation and operation have been validated in real Windows projects; public checks also cover package contents, installation structure, and the minimal fixture.
 - Task creation, callbacks, and persistent permissions vary across platforms. Evidence from one platform is not a universal compatibility claim.
 - This release adds a read-only local fallback for completed tasks whose final text is unavailable through the platform. It does not guarantee compatibility with every host version or eliminate long-context goal drift.
@@ -192,7 +194,7 @@ It is not currently a good fit for:
 | Install, upgrade, or roll back | [Installation, Upgrade, and Project Initialization](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) |
 | Try a clean fixture | [Quick Start](docs/en/quick-start.md) |
 | Understand PM, Worker, documents, and runtime | [Architecture](docs/en/architecture.md) |
-| Review 3.2.8 changes | [Upgrade Guide](docs/en/releases/v3.2.8.md) · [CHANGELOG](CHANGELOG.md) |
+| Review 3.2.9 changes | [Upgrade Guide](docs/en/releases/v3.2.9.md) · [CHANGELOG](CHANGELOG.md) |
 | Inspect the control repository | [Template Package](模板交付包/README.md) |
 | Report a problem or propose an improvement | [Issues](https://github.com/adubeyond/beyond-ai-collaboration/issues) · [Contributing](CONTRIBUTING.en.md) |
 | Report a vulnerability privately | [Security Policy](SECURITY.en.md) |
