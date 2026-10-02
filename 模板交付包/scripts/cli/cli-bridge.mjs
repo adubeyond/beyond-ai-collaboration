@@ -14,9 +14,15 @@ export function readProfile(file) {
   if (!path.isAbsolute(file)) throw new Error('CLI profile absolute path required');
   const profile = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (Object.keys(profile).some(key => !['schemaVersion', 'runner', 'codexHome', 'model'].includes(key)) || Object.keys(profile.runner ?? {}).some(key => !['command', 'args'].includes(key))) throw new Error('CLI profile cannot contain credentials or undocumented overrides');
+  const home = desktopHome();
+  const lexical = file => {
+    const absolute = path.resolve(file);
+    return process.platform === 'win32' ? absolute.toLowerCase() : absolute;
+  };
+  // Reject Desktop credential reuse before stat, including a cold host with no home yet.
+  if (path.isAbsolute(profile.codexHome ?? '') && lexical(profile.codexHome) === lexical(home)) throw new Error('CLI profile must not reuse Desktop authentication home');
   if (profile.schemaVersion !== 1 || !path.isAbsolute(profile.runner?.command ?? '') || !fs.statSync(profile.runner.command).isFile() || !Array.isArray(profile.runner.args) || profile.runner.args.some(a => typeof a !== 'string' || /(?:api[_-]?key|auth|provider|--last|--config|--ephemeral)/i.test(a)) || !path.isAbsolute(profile.codexHome ?? '') || !fs.statSync(profile.codexHome).isDirectory() || typeof profile.model !== 'string' || !profile.model.trim()) throw new Error('invalid CLI profile');
   const normalized = file => { const physical = fs.realpathSync(file); return process.platform === 'win32' ? physical.toLowerCase() : physical; };
-  const home = desktopHome();
   if (fs.existsSync(home) && normalized(profile.codexHome) === normalized(home)) throw new Error('CLI profile must not reuse Desktop authentication home');
   return profile;
 }

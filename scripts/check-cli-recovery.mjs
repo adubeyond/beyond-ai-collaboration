@@ -68,6 +68,16 @@ test('default Desktop home is rejected even when CODEX_HOME is unset',t=>{
   try { fs.writeFileSync(f.profilePath,JSON.stringify({...f.profile,codexHome:path.join(process.env.USERPROFILE||process.env.HOME,'.codex')}));assert.throws(()=>readProfile(f.profilePath),/Desktop.*home|authentication/); }
   finally {if(saved===undefined)delete process.env.CODEX_HOME;else process.env.CODEX_HOME=saved;}
 });
+test('nonexistent explicitly configured Desktop home is rejected before filesystem lookup',t=>{
+  const f=fixture(t),saved=process.env.CODEX_HOME,home=path.join(f.root,'not-created-desktop');process.env.CODEX_HOME=home;
+  try { fs.writeFileSync(f.profilePath,JSON.stringify({...f.profile,codexHome:home}));assert.throws(()=>readProfile(f.profilePath),/Desktop.*home|authentication/);assert.equal(fs.existsSync(home),false); }
+  finally {if(saved===undefined)delete process.env.CODEX_HOME;else process.env.CODEX_HOME=saved;}
+});
+test('physical alias to Desktop home is rejected while a separate CLI home remains valid',t=>{
+  const f=fixture(t),saved=process.env.CODEX_HOME,home=path.join(f.root,'desktop'),alias=path.join(f.root,'desktop-alias');fs.mkdirSync(home);fs.symlinkSync(home,alias,process.platform==='win32'?'junction':'dir');process.env.CODEX_HOME=home;
+  try { assert.equal(readProfile(f.profilePath).codexHome,f.profile.codexHome);fs.writeFileSync(f.profilePath,JSON.stringify({...f.profile,codexHome:alias}));assert.throws(()=>readProfile(f.profilePath),/Desktop.*home|authentication/); }
+  finally {if(saved===undefined)delete process.env.CODEX_HOME;else process.env.CODEX_HOME=saved;}
+});
 test('stop submitted before thread.started still stops the exact run after its session binds',async t=>{
   const f=fixture(t),run=f.store.beginRun(f.binding,f.begin);
   f.store.setProcess(run,{pid:process.pid,startedAt:processStart(process.pid),token:'manager'});

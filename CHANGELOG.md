@@ -22,6 +22,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Avoid nesting a historical override block inside native rules when adopting an unversioned entry.
 - Normalize equivalent Windows path spellings before validating CLI execution roots.
+- Reject Desktop credential-home reuse before filesystem lookup on cold hosts, retaining physical-alias rejection.
 
 ## [3.2.7] - 2026-09-27
 
