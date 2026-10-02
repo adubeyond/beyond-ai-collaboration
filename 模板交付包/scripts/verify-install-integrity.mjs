@@ -237,9 +237,9 @@ function validateWorkerPolicy(text, label) {
   }
   const policy = parseJson(encoded, `${label}的Worker运行策略`);
   if (!policy) return;
-  const expectedScope = ["beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3"].includes(policy.mode)
+  const expectedScope = ["beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3", "beyond-worker-gpt61-v4"].includes(policy.mode)
     ? "formal-worker-stages" : "new-formal-worker";
-  if (policy.schemaVersion !== 1 || !["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3"].includes(policy.mode)
+  if (policy.schemaVersion !== 1 || !["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3", "beyond-worker-gpt61-v4"].includes(policy.mode)
     || policy.scope !== expectedScope || typeof policy.confirmed !== "boolean") {
     errors.push(`${label}的Worker运行策略字段无效`);
   }

@@ -103,7 +103,7 @@ try {
   const policyOverview = join(controlRoot, "projects", policyProjectId, "项目总览.md");
   const originalOverview = readFileSync(policyOverview, "utf8");
   const policyCli = join(controlRoot, "scripts", "beyond-control.mjs");
-  const modes = ["platform-default", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3"];
+  const modes = ["platform-default", "beyond-worker-gpt61-v4", "beyond-worker-matrix-v1", "beyond-worker-sweetspots-v2", "beyond-worker-gpt6-v3"];
   function replacePolicy(policy) {
     writeFileSync(policyOverview, originalOverview.replace(
       /(<!-- BEGIN BEYOND WORKER POLICY -->)[\s\S]*?(<!-- END BEYOND WORKER POLICY -->)/,
@@ -117,11 +117,16 @@ try {
   }
   for (const mode of modes) {
     writeFileSync(policyOverview, originalOverview);
-    const set = spawnSync(process.execPath, [policyCli, "worker-policy", "--action", "set",
+    const historical = !["platform-default", "beyond-worker-gpt61-v4"].includes(mode);
+    const set = historical ? null : spawnSync(process.execPath, [policyCli, "worker-policy", "--action", "set",
       "--project-id", policyProjectId, "--mode", mode, "--approved-by", "isolated-test-explicit-approval"],
     { encoding: "utf8", windowsHide: true });
-    if (set.status !== 0) throw new Error(`策略保存失败：${mode}\n${set.stdout}\n${set.stderr}`);
-    const saved = JSON.parse(set.stdout).policy;
+    if (set && set.status !== 0) throw new Error(`策略保存失败：${mode}\n${set.stdout}\n${set.stderr}`);
+    const saved = historical ? { schemaVersion: 1, mode,
+      scope: mode.endsWith("v1") ? "new-formal-worker" : "formal-worker-stages",
+      confirmed: true, approvedBy: "historical-approval", approvedAt: "2026-10-02T00:00:00.000Z" }
+      : JSON.parse(set.stdout).policy;
+    if (historical) replacePolicy(saved);
     const show = spawnSync(process.execPath, [policyCli, "worker-policy", "--action", "show",
       "--project-id", policyProjectId], { encoding: "utf8", windowsHide: true });
     if (show.status !== 0 || JSON.parse(show.stdout).policy.mode !== mode) throw new Error(`策略读取失败：${mode}`);
@@ -141,7 +146,7 @@ try {
     writeFileSync(policyOverview, originalOverview);
     const missingApproval = spawnSync(process.execPath, [policyCli, "worker-policy", "--action", "set",
       "--project-id", policyProjectId, "--mode", mode], { encoding: "utf8", windowsHide: true });
-    if (missingApproval.status === 0 || !`${missingApproval.stderr}${missingApproval.stdout}`.includes("明确批准依据")
+    if (missingApproval.status === 0 || !`${missingApproval.stderr}${missingApproval.stdout}`.includes(historical ? "Worker运行策略无效" : "明确批准依据")
       || readFileSync(policyOverview, "utf8") !== originalOverview) errors.push(`${mode}无批准set未正确拒绝`);
     else passed += 1;
   }

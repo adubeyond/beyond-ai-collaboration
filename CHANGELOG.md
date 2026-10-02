@@ -6,6 +6,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.8] - 2026-10-02
+
+### Changed
+
+- Use GPT-6.1 Sol for routine work, Luna for clear extraction, and Astra for demanding reasoning; PMs select effort and adjust the same thread by stage.
+- Retire active v1/v2/v3 matrices. Recognize old approval records for upgrade only, without silently rewriting them or reconfiguring existing threads.
+
+### Added
+
+- Optional PM → Worker → CLI and direct owner → CLI goal loops with retained sessions, finite background runs, notifications, explicit review, and idempotent closeout.
+- CLI execution, identity, concurrency, recovery, and goal-loop tests in public Windows/Linux validation.
+
+### Fixed
+
+- Avoid nesting a historical override block inside native rules when adopting an unversioned entry.
+- Normalize equivalent Windows path spellings before validating CLI execution roots.
+
 ## [3.2.7] - 2026-09-27
 
 - Add the opt-in GPT-6 Worker policy: PMs select both model and reasoning effort within approved Luna, Sol and Astra combinations; preserve older approvals and explicit user choices.
