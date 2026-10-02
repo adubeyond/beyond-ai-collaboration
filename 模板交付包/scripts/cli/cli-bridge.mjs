@@ -21,7 +21,7 @@ export function readProfile(file) {
   return profile;
 }
 function validateBinding(binding, context, store) {
-  if (binding.ownerThreadId !== context.ownerThreadId || binding.executionRoot !== context.executionRoot) throw new Error('CLI owner/execution identity mismatch');
+  if (binding.ownerThreadId !== context.ownerThreadId || !path.isAbsolute(binding.executionRoot) || path.resolve(binding.executionRoot) !== path.resolve(context.executionRoot)) throw new Error('CLI owner/execution identity mismatch');
   const provider = new ProjectIdentityProvider({ controlRoot: context.controlRoot, runtimeRoot: path.join(context.controlRoot, 'local/runtime/project-identity') });
   if (binding.projectRoute) provider.validateWorkerRoute(binding.projectId, binding.projectRoute, { executionRoot: context.executionRoot });
   else provider.validateSameRootProject(binding.projectId, { executionRoot: context.executionRoot });

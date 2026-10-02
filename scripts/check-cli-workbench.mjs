@@ -32,6 +32,16 @@ test('PM can own two distinct CLI goals without inventing Worker identities', t 
   assert.equal(records.every(r => r.execution.ownerThreadId === 'pm-owner' && !Object.hasOwn(r, 'worker')), true);
   assert.match(f.store.view(), /CLI/); assert.match(f.store.view(), /pm-owner/);
 });
+
+test('CLI registration accepts an equivalent absolute state locator, rejecting a different or relative path', t => {
+  const f = fixture(t);
+  const registration = { projectId: 'local-cli', taskId: 'portable', task: 'portable goal', execution: { kind: 'cli', ownerThreadId: 'pm-owner', stateLocator: f.cli.locator(f.binding('portable')).replaceAll('\\', '/').replace('/task.json', '/./task.json') }, status: '进行中', progress: 'pending CLI', pause: '无', updatedAt: time };
+  assert.equal(f.call('workbench.register', registration).result.taskId, 'portable');
+  const before = fs.readFileSync(f.store.stateFile);
+  assert.throws(() => f.call('workbench.register', { ...registration, taskId: 'bad', execution: { ...registration.execution, stateLocator: path.join(f.root, 'other.json') } }), /locator identity/);
+  assert.throws(() => f.call('workbench.register', { ...registration, taskId: 'relative', execution: { ...registration.execution, stateLocator: 'local/runtime/cli-tasks/local-cli/relative/task.json' } }), /locator identity/);
+  assert.deepEqual(fs.readFileSync(f.store.stateFile), before);
+});
 test('legacy Worker remains unique and CLI cannot use legacy acceptance', t => {
   const f = fixture(t);
   const worker = { taskId: 'old', task: 'legacy task', worker: 'worker-one', status: '进行中', progress: 'work', pause: '无', updatedAt: time };

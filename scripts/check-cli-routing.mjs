@@ -33,3 +33,20 @@ test('optional CLI has one rule owner and keeps the default Worker callback inta
   assert.match(worker, /"threadId":"<source_thread_id>","prompt"/);
   assert.match(worker, /正式任务在回源前通过固定`runtime`入口执行一次`worker-result.enqueue`/);
 });
+
+test('CLI local result inspection accepts equivalent absolute execution paths but not another root', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-cli-path-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'local/projects'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'local/projects/local-test.md'), `---\nid: local-test\npath: ${root}\n---\n`);
+  fs.writeFileSync(path.join(root, 'AGENTS.md'), '<!-- BEYOND-CONTROL-ROOT: . -->\n<!-- BEYOND-PROJECT-ID: local-test -->\n');
+  const equivalent = root.replaceAll('\\', '/') + '/.';
+  const binding = { projectId: 'local-test', taskId: 'goal', ownerThreadId: 'owner', ownerTurnId: 'turn', executionRoot: equivalent, profilePath: path.join(root, 'profile.json'), taskMode: 'assist', contract: { goal: 'inspect', boundaries: 'temporary', acceptance: 'same root', factEntries: [], skillEntries: [] } };
+  const store = new CliTaskStore({ controlRoot: root }); store.create(binding);
+  const request = { schemaVersion: 1, requestId: 'inspect-equivalent', action: 'cli.status', input: { projectId: 'local-test', taskId: 'goal', ownerThreadId: 'owner' } };
+  const context = { controlRoot: root, executionRoot: root, ownerThreadId: 'owner' };
+  assert.equal((await launchCliRequest(request, context)).taskId, 'goal');
+  const before = fs.readFileSync(store.locator(binding));
+  await assert.rejects(() => launchCliRequest(request, { ...context, executionRoot: path.join(root, 'other') }), /identity mismatch/);
+  assert.deepEqual(fs.readFileSync(store.locator(binding)), before);
+});

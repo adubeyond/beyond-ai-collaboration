@@ -335,7 +335,7 @@ export class WorkbenchTransactionStore {
       if (cli && (Object.hasOwn(input, 'worker') || !validId(input.execution.ownerThreadId) || !validId(input.projectId))) throw new Error('invalid CLI registration identity');
       if (cli) {
         const locator = new CliTaskStore({ controlRoot: path.resolve(this.runtimeRoot, '../../..') }).locator({ ...input, ownerThreadId: input.execution.ownerThreadId });
-        if (input.execution.stateLocator !== locator) throw new Error('CLI state locator identity mismatch');
+        if (!path.isAbsolute(input.execution.stateLocator ?? '') || path.resolve(input.execution.stateLocator) !== locator) throw new Error('CLI state locator identity mismatch');
       }
       if (!validId(input.taskId) || (!cli && !validId(input.worker)) || !String(input.task ?? '').trim()
         || !ACTIVE_STATES.has(input.status) || !String(input.progress ?? '').trim()

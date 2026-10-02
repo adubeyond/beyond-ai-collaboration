@@ -245,7 +245,7 @@ function execute(action, request, config) {
     projectIdentity(config).validateControlProject(nonEmpty(input.projectId, 'projectId'));
     if (input.execution.ownerThreadId !== config.ownerThreadId) throw new Error('CLI registered owner identity mismatch');
     const locator = new CliTaskStore({ controlRoot: config.controlRoot }).locator({ ...input, ownerThreadId: input.execution.ownerThreadId });
-    if (input.execution.stateLocator !== locator) throw new Error('CLI state locator identity mismatch');
+    if (!path.isAbsolute(input.execution.stateLocator ?? '') || path.resolve(input.execution.stateLocator) !== locator) throw new Error('CLI state locator identity mismatch');
     return workbench(config).registerTask(input);
   }
   if (action === 'workbench.accept-cli') {
