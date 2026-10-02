@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [3.2.9] - 2026-10-02
 
+### Fixed
+
+- Reuse the existing bounded file-operation retry when Windows briefly denies reading a receipt-lock directory during handoff. Persistent access failures remain visible; lock ownership and callback/receipt protocols are unchanged.
+
 ### Changed
 
 - Adopt the user-tested Sol-first defaults in opt-in `beyond-worker-gpt61-v5`: Sol high for routine engineering and ordinary design, Sol xhigh for difficult/high-consequence work, and Luna high for structured batches. Astra remains an explicit breakthrough option, not a task-category default.

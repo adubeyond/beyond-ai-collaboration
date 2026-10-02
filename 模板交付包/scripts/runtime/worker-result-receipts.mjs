@@ -159,7 +159,9 @@ export class WorkerResultReceiptStore {
         } catch (error) {
           if (!['EEXIST', 'ENOTEMPTY', 'EPERM', 'EACCES'].includes(error?.code)) throw error;
           let owners;
-          try { owners = fs.readdirSync(lock); }
+          // Windows can temporarily deny directory reads during lock handoff.
+          // Reuse the bounded I/O retry; a persistent denial still fails closed.
+          try { owners = retryTransientFileOperation(() => fs.readdirSync(lock)); }
           catch (readError) { if (readError?.code === 'ENOENT') continue; throw readError; }
           if (owners.length === 0) {
             removeEmptyLockDirectory(lock);

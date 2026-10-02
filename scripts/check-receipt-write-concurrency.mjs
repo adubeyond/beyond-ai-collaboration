@@ -153,6 +153,54 @@ test('concurrent dead-lock recovery never removes a replacement live owner', asy
   assert.deepEqual(fs.readdirSync(path.join(f.root, 'locks')), []);
 });
 
+test('transient Windows directory denial during recovery is retried without losing pending', async t => {
+  const f = fixture(t), crashed = f.run('crashed', 'acknowledge', f.ack, true);
+  await f.entered(crashed);
+  crashed.process.kill();
+  await crashed.done;
+  const lock = path.join(f.root, 'locks', path.basename(f.store.receiptPath(f.input.projectId, f.input.taskId), '.json') + '.lock');
+  const read = fs.readdirSync;
+  let injected = 0;
+  fs.readdirSync = function(directory, ...args) {
+    if (path.resolve(String(directory)) === lock && injected++ === 0) {
+      throw Object.assign(new Error('injected transient directory denial'), { code: 'EPERM' });
+    }
+    return read.call(this, directory, ...args);
+  };
+  try {
+    const result = f.store.enqueue({ ...f.input, finalText: '已完成：短暂占用后恢复' });
+    assert.equal(result.mode, 'replaced');
+    assert.ok(injected >= 2, 'retry must reach the same lock directory again');
+    assert.equal(f.store.list({ projectId: f.input.projectId }).records[0].finalText, '已完成：短暂占用后恢复');
+  } finally { fs.readdirSync = read; }
+  assert.deepEqual(fs.readdirSync(path.join(f.root, 'locks')), []);
+});
+
+test('persistent directory denial fails closed without deleting old receipt or lock owner', async t => {
+  const f = fixture(t), crashed = f.run('crashed', 'acknowledge', f.ack, true);
+  await f.entered(crashed);
+  crashed.process.kill();
+  await crashed.done;
+  const lock = path.join(f.root, 'locks', path.basename(f.store.receiptPath(f.input.projectId, f.input.taskId), '.json') + '.lock');
+  const owners = fs.readdirSync(lock);
+  const read = fs.readdirSync;
+  let attempts = 0;
+  fs.readdirSync = function(directory, ...args) {
+    if (path.resolve(String(directory)) === lock) {
+      attempts += 1;
+      throw Object.assign(new Error('injected persistent directory denial'), { code: 'EACCES' });
+    }
+    return read.call(this, directory, ...args);
+  };
+  try {
+    assert.throws(() => f.store.enqueue({ ...f.input, finalText: '已完成：不可写入' }), error => error.code === 'EACCES');
+    assert.equal(attempts, 20, 'the existing retry bound must remain finite');
+  } finally { fs.readdirSync = read; }
+  assert.deepEqual(fs.readdirSync(lock), owners);
+  assert.deepEqual(fs.readdirSync(path.join(f.root, 'locks')), [path.basename(lock)]);
+  assert.equal(f.store.list({ projectId: f.input.projectId }).records[0].receiptId, f.old.receiptId);
+});
+
 test('live lock times out without theft; failure releases only the contender directory', async t => {
   const f = fixture(t), ack = f.run('owner', 'acknowledge', f.ack, true);
   await f.entered(ack);
