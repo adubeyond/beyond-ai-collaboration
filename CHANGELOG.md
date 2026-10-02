@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.9] - 2026-10-02
+
+### Changed
+
+- Adopt the user-tested Sol-first defaults in opt-in `beyond-worker-gpt61-v5`: Sol high for routine engineering and ordinary design, Sol xhigh for difficult/high-consequence work, and Luna high for structured batches. Astra remains an explicit breakthrough option, not a task-category default.
+- Recommend Sol xhigh for PMs without automatically changing their platform settings. Preserve evidence-based same-Worker adjustments; recognize v4 approvals for migration only, requiring a new explicit selection before applying the changed defaults. Callback, receipt, and CLI protocols are unchanged.
+
 ## [3.2.8] - 2026-10-02
 
 ### Changed

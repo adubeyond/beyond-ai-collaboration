@@ -39,7 +39,7 @@ function command(args, script = 'scripts/beyond-control.mjs') {
   return r.stdout;
 }
 
-const baseline = await Zip.loadAsync(execFileSync('git', ['archive', '--format=zip', 'v3.2.7', '模板交付包'], { cwd: root, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }));
+const baseline = await Zip.loadAsync(execFileSync('git', ['archive', '--format=zip', 'v3.2.8', '模板交付包'], { cwd: root, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }));
 for (const [name, entry] of Object.entries(baseline.files)) {
   if (entry.dir) continue;
   assert.ok(name.startsWith('模板交付包/'));
@@ -49,7 +49,7 @@ write(path.join(project, 'AGENTS.md'), '# Existing project\n\nKeep the native bu
 command(['install-project-entry', '--project-root', project, '--confirm-fusion', 'yes']);
 const projectId = JSON.parse(command(['register-project', '--project-root', project])).project.projectId;
 const overview = path.join(control, 'projects', projectId, '项目总览.md');
-const oldPolicy = { schemaVersion: 1, mode: 'beyond-worker-gpt6-v3', scope: 'formal-worker-stages', confirmed: true, approvedBy: 'Historical test approval', approvedAt: '2026-10-01T00:00:00.000Z' };
+const oldPolicy = { schemaVersion: 1, mode: 'beyond-worker-gpt61-v4', scope: 'formal-worker-stages', confirmed: true, approvedBy: 'Historical test approval', approvedAt: '2026-10-01T00:00:00.000Z' };
 const oldOverview = fs.readFileSync(overview, 'utf8');
 assert.match(oldOverview, /BEGIN BEYOND WORKER POLICY/);
 const fence = String.fromCharCode(96).repeat(3);
@@ -80,7 +80,7 @@ for (const [name, hash] of Object.entries(protectedBefore)) assert.equal(afterCo
 for (const name of fs.readdirSync(path.join(release, 'beyond-control/skills'))) fs.cpSync(path.join(release, 'beyond-control/skills', name), path.join(skills, name), { recursive: true });
 command(['install-project-entry', '--project-root', project, '--confirm-fusion', 'yes']);
 const integrity = command(['--installed-skills-root', skills, '--project-agents', path.join(project, 'AGENTS.md')], 'scripts/verify-install-integrity.mjs');
-assert.match(integrity, /3\.2\.8/);
+assert.match(integrity, /3\.2\.9/);
 assert.match(fs.readFileSync(path.join(project, 'AGENTS.md'), 'utf8'), /Keep the native business rules/);
 const policy = JSON.parse(command(['worker-policy', '--action', 'resolve-stage', '--project-id', projectId, '--task-kind', 'ordinary-engineering']));
 assert.equal(policy.requiresSelection, true); assert.deepEqual(policy.continuationParameters, {});
@@ -92,4 +92,4 @@ assert.equal(store.snapshot().tasks.paused.status, '已暂停');
 for (const name of Object.keys(upgraded).filter(name => !Object.hasOwn(before, name))) fs.unlinkSync(contained(project, name));
 for (const name of Object.keys(before)) write(contained(project, name), fs.readFileSync(contained(backup, name)));
 assert.deepEqual(snapshot(project), before);
-console.log(JSON.stringify({ passed: true, baseline: 'v3.2.7', release: '3.2.8', productFiles: manifest.files.length, protectedFiles: Object.keys(protectedBefore).length, nativeRulesPreserved: true, tasksUnchanged: true, historicalApprovalNotReinterpreted: true, rollbackBytesEqual: true, scratch, liveProjectWrites: false }, null, 2));
+console.log(JSON.stringify({ passed: true, baseline: 'v3.2.8', release: '3.2.9', productFiles: manifest.files.length, protectedFiles: Object.keys(protectedBefore).length, nativeRulesPreserved: true, tasksUnchanged: true, historicalApprovalNotReinterpreted: true, rollbackBytesEqual: true, scratch, liveProjectWrites: false }, null, 2));

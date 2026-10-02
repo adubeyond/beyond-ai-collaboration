@@ -46,6 +46,7 @@ for (const [target, source] of [
     const sourceLink = '(v' + version + '-validation.md)';
     assert.ok(bytes.toString('utf8').includes(sourceLink), 'Release validation link missing');
     bytes = Buffer.from(bytes.toString('utf8').replaceAll(sourceLink, '(TEST-RESULTS.md)'));
+    bytes = Buffer.from(bytes.toString('utf8').replaceAll('(v' + version + '-install.md)', '(INSTALL.md)'));
   }
   payload.set(target, bytes);
 }

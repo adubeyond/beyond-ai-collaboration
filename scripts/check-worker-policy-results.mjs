@@ -29,13 +29,13 @@ function replacePolicy(text, policy) {
   return text.replace(/(<!-- BEGIN BEYOND WORKER POLICY -->)[\s\S]*?(<!-- END BEYOND WORKER POLICY -->)/,
     (_all,b,e)=>b+"\n"+fence+"json\n"+JSON.stringify(policy)+"\n"+fence+"\n"+e);
 }
-const mode="beyond-worker-gpt61-v4";
+const mode="beyond-worker-gpt61-v5";
 const defaults={
-  "design-analysis":{model:"gpt-6.1-sol",thinking:"medium"},
-  "ordinary-engineering":{model:"gpt-6.1-sol",thinking:"medium"},
-  "bulk-structured":{model:"gpt-6-luna",thinking:"low"},
-  "hard-analysis":{model:"gpt-6-astra",thinking:"medium"},
-  "complex-high-risk":{model:"gpt-6.1-sol",thinking:"high"},
+  "design-analysis":{model:"gpt-6.1-sol",thinking:"high"},
+  "ordinary-engineering":{model:"gpt-6.1-sol",thinking:"high"},
+  "bulk-structured":{model:"gpt-6-luna",thinking:"high"},
+  "hard-analysis":{model:"gpt-6.1-sol",thinking:"xhigh"},
+  "complex-high-risk":{model:"gpt-6.1-sol",thinking:"xhigh"},
 };
 const options={"gpt-6-luna":["low","medium","high","xhigh","max"],
   "gpt-6.1-sol":["low","medium","high","xhigh","max","ultra"],
@@ -57,6 +57,7 @@ try {
   check("未批准默认",!initial.policy.confirmed && initial.policy.mode==="platform-default");
   check("只有两个有效选项",Object.keys(initial.choices).sort().join(",")===[mode,"platform-default"].sort().join(","));
   check("唯一参数表",JSON.stringify(initial.choices[mode])===JSON.stringify(defaults)&&JSON.stringify(initial.selectionOptions[mode])===JSON.stringify(options)&&initial.recommendedMode===mode);
+  check("Astra只作显式攻坚选项",Object.values(initial.choices[mode]).every(pair=>pair.model!=="gpt-6-astra")&&Object.hasOwn(initial.selectionOptions[mode],"gpt-6-astra"));
   const before=snapshot(control); run(set,2); check("缺批准不写入",snapshot(control)===before);
   for(const kind of Object.keys(defaults)) check("未批准不覆盖 "+kind,Object.keys(json([...create,"--task-kind",kind]).createParameters).length===0);
   const installed=json(["install-project-entry","--project-root",project,"--confirm-fusion","yes","--worker-policy-mode",mode,"--worker-policy-approved-by","用户明确启用新矩阵"]);
@@ -72,6 +73,7 @@ try {
   const selected=snapshot(control);
   for(const [kind,pair] of Object.entries(defaults)) for(const [args,field] of [[create,"createParameters"],[stage,"continuationParameters"]])
     check(kind+"/"+field,JSON.stringify(json([...args,"--task-kind",kind])[field])===JSON.stringify(pair));
+  check("策略不保存PM配置",!Object.hasOwn(json(show).policy,"model")&&!Object.hasOwn(json(show).policy,"thinking"));
   for(const [model,efforts] of Object.entries(options)) for(const thinking of efforts) for(const [args,field] of [[create,"createParameters"],[stage,"continuationParameters"]])
     check(model+"/"+thinking+"/"+field,JSON.stringify(json([...args,"--task-kind","design-analysis","--model",model,"--thinking",thinking])[field])===JSON.stringify({model,thinking}));
   for(const bad of [
@@ -82,7 +84,7 @@ try {
   ]) for(const args of [create,stage]) run([...args,"--task-kind","ordinary-engineering",...bad],2);
   run([...create,"--task-kind","unknown"],2); check("查询与拒绝只读",snapshot(control)===selected);
   let previous={model:"gpt-6-astra",thinking:"ultra"};
-  for(const pair of [defaults["ordinary-engineering"],{model:"gpt-6.1-sol",thinking:"xhigh"},defaults["hard-analysis"],defaults["bulk-structured"],{model:"gpt-6-luna",thinking:"high"}]) {
+  for(const pair of [defaults["ordinary-engineering"],defaults["hard-analysis"],{model:"gpt-6-astra",thinking:"medium"},defaults["bulk-structured"],defaults["ordinary-engineering"]]) {
     previous={...previous,...json([...stage,"--task-kind","ordinary-engineering","--model",pair.model,"--thinking",pair.thinking]).continuationParameters};
     check("升降档不继承 "+pair.model+"/"+pair.thinking,JSON.stringify(previous)===JSON.stringify(pair));
   }
@@ -91,7 +93,7 @@ try {
     check("未批准不覆盖 "+field,Object.keys(json([...args,"--task-kind","ordinary-engineering"])[field]).length===0);
     run([...args,"--task-kind","ordinary-engineering","--model","gpt-6.1-sol","--thinking","medium"],2);
   }
-  for(const legacy of ["beyond-worker-matrix-v1","beyond-worker-sweetspots-v2","beyond-worker-gpt6-v3"]) {
+  for(const legacy of ["beyond-worker-matrix-v1","beyond-worker-sweetspots-v2","beyond-worker-gpt6-v3","beyond-worker-gpt61-v4"]) {
     const historicalText = valid.replace(/本节记录当前项目的Worker运行策略及批准范围。[^\n]+/,
       "本节记录当前项目的Worker运行策略及批准范围。用户未确认时保持平台默认；旧v1仅用于新建，旧v2允许阶段切换，GPT-6 v3允许PM选择模型与强度并在同一Worker正常续接时调整。具体候选和起点以worker-policy show为准，旧批准不自动迁移；工作台、任务包和根入口不复制本节。");
     writeFileSync(overview,replacePolicy(historicalText,{schemaVersion:1,mode:legacy,scope:legacy.endsWith("v1")?"new-formal-worker":"formal-worker-stages",confirmed:true,approvedBy:"历史批准",approvedAt:"2026-10-02T00:00:00.000Z"}));
@@ -113,6 +115,9 @@ try {
   }
   json(["worker-policy","--action","set","--project-id",projectId,"--mode","platform-default","--approved-by","恢复平台默认"]);
   check("退出不重置原线程",Object.keys(json([...stage,"--task-kind","bulk-structured"]).continuationParameters).length===0);
+  const platformDefault=snapshot(control);
+  for(const args of [create,stage]) run([...args,"--task-kind","hard-analysis","--model","gpt-6-astra","--thinking","high"],2);
+  check("平台默认不被自主升档覆盖",snapshot(control)===platformDefault);
   const query=join(scratch,"query-only"); cpSync(product,query,{recursive:true});
   mkdirSync(join(query,"projects",projectId),{recursive:true}); writeFileSync(join(query,"projects",projectId,"项目总览.md"),valid);
   const queryBefore=snapshot(query);
