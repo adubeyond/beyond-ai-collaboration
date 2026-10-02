@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
+import { CliTaskStore, sha256File } from '../cli/cli-task-store.mjs';
 
 const MANAGED_BEGIN = '<!-- BEGIN BEYOND MANAGED WORKBENCH -->';
 const MANAGED_END = '<!-- END BEYOND MANAGED WORKBENCH -->';
@@ -26,6 +27,9 @@ function digest(value) {
 
 function clone(value) {
   return structuredClone(value);
+}
+function executionOwner(record) {
+  return record.execution?.kind === 'cli' ? `CLI / ${record.execution.ownerThreadId} / ${record.execution.stateLocator}` : record.worker;
 }
 
 function markdown(value) {
@@ -326,7 +330,14 @@ export class WorkbenchTransactionStore {
   registerTask(input) {
     this.#assertWritable();
     return this.#withLock(() => {
-      if (!validId(input.taskId) || !validId(input.worker) || !String(input.task ?? '').trim()
+      const cli = input.execution?.kind === 'cli';
+      if (input.execution && !cli) throw new Error('unsupported execution kind');
+      if (cli && (Object.hasOwn(input, 'worker') || !validId(input.execution.ownerThreadId) || !validId(input.projectId))) throw new Error('invalid CLI registration identity');
+      if (cli) {
+        const locator = new CliTaskStore({ controlRoot: path.resolve(this.runtimeRoot, '../../..') }).locator({ ...input, ownerThreadId: input.execution.ownerThreadId });
+        if (!path.isAbsolute(input.execution.stateLocator ?? '') || path.resolve(input.execution.stateLocator) !== locator) throw new Error('CLI state locator identity mismatch');
+      }
+      if (!validId(input.taskId) || (!cli && !validId(input.worker)) || !String(input.task ?? '').trim()
         || !ACTIVE_STATES.has(input.status) || !String(input.progress ?? '').trim()
         || !String(input.pause ?? '').trim() || !validTimestamp(input.updatedAt)) {
         throw new Error('invalid task registration');
@@ -338,7 +349,7 @@ export class WorkbenchTransactionStore {
         if (digest(existing) !== digest(record)) throw new Error('task already registered with different content');
         return clone(existing);
       }
-      if (Object.values(state.tasks).some((task) => task.worker === input.worker)) {
+      if (!cli && Object.values(state.tasks).some((task) => task.worker === input.worker)) {
         throw new Error('worker already owns another active task');
       }
       if (Object.values(state.tasks).some((task) => task.task === input.task)) {
@@ -371,6 +382,7 @@ export class WorkbenchTransactionStore {
       }
       const task = state.tasks[input.taskId];
       if (!task) throw new Error('active task is missing');
+      if (task.execution?.kind === 'cli' && (task.execution.ownerThreadId !== input.ownerThreadId || task.projectId !== input.projectId)) throw new Error('CLI update identity mismatch');
       if (task.status !== input.expectedStatus) throw new Error(`unexpected task state: ${task.status}`);
       const updated = {
         ...task,
@@ -437,14 +449,34 @@ export class WorkbenchTransactionStore {
     return this.#withLock(() => this.#consumeLocked(input, faultAt, 'accepted'));
   }
 
+  consumeAcceptedCliResult(input, { faultAt = null } = {}) {
+    this.#assertWritable();
+    const cli = new CliTaskStore({ controlRoot: path.resolve(this.runtimeRoot, '../../..') });
+    const state = cli.read(input), result = cli.readResult(input, input.runNumber);
+    if (state.runNumber !== input.runNumber || sha256File(state.currentResultPath) !== input.resultSha256) throw new Error('CLI current result fingerprint mismatch');
+    const review = cli.readReview(input, input.runNumber);
+    if (review?.decision !== 'accept' || review.resultSha256 !== input.resultSha256 || review.ownerThreadId !== input.ownerThreadId) throw new Error('CLI owner acceptance review required');
+    if (state.status !== 'completed' || result.status !== 'completed' || state.managerPid !== null) throw new Error('CLI run is not completed and stable');
+    const normalized = {
+      operationId: input.operationId, taskId: input.taskId, projectId: input.projectId, ownerThreadId: input.ownerThreadId,
+      expectedStatus: input.expectedStatus, runNumber: input.runNumber, sessionId: result.sessionId, resultSha256: input.resultSha256,
+      acceptance: 'accepted', acceptedBy: review.ownerThreadId, acceptedAt: review.reviewedAt,
+      completedAt: review.reviewedAt, businessState: '已完成', finalLocator: state.currentResultPath,
+      evidenceLocator: review.evidenceLocator, conclusion: review.conclusion, affectsMainline: input.affectsMainline === true,
+      pendingDependencies: input.pendingDependencies ?? [],
+    };
+    return this.#withLock(() => this.#consumeLocked(normalized, faultAt, 'accepted-cli'));
+  }
+
   closeTask(input, { faultAt = null } = {}) {
     this.#assertWritable();
-    return this.#withLock(() => this.#consumeLocked(input, faultAt, 'closed'));
+    return this.#withLock(() => this.#consumeLocked(input, faultAt, input.execution?.kind === 'cli' ? 'closed-cli' : 'closed'));
   }
 
   #consumeLocked(input, faultAt, kind) {
+    const cli = kind.endsWith('-cli'), closed = kind.startsWith('closed');
     if (!validId(input.operationId)) throw new Error('invalid operation id');
-    if (!validId(input.taskId) || !validId(input.worker)) {
+    if (!validId(input.taskId) || !(cli ? validId(input.ownerThreadId) : validId(input.worker))) {
       throw new Error('invalid task or worker id');
     }
     const inputDigest = digest(input);
@@ -487,17 +519,18 @@ export class WorkbenchTransactionStore {
         transaction.historyRecord = clone(alreadyCommitted.historyRecord);
       } else {
         const task = state.tasks[input.taskId];
-        if (!task || task.worker !== input.worker || task.status !== input.expectedStatus) {
+        if (!task || (cli ? task.execution?.kind !== 'cli' || task.execution.ownerThreadId !== input.ownerThreadId : task.worker !== input.worker) || task.status !== input.expectedStatus) {
           throw new Error('task changed after transaction intent');
         }
         state.revision += 1;
-        const terminalStatus = kind === 'closed' ? '已关闭' : '已完成';
-        const terminalAt = kind === 'closed' ? input.closedAt : input.completedAt;
-        const historyRecord = kind === 'closed' ? {
+        const terminalStatus = closed ? '已关闭' : '已完成';
+        const terminalAt = closed ? input.closedAt : input.completedAt;
+        const executor = cli ? { projectId: task.projectId, execution: clone(task.execution), ...(closed ? {} : { runNumber: input.runNumber, sessionId: input.sessionId, resultSha256: input.resultSha256 }) } : { worker: input.worker };
+        const historyRecord = closed ? {
           operationId: input.operationId,
           taskId: input.taskId,
           task: task.task,
-          worker: input.worker,
+          ...executor,
           status: terminalStatus,
           result: input.taskLocator,
           evidence: input.authorizationLocator,
@@ -510,7 +543,7 @@ export class WorkbenchTransactionStore {
           operationId: input.operationId,
           taskId: input.taskId,
           task: task.task,
-          worker: input.worker,
+          ...executor,
           status: terminalStatus,
           result: input.finalLocator,
           evidence: input.evidenceLocator,
@@ -520,11 +553,11 @@ export class WorkbenchTransactionStore {
           pendingDependencies: [...new Set(input.pendingDependencies ?? [])],
         };
         delete state.tasks[input.taskId];
-        if (kind === 'accepted' && input.affectsMainline === true) {
+        if (!closed && input.affectsMainline === true) {
           state.recentMainlineResults.push({
             taskId: input.taskId,
             task: task.task,
-            worker: input.worker,
+            ...executor,
             result: input.finalLocator,
             completedAt: input.completedAt,
           });
@@ -533,7 +566,7 @@ export class WorkbenchTransactionStore {
         const output = {
           operationId: input.operationId,
           taskId: input.taskId,
-          worker: input.worker,
+          ...executor,
           status: terminalStatus,
           stateRevision: state.revision,
           archived: true,
@@ -570,7 +603,7 @@ export class WorkbenchTransactionStore {
         kind,
         phase: 'completed',
         output: transaction.output,
-        completedAt: kind === 'closed' ? input.closedAt : input.completedAt,
+        completedAt: closed ? input.closedAt : input.completedAt,
       };
       writeAtomic(transactionFile, transaction);
       this.#trimBackups();
@@ -580,14 +613,16 @@ export class WorkbenchTransactionStore {
 
   #validateTerminalInput(state, input, kind) {
     const task = state.tasks[input.taskId];
-    if (!task || task.worker !== input.worker) throw new Error('unique active task is missing');
+    const cli = kind.endsWith('-cli'), closed = kind.startsWith('closed');
+    if (task?.execution?.kind === 'cli' && !cli) throw new Error('CLI task cannot use Worker terminal acceptance');
+    if (!task || (cli ? task.execution?.kind !== 'cli' || task.execution.ownerThreadId !== input.ownerThreadId || task.projectId !== input.projectId : task.worker !== input.worker)) throw new Error('unique active task is missing');
     if (task.status !== input.expectedStatus || !ACTIVE_STATES.has(task.status)) {
       throw new Error(`unexpected task state: ${task.status}`);
     }
-    if (kind === 'closed') {
+    if (closed) {
       if (input.businessState !== '已关闭'
         || input.ownerDirective !== 'explicit-owner-instruction'
-        || input.workerStopped !== true
+        || (!cli && input.workerStopped !== true)
         || !validId(input.closedBy)
         || !validTimestamp(input.closedAt)) {
         throw new Error('explicit owner-authorized task closure is required');
@@ -598,6 +633,16 @@ export class WorkbenchTransactionStore {
         throw new Error('closure reason or traceable locator is missing');
       }
       monthOf(input.closedAt);
+      if (cli) {
+        if (input.closedBy !== task.execution.ownerThreadId) throw new Error('CLI closure owner identity mismatch');
+        const store = new CliTaskStore({ controlRoot: path.resolve(this.runtimeRoot, '../../..') });
+        if (fs.existsSync(store.locator(input))) {
+          const state = store.read(input);
+          if (digest(state) !== input.stateSha256) throw new Error('CLI closure state fingerprint mismatch');
+          if (state.managerPid || ['running'].includes(state.status) || (state.status === 'starting' && state.runNumber > 0)) throw new Error('CLI process not confirmed stopped');
+        } else if (input.stateSha256 !== 'not-started') throw new Error('CLI never-started closure fingerprint required');
+        return;
+      }
       if (input.pendingReceiptId !== undefined) {
         const receipt = input.cancelledReceipt;
         if (!receipt || receipt.receiptId !== input.pendingReceiptId
@@ -630,6 +675,8 @@ export class WorkbenchTransactionStore {
       const transaction = readJson(file, null);
       if (!transaction || transaction.phase === 'completed' || !transaction.input) continue;
       if ((transaction.kind ?? 'accepted') === 'closed') this.closeTask(transaction.input);
+      else if (transaction.kind === 'closed-cli') this.closeTask(transaction.input);
+      else if (transaction.kind === 'accepted-cli') this.consumeAcceptedCliResult(transaction.input);
       else this.consumeAcceptedResult(transaction.input);
       recoveredOperations.push(transaction.operationId);
     }
@@ -692,7 +739,7 @@ export class WorkbenchTransactionStore {
       writeAtomic(jsonFile, history);
     }
     const rows = history.records.map((item) => (
-      `| ${markdown(item.taskId)} | ${markdown(item.task)} | ${markdown(item.worker)} | ${markdown(item.status ?? '已完成')} | ${markdown(item.result)} | ${markdown(item.conclusion)} | ${markdown(item.completedAt)} |`
+      `| ${markdown(item.taskId)} | ${markdown(item.task)} | ${markdown(executionOwner(item))} | ${markdown(item.status ?? '已完成')} | ${markdown(item.result)} | ${markdown(item.conclusion)} | ${markdown(item.completedAt)} |`
     ));
     writeAtomic(path.join(this.historyRoot, `${month}.md`), [
       `# ${month} 工作台历史`, '',
@@ -709,10 +756,10 @@ export class WorkbenchTransactionStore {
       : '| 无 | 待确认 | 进行中 | 无 | 无 | 待确认 | 无 |';
     const tasks = Object.values(state.tasks).sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));
     const taskRows = tasks.length ? tasks.map((task) => (
-      `| ${markdown(task.task)} | ${markdown(task.worker)} | ${markdown(task.status)} | ${markdown(task.progress)} | ${markdown(task.pause ?? '无')} | ${markdown(task.result ?? '无')} | ${markdown(task.updatedAt)} |`
+      `| ${markdown(task.task)} | ${markdown(executionOwner(task))} | ${markdown(task.status)} | ${markdown(task.progress)} | ${markdown(task.pause ?? '无')} | ${markdown(task.result ?? '无')} | ${markdown(task.updatedAt)} |`
     )) : ['| 当前无活动正式任务 | 无 | 已完成 | 无 | 无 | 无 | 无 |'];
     const recentRows = state.recentMainlineResults.length ? state.recentMainlineResults.map((item) => (
-      `| ${markdown(item.task)} | ${markdown(item.worker)} | ${markdown(item.result)} | ${markdown(item.completedAt)} |`
+      `| ${markdown(item.task)} | ${markdown(executionOwner(item))} | ${markdown(item.result)} | ${markdown(item.completedAt)} |`
     )) : ['| 当前无近期主线结果 | 无 | 无 | 无 |'];
     return [
       MANAGED_BEGIN,

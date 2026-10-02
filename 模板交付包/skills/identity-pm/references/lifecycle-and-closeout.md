@@ -4,6 +4,8 @@
 
 任务状态始终只有`进行中 / 已暂停 / 已完成 / 已关闭`。`已关闭`只表示老板明确决定不再追求该任务结果，不是Worker终态，也不冒充完成。测试结果、当前动作、消息类型、PM是否已经查看和 Worker是否在线都不是新的任务状态。
 
+本文件以下是桌面Worker路径。显式CLI记录或`CLI_RESULT_READY`按当前项目根映射的`04-CLI目标协作机制.md`处理：定点核对CLI当前轮结果及主证据，不执行Worker的pending、回调后等待或ack；直接CLI目标只由登记负责人用`workbench.accept-cli`据证验收。原Worker调用CLI时，CLI通知只回原Worker；其最终完成或真实暂停仍沿本文件原协议回PM。
+
 新任务仍由一次原生回调唤醒PM，用户可见Worker final仍保存正式交付；固定`worker-result`只保存同一份冻结final的短期待处理快照，用来补齐平台恢复回合可能出现的空响应或控制面不可读。它不保存过程消息、不形成历史、不轮询，也不引入Hook、notify适配器、额外Codex CLI或后台进程。
 
 所有`worker-result`固定调用都让`runtime --request`读取JSON请求文件，不把JSON正文当路径传入。文件外层固定为`{"schemaVersion":1,"action":"worker-result.enqueue|list|ack","input":{…}}`；`enqueue`的input使用`projectId / taskId / sourceThreadId / businessState / finalText`及任务包确有的`projectRoute`，`list`至少用`projectId`限定当前项目，`ack`固定带`projectId / taskId / receiptId`。字段名不使用`operation / status / final`等猜测别名；这三类动作的`requestId`可省略并由运行内核生成。

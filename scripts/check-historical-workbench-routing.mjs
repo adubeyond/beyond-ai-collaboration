@@ -57,6 +57,7 @@ try {
   const oldWorkbench = join(projectRoot, 'docs', 'AI编程协同机制', '当前工作台.md');
   mkdirSync(dirname(oldWorkbench), { recursive: true });
   writeFileSync(oldWorkbench, taskTable('过期旧任务', 'worker-stale', '进行中'), 'utf8');
+  mkdirSync(join(controlRoot, 'local'), { recursive: true });
   writeFileSync(join(controlRoot, 'local', '当前工作台.md'), taskTable('当前真实暂停任务', 'worker-current', '已暂停'), 'utf8');
 
   const inspect = run(['inspect-project', '--project-root', projectRoot]);

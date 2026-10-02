@@ -1,299 +1,122 @@
 import { spawnSync } from "node:child_process";
-import {
-  cpSync,
-  existsSync,
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
-
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const product = process.env.BEYOND_TEST_PRODUCT_ROOT ? resolve(process.env.BEYOND_TEST_PRODUCT_ROOT) : join(repo, "模板交付包");
 const scratch = mkdtempSync(join(tmpdir(), "beyond-worker-policy-"));
-const project = join(scratch, "legacy-project");
-const control = join(project, "beyond-control");
-const errors = [];
-let passed = 0;
+const project = join(scratch, "legacy-project"), control = join(project, "beyond-control");
+const errors = []; let passed = 0;
+function check(name, ok, detail = "") { if(ok) passed++; else errors.push(name + ": " + detail); }
 function snapshot(root) {
   const out = {};
-  function visit(directory, prefix = "") {
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const key = `${prefix}${entry.name}`;
-      if (entry.isDirectory()) { out[`${key}/`] = "directory"; visit(join(directory, entry.name), `${key}/`); }
-      else out[key] = createHash("sha256").update(readFileSync(join(directory, entry.name))).digest("hex");
-    }
-  }
-  visit(root);
-  return JSON.stringify(out);
+  function walk(dir, prefix = "") { for(const e of readdirSync(dir, {withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name))) {
+    const key = prefix + e.name;
+    if(e.isDirectory()) { out[key+"/"] = "directory"; walk(join(dir,e.name), key+"/"); }
+    else out[key] = createHash("sha256").update(readFileSync(join(dir,e.name))).digest("hex");
+  }}
+  walk(root); return JSON.stringify(out);
 }
-
-function check(name, condition, detail = "") {
-  if (condition) passed += 1;
-  else errors.push(`${name}${detail ? `：${detail}` : ""}`);
+function run(args, status = 0, root = control) {
+  const r = spawnSync(process.execPath, [join(root,"scripts/beyond-control.mjs"),...args], {cwd:root,encoding:"utf8",windowsHide:true});
+  check("exit " + args.join(" "), r.status === status, String(r.stdout) + String(r.stderr)); return r;
 }
-
-function command(args, expectedStatus = 0) {
-  const result = spawnSync(process.execPath, [join(control, "scripts", "beyond-control.mjs"), ...args], {
-    cwd: control,
-    encoding: "utf8",
-    windowsHide: true,
-  });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
-  if (result.status !== expectedStatus) {
-    errors.push(`${args.join(" ")}：期望退出码${expectedStatus}，实际${result.status}\n${output}`);
-  }
-  return { status: result.status, stdout: (result.stdout ?? "").trim(), output };
+function json(args, root = control) { return JSON.parse(run(args,0,root).stdout); }
+function replacePolicy(text, policy) {
+  const fence = String.fromCharCode(96).repeat(3);
+  return text.replace(/(<!-- BEGIN BEYOND WORKER POLICY -->)[\s\S]*?(<!-- END BEYOND WORKER POLICY -->)/,
+    (_all,b,e)=>b+"\n"+fence+"json\n"+JSON.stringify(policy)+"\n"+fence+"\n"+e);
 }
-
-function json(args, expectedStatus = 0) {
-  const result = command(args, expectedStatus);
-  return { ...result, value: result.stdout ? JSON.parse(result.stdout) : null };
-}
-
+const mode="beyond-worker-gpt61-v4";
+const defaults={
+  "design-analysis":{model:"gpt-6.1-sol",thinking:"medium"},
+  "ordinary-engineering":{model:"gpt-6.1-sol",thinking:"medium"},
+  "bulk-structured":{model:"gpt-6-luna",thinking:"low"},
+  "hard-analysis":{model:"gpt-6-astra",thinking:"medium"},
+  "complex-high-risk":{model:"gpt-6.1-sol",thinking:"high"},
+};
+const options={"gpt-6-luna":["low","medium","high","xhigh","max"],
+  "gpt-6.1-sol":["low","medium","high","xhigh","max","ultra"],
+  "gpt-6-astra":["low","medium","high","xhigh","max","ultra"]};
 try {
-  const entryText = readFileSync(join(repositoryRoot, "模板交付包", "AGENTS.md"), "utf8");
-  check("根入口不把所有已批准策略限制为仅新建", !entryText.includes("只适用于当前项目新建Worker"));
-  check("根入口将策略及批准范围交给唯一项目所有者", entryText.includes("运行策略及其适用范围由项目总览受管小节唯一承载"));
-  cpSync(join(repositoryRoot, "examples", "minimal-project"), project, { recursive: true });
-  cpSync(join(repositoryRoot, "模板交付包"), control, { recursive: true });
-  writeFileSync(join(project, "AGENTS.md"), `# 原项目规则
-
-<!-- BEGIN BEYOND PROJECT OVERRIDES -->
-- 旧项目曾明确采用 Terra / Luna / Sol 的 Worker 模型矩阵。
-<!-- END BEYOND PROJECT OVERRIDES -->
-`, "utf8");
-
-  const inspection = json(["inspect-project", "--project-root", project]).value;
-  check("旧入口只识别为待裁决候选", inspection.legacyWorkerPolicyCandidate === true);
-  check("旧入口不自动恢复为已批准策略", inspection.workerPolicy.configured === false && inspection.workerPolicy.policy.confirmed === false);
-  const rootBeforeRejectedInstall = readFileSync(join(project, "AGENTS.md"), "utf8");
-  const rejectedLegacyInstall = command(["install-project-entry", "--project-root", project, "--confirm-fusion", "yes"], 2);
-  check("旧模型策略未经用户选择时拒绝融合", rejectedLegacyInstall.output.includes("不能静默继承") && readFileSync(join(project, "AGENTS.md"), "utf8") === rootBeforeRejectedInstall, rejectedLegacyInstall.output);
-
-  const registration = json(["register-project", "--project-root", project]).value;
-  const projectId = registration.project.projectId;
-  const overviewPath = join(control, "projects", projectId, "项目总览.md");
-  const initialOverview = readFileSync(overviewPath, "utf8");
-  check("老项目登记建立唯一受管策略块", (initialOverview.match(/BEGIN BEYOND WORKER POLICY/g) ?? []).length === 1);
-
-  const initial = json(["worker-policy", "--action", "show", "--project-id", projectId]).value;
-  check("未批准策略默认关闭", initial.configured === true && initial.policy.mode === "platform-default" && initial.policy.confirmed === false, JSON.stringify(initial));
-
-  for (const taskKind of ["design-analysis", "ordinary-engineering", "bulk-structured", "complex-high-risk"]) {
-    const unresolved = json(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", taskKind]).value;
-    check(`未批准时${taskKind}不覆盖平台模型`, unresolved.decision === "keep-platform-default" && Object.keys(unresolved.createParameters).length === 0, JSON.stringify(unresolved));
+  cpSync(join(repo,"examples/minimal-project"),project,{recursive:true}); cpSync(product,control,{recursive:true});
+  writeFileSync(join(project,"AGENTS.md"),"# 原项目规则\n\n- 保留原生规则。\n\n<!-- BEGIN BEYOND PROJECT OVERRIDES -->\n- Terra / Luna / Sol 模型矩阵。\n- 保留项目覆盖。\n<!-- END BEYOND PROJECT OVERRIDES -->\n");
+  check("只识别旧入口",json(["inspect-project","--project-root",project]).legacyWorkerPolicyCandidate === true);
+  const oldRoot=readFileSync(join(project,"AGENTS.md"),"utf8");
+  run(["install-project-entry","--project-root",project,"--confirm-fusion","yes"],2);
+  check("未经选择不融合",readFileSync(join(project,"AGENTS.md"),"utf8")===oldRoot);
+  const projectId=json(["register-project","--project-root",project]).project.projectId;
+  const overview=join(control,"projects",projectId,"项目总览.md");
+  const show=["worker-policy","--action","show","--project-id",projectId];
+  const create=["worker-policy","--action","resolve","--project-id",projectId];
+  const stage=["worker-policy","--action","resolve-stage","--project-id",projectId];
+  const set=["worker-policy","--action","set","--project-id",projectId,"--mode",mode];
+  const initial=json(show);
+  check("未批准默认",!initial.policy.confirmed && initial.policy.mode==="platform-default");
+  check("只有两个有效选项",Object.keys(initial.choices).sort().join(",")===[mode,"platform-default"].sort().join(","));
+  check("唯一参数表",JSON.stringify(initial.choices[mode])===JSON.stringify(defaults)&&JSON.stringify(initial.selectionOptions[mode])===JSON.stringify(options)&&initial.recommendedMode===mode);
+  const before=snapshot(control); run(set,2); check("缺批准不写入",snapshot(control)===before);
+  for(const kind of Object.keys(defaults)) check("未批准不覆盖 "+kind,Object.keys(json([...create,"--task-kind",kind]).createParameters).length===0);
+  const installed=json(["install-project-entry","--project-root",project,"--confirm-fusion","yes","--worker-policy-mode",mode,"--worker-policy-approved-by","用户明确启用新矩阵"]);
+  check("迁移有前像",existsSync(installed.workerPolicy.backup));
+  const agents=readFileSync(join(project,"AGENTS.md"),"utf8");
+  check("旧入口无重复覆盖区",(agents.match(/BEGIN BEYOND PROJECT OVERRIDES/g)??[]).length===1);
+  check("保留原生与非模型覆盖",agents.includes("保留原生规则")&&agents.includes("保留项目覆盖")&&!/Terra|Luna|Sol|模型矩阵/.test(agents));
+  json(["install-project-entry","--project-root",project,"--confirm-fusion","yes"]);
+  check("重复融合幂等",readFileSync(join(project,"AGENTS.md"),"utf8")===agents);
+  const valid=readFileSync(overview,"utf8");
+  const verify=()=>spawnSync(process.execPath,[join(control,"scripts/verify-install-integrity.mjs"),"--installed-skills-root",join(control,"skills"),"--project-agents",join(project,"AGENTS.md")],{cwd:project,encoding:"utf8",windowsHide:true});
+  const verified=verify(); check("融合验真",verified.status===0,String(verified.stderr));
+  const selected=snapshot(control);
+  for(const [kind,pair] of Object.entries(defaults)) for(const [args,field] of [[create,"createParameters"],[stage,"continuationParameters"]])
+    check(kind+"/"+field,JSON.stringify(json([...args,"--task-kind",kind])[field])===JSON.stringify(pair));
+  for(const [model,efforts] of Object.entries(options)) for(const thinking of efforts) for(const [args,field] of [[create,"createParameters"],[stage,"continuationParameters"]])
+    check(model+"/"+thinking+"/"+field,JSON.stringify(json([...args,"--task-kind","design-analysis","--model",model,"--thinking",thinking])[field])===JSON.stringify({model,thinking}));
+  for(const bad of [
+    ["--model","gpt-6.1-sol"],["--thinking","medium"],["--model"],["--thinking"],
+    ["--model","gpt-6.1-sol","--thinking","none"],["--model","gpt-6.1-sol","--thinking","minimal"],
+    ["--model","gpt-6-luna","--thinking","ultra"],["--model","gpt-6-sol","--thinking","high"],
+    ["--model","gpt-5.6-terra","--thinking","high"],["--model","__proto__","--thinking","medium"],
+  ]) for(const args of [create,stage]) run([...args,"--task-kind","ordinary-engineering",...bad],2);
+  run([...create,"--task-kind","unknown"],2); check("查询与拒绝只读",snapshot(control)===selected);
+  let previous={model:"gpt-6-astra",thinking:"ultra"};
+  for(const pair of [defaults["ordinary-engineering"],{model:"gpt-6.1-sol",thinking:"xhigh"},defaults["hard-analysis"],defaults["bulk-structured"],{model:"gpt-6-luna",thinking:"high"}]) {
+    previous={...previous,...json([...stage,"--task-kind","ordinary-engineering","--model",pair.model,"--thinking",pair.thinking]).continuationParameters};
+    check("升降档不继承 "+pair.model+"/"+pair.thinking,JSON.stringify(previous)===JSON.stringify(pair));
   }
-
-  const approvedAt = "2026-08-12T08:00:00.000Z";
-  const enabled = json([
-    "worker-policy", "--action", "set", "--project-id", projectId,
-    "--mode", "beyond-worker-matrix-v1", "--approved-by", "老板在项目初始化时明确批准",
-    "--approved-at", approvedAt,
-  ]).value;
-  check("启用策略保留明确批准依据", enabled.policy.confirmed === true && enabled.policy.approvedBy === "老板在项目初始化时明确批准" && enabled.policy.approvedAt === approvedAt, JSON.stringify(enabled));
-  check("策略变更先建立可恢复备份", existsSync(enabled.backup), enabled.backup);
-
-  const expected = {
-    "design-analysis": { model: "gpt-5.6-sol", thinking: "high" },
-    "ordinary-engineering": { model: "gpt-5.6-terra", thinking: "high" },
-    "bulk-structured": { model: "gpt-5.6-luna", thinking: "high" },
-    "complex-high-risk": { model: "gpt-5.6-sol", thinking: "high" },
-  };
-  const overviewBeforeResolve = readFileSync(overviewPath, "utf8");
-  const shown = json(["worker-policy", "--action", "show", "--project-id", projectId]).value;
-  check("show展示与解析相同的唯一映射", JSON.stringify(shown.choices["beyond-worker-matrix-v1"]) === JSON.stringify(expected));
-  for (const [taskKind, createParameters] of Object.entries(expected)) {
-    const resolved = json(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", taskKind]).value;
-    check(`已批准时${taskKind}解析固定参数`, resolved.decision === "use-approved-project-worker-matrix" && JSON.stringify(resolved.createParameters) === JSON.stringify(createParameters), JSON.stringify(resolved));
-    check(`${taskKind}只产生模型与强度创建参数`, Object.keys(resolved.createParameters).sort().join(",") === "model,thinking");
+  writeFileSync(overview,valid.replace('"confirmed":true','"confirmed":false'));
+  for(const [args,field] of [[create,"createParameters"],[stage,"continuationParameters"]]) {
+    check("未批准不覆盖 "+field,Object.keys(json([...args,"--task-kind","ordinary-engineering"])[field]).length===0);
+    run([...args,"--task-kind","ordinary-engineering","--model","gpt-6.1-sol","--thinking","medium"],2);
   }
-  check("show与resolve不改写项目策略", readFileSync(overviewPath, "utf8") === overviewBeforeResolve);
-  check("策略仍只作用于新建正式Worker", shown.policy.scope === "new-formal-worker");
-  const stageArgs = ["worker-policy", "--action", "resolve-stage", "--project-id", projectId];
-  const legacyStage = json([...stageArgs, "--task-kind", "design-analysis"]).value;
-  check("旧v1批准不扩张为任务内切换", legacyStage.decision === "keep-current-worker-settings" && Object.keys(legacyStage.continuationParameters).length === 0);
-  check("旧v1不偷偷使用v2难题映射", command(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", "hard-analysis"], 2).output.includes("当前Worker策略不包含"));
-
-  const migrated = json([
-    "install-project-entry", "--project-root", project, "--confirm-fusion", "yes",
-    "--worker-policy-mode", "beyond-worker-matrix-v1",
-    "--worker-policy-approved-by", "老板明确把旧矩阵迁入项目总览",
-    "--worker-policy-approved-at", "2026-08-12T08:30:00.000Z",
-  ]).value;
-  const migratedRoot = readFileSync(join(project, "AGENTS.md"), "utf8");
-  check("确认后旧模型行迁出根入口", migrated.removedLegacyWorkerPolicyOverrides.length === 1 && !/Terra|Luna|Sol|模型矩阵/.test(migratedRoot), JSON.stringify(migrated));
-  check("迁移结果返回新策略与备份", migrated.workerPolicy.policy.mode === "beyond-worker-matrix-v1" && existsSync(migrated.workerPolicy.backup), JSON.stringify(migrated));
-
-  json(["register-project", "--project-root", project]);
-  const repeatedOverview = readFileSync(overviewPath, "utf8");
-  check("重复初始化不重置用户已批准策略", repeatedOverview.includes('"mode":"beyond-worker-matrix-v1"') && repeatedOverview.includes('"confirmed":true'));
-  check("重复初始化不产生第二个策略块", (repeatedOverview.match(/BEGIN BEYOND WORKER POLICY/g) ?? []).length === 1);
-  check("模型策略不写回项目根入口", !/gpt-5\.6|Terra|Luna|Sol|模型矩阵|worker-policy|Worker运行策略/.test(readFileSync(join(project, "AGENTS.md"), "utf8")));
-
-  const disabled = json([
-    "worker-policy", "--action", "set", "--project-id", projectId,
-    "--mode", "platform-default", "--approved-by", "老板明确恢复平台默认",
-    "--approved-at", "2026-08-12T09:00:00.000Z",
-  ]).value;
-  const defaultResolution = json(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", "complex-high-risk"]).value;
-  check("用户可明确恢复平台默认", disabled.policy.mode === "platform-default" && Object.keys(defaultResolution.createParameters).length === 0);
-  for (const taskKind of Object.keys(expected)) {
-    const resolved = json(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", taskKind]).value;
-    check(`已批准平台默认时${taskKind}仍不覆盖`, resolved.decision === "keep-platform-default" && Object.keys(resolved.createParameters).length === 0);
-  }
-
-  const beforeInvalid = readFileSync(overviewPath, "utf8");
-  const invalidMode = command([
-    "worker-policy", "--action", "set", "--project-id", projectId,
-    "--mode", "unknown", "--approved-by", "无效测试",
-  ], 2);
-  check("未知策略拒绝且不改文件", invalidMode.output.includes("Worker运行策略无效") && readFileSync(overviewPath, "utf8") === beforeInvalid, invalidMode.output);
-  const invalidKind = command(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", "unknown"], 2);
-  check("未知任务性质拒绝默认猜测", invalidKind.output.includes("Worker任务性质无效"), invalidKind.output);
-
-  const defaultStage = json([...stageArgs, "--task-kind", "bulk-structured"]).value;
-  check("平台默认续接不重置原Worker", defaultStage.decision === "keep-current-worker-settings" && Object.keys(defaultStage.continuationParameters).length === 0);
-  const v2Args = ["worker-policy", "--action", "set", "--project-id", projectId, "--mode", "beyond-worker-sweetspots-v2"];
-  check("v2没有批准依据不生效", command(v2Args, 2).output.includes("明确批准依据") && readFileSync(overviewPath, "utf8") === beforeInvalid);
-  const legacyIntro = "本节记录当前项目的新建正式Worker运行策略状态。用户未确认时保持平台默认；任务分类由PM判断，具体模型映射由控制仓固定脚本唯一维护；工作台、任务包和根入口不复制本节。";
-  writeFileSync(overviewPath, readFileSync(overviewPath, "utf8").replace(/本节记录当前项目的Worker运行策略及批准范围。[^\n]+/, legacyIntro) + "\n用户自有说明必须保留。\n");
-  const v2 = json([...v2Args, "--approved-by", "批准新建及同一Worker阶段切换"]).value;
-  check("v2显式登记阶段适用范围", v2.policy.scope === "formal-worker-stages" && v2.policy.confirmed && existsSync(v2.backup));
-  check("升级只刷新旧生成说明不删用户正文", !readFileSync(overviewPath,"utf8").includes(legacyIntro) && readFileSync(overviewPath,"utf8").includes("用户自有说明必须保留。"));
-  const sweetspots = {
-    "design-analysis": { model: "gpt-5.6-sol", thinking: "medium" },
-    "ordinary-engineering": { model: "gpt-5.6-terra", thinking: "medium" },
-    "bulk-structured": { model: "gpt-5.6-luna", thinking: "high" },
-    "hard-analysis": { model: "gpt-6-astra", thinking: "medium" },
-    "complex-high-risk": expected["complex-high-risk"],
-  };
-  const v2BeforeRead = readFileSync(overviewPath, "utf8");
-  const v2Show = json(["worker-policy", "--action", "show", "--project-id", projectId]).value;
-  check("展示新旧映射和范围", JSON.stringify(v2Show.choices["beyond-worker-matrix-v1"]) === JSON.stringify(expected)
-    && JSON.stringify(v2Show.choices["beyond-worker-sweetspots-v2"]) === JSON.stringify(sweetspots)
-    && v2Show.choiceScopes["beyond-worker-sweetspots-v2"] === "formal-worker-stages");
-  for (const [kind, pair] of Object.entries(sweetspots)) {
-    const creation = json(["worker-policy", "--action", "resolve", "--project-id", projectId, "--task-kind", kind]).value;
-    const continuation = json([...stageArgs, "--task-kind", kind]).value;
-    check(`v2 ${kind}新建与续接完整组合相同`, JSON.stringify(creation.createParameters) === JSON.stringify(pair)
-      && JSON.stringify(continuation.continuationParameters) === JSON.stringify(pair));
-    check(`v2 ${kind}续接只包含两个模型字段`, Object.keys(continuation.continuationParameters).sort().join(",") === "model,thinking" && !("createParameters" in continuation));
-  }
-  let currentPair = sweetspots["bulk-structured"];
-  for (const kind of ["design-analysis", "ordinary-engineering", "hard-analysis", "bulk-structured"]) {
-    const params = json([...stageArgs, "--task-kind", kind]).value.continuationParameters;
-    currentPair = { ...currentPair, ...params };
-    check(`往返阶段${kind}不残留上个模型强度`, JSON.stringify(currentPair) === JSON.stringify(sweetspots[kind]));
-  }
-  check("阶段解析不写策略或切换台账", readFileSync(overviewPath, "utf8") === v2BeforeRead);
-  command([...stageArgs, "--task-kind", "unknown"], 2);
-  json(["register-project", "--project-root", project]);
-  check("重复登记保留v2批准及范围", readFileSync(overviewPath, "utf8").includes('"scope":"formal-worker-stages"'));
-  // Corrupt only the isolated fixture: a scope cannot be broadened by changing its label.
-  const validV2 = readFileSync(overviewPath, "utf8");
-  writeFileSync(overviewPath, validV2.replace('"scope":"formal-worker-stages"', '"scope":"new-formal-worker"'));
-  check("不接受v2窄授权冒充阶段授权", command([...stageArgs, "--task-kind", "bulk-structured"], 2).output.includes("字段无效"));
-  writeFileSync(overviewPath, validV2.replace('"confirmed":true', '"confirmed":false'));
-  const unconfirmedStage = json([...stageArgs, "--task-kind", "hard-analysis"]).value;
-  check("未批准v2保持原设置", Object.keys(unconfirmedStage.continuationParameters).length === 0);
-  writeFileSync(overviewPath, validV2);
-  json(["worker-policy", "--action", "set", "--project-id", projectId, "--mode", "beyond-worker-matrix-v1", "--approved-by", "恢复原策略"]);
-  check("可退回v1且停止自动切换", Object.keys(json([...stageArgs, "--task-kind", "hard-analysis"]).value.continuationParameters).length === 0);
-
-  const resolveArgs = ["worker-policy", "--action", "resolve", "--project-id", projectId];
-  const chosen = ["--model", "gpt-6-luna", "--thinking", "max"];
-  check("旧批准不能借显式选档越权", command([...resolveArgs, "--task-kind", "bulk-structured", ...chosen], 2).output.includes("仅适用于已批准"));
-  const v3Args = ["worker-policy", "--action", "set", "--project-id", projectId, "--mode", "beyond-worker-gpt6-v3"];
-  const beforeV3 = snapshot(control);
-  command(v3Args, 2);
-  check("v3缺批准不写任何文件", snapshot(control) === beforeV3);
-  const v3 = json([...v3Args, "--approved-by", "老板批准GPT-6模型与强度自主选择及同线程调整"]).value;
-  check("v3批准可恢复且包含续接范围", existsSync(v3.backup) && v3.policy.scope === "formal-worker-stages");
-  const defaultsV3 = {
-    "design-analysis": { model: "gpt-6-sol", thinking: "high" },
-    "ordinary-engineering": { model: "gpt-6-sol", thinking: "high" },
-    "bulk-structured": { model: "gpt-6-luna", thinking: "high" },
-    "hard-analysis": { model: "gpt-6-astra", thinking: "low" },
-    "complex-high-risk": { model: "gpt-6-sol", thinking: "high" },
-  };
-  const optionsV3 = {
-    "gpt-6-luna": ["high", "max"],
-    "gpt-6-sol": ["high", "xhigh", "max", "ultra"],
-    "gpt-6-astra": ["low", "ultra"],
-  };
-  const v3Snapshot = snapshot(control);
-  const showV3 = json(["worker-policy", "--action", "show", "--project-id", projectId]).value;
-  check("v3展示唯一候选及推荐而不改旧表", showV3.recommendedMode === "beyond-worker-gpt6-v3"
-    && JSON.stringify(showV3.selectionOptions["beyond-worker-gpt6-v3"]) === JSON.stringify(optionsV3)
-    && JSON.stringify(showV3.choices["beyond-worker-gpt6-v3"]) === JSON.stringify(defaultsV3)
-    && JSON.stringify(showV3.choices["beyond-worker-matrix-v1"]) === JSON.stringify(expected)
-    && JSON.stringify(showV3.choices["beyond-worker-sweetspots-v2"]) === JSON.stringify(sweetspots));
-  for (const [kind, pair] of Object.entries(defaultsV3)) {
-    for (const [args, field] of [[resolveArgs, "createParameters"], [stageArgs, "continuationParameters"]]) {
-      check(`v3 ${kind} ${field}默认完整组合`, JSON.stringify(json([...args, "--task-kind", kind]).value[field]) === JSON.stringify(pair));
+  for(const legacy of ["beyond-worker-matrix-v1","beyond-worker-sweetspots-v2","beyond-worker-gpt6-v3"]) {
+    const historicalText = valid.replace(/本节记录当前项目的Worker运行策略及批准范围。[^\n]+/,
+      "本节记录当前项目的Worker运行策略及批准范围。用户未确认时保持平台默认；旧v1仅用于新建，旧v2允许阶段切换，GPT-6 v3允许PM选择模型与强度并在同一Worker正常续接时调整。具体候选和起点以worker-policy show为准，旧批准不自动迁移；工作台、任务包和根入口不复制本节。");
+    writeFileSync(overview,replacePolicy(historicalText,{schemaVersion:1,mode:legacy,scope:legacy.endsWith("v1")?"new-formal-worker":"formal-worker-stages",confirmed:true,approvedBy:"历史批准",approvedAt:"2026-10-02T00:00:00.000Z"}));
+    const historical=snapshot(control), shown=json(show);
+    check("旧记录只识别 "+legacy,shown.requiresSelection && !Object.hasOwn(shown.choices,legacy));
+    for(const [args,field] of [[create,"createParameters"],[stage,"continuationParameters"]]) {
+      const v=json([...args,"--task-kind","ordinary-engineering"]);
+      check("不执行旧映射 "+legacy+"/"+field,v.requiresSelection&&Object.keys(v[field]).length===0);
+      run([...args,"--task-kind","ordinary-engineering","--model","gpt-6.1-sol","--thinking","medium"],2);
     }
+    run(["worker-policy","--action","set","--project-id",projectId,"--mode",legacy,"--approved-by","不得重新启用"],2);
+    check("旧策略识别不写入 "+legacy,snapshot(control)===historical);
+    check("验真识别旧记录 "+legacy,verify().status===0);
+    json(["register-project","--project-root",project]); check("不默改旧批准 "+legacy,json(show).policy.mode===legacy);
+    const migrated=json([...set,"--approved-by","用户明确迁移"]);
+    check("保留旧批准前像 "+legacy,readFileSync(migrated.backup,"utf8").includes('"mode":"'+legacy+'"'));
+    check("明确选择才启用 "+legacy,json(show).policy.mode===mode);
+    check("迁移同步刷新旧生成说明 "+legacy,readFileSync(overview,"utf8").includes("当前只提供平台默认或GPT-6.1矩阵"));
   }
-  for (const [model, efforts] of Object.entries(optionsV3)) {
-    for (const thinking of efforts) {
-      for (const [args, field] of [[resolveArgs, "createParameters"], [stageArgs, "continuationParameters"]]) {
-        const value = json([...args, "--task-kind", "ordinary-engineering", "--model", model, "--thinking", thinking]).value;
-        check(`PM选择 ${model}/${thinking} ${field}原样通过`, JSON.stringify(value[field]) === JSON.stringify({ model, thinking }));
-      }
-    }
-  }
-  for (const invalid of [
-    ["--model", "gpt-6-luna"], ["--thinking", "max"], ["--model"], ["--thinking"],
-    ["--model", "gpt-5.6-terra", "--thinking", "high"],
-    ["--model", "gpt-5.6-luna", "--thinking", "high"],
-    ["--model", "gpt-6-luna", "--thinking", "xhigh"],
-    ["--model", "gpt-6-luna", "--thinking", "ultra"],
-    ["--model", "gpt-6-sol", "--thinking", "low"],
-    ["--model", "gpt-6-astra", "--thinking", "medium"],
-    ["--model", "__proto__", "--thinking", "high"],
-  ]) {
-    check(`拒绝不成对或非候选组合 ${invalid.join(" ")}`, command([...stageArgs, "--task-kind", "bulk-structured", ...invalid], 2).output.includes("须成对提供"));
-  }
-  check("v3所有解析与拒绝均无写入", snapshot(control) === v3Snapshot);
-  let previous = { model: "gpt-6-astra", thinking: "ultra" };
-  for (const pair of [defaultsV3["bulk-structured"], defaultsV3["ordinary-engineering"], defaultsV3["hard-analysis"], { model: "gpt-6-luna", thinking: "max" }]) {
-    previous = { ...previous, ...json([...stageArgs, "--task-kind", "ordinary-engineering", "--model", pair.model, "--thinking", pair.thinking]).value.continuationParameters };
-    check(`v3往返不继承旧参数 ${pair.model}/${pair.thinking}`, JSON.stringify(previous) === JSON.stringify(pair));
-  }
-  json(["register-project", "--project-root", project]);
-  const validV3 = readFileSync(overviewPath, "utf8");
-  check("重复登记不丢v3批准", validV3.includes('"mode":"beyond-worker-gpt6-v3"') && validV3.includes('"confirmed":true'));
-  writeFileSync(overviewPath, validV3.replace('"confirmed":true', '"confirmed":false'));
-  for (const [args, field] of [[resolveArgs, "createParameters"], [stageArgs, "continuationParameters"]]) {
-    check(`未批准v3不覆盖 ${field}`, Object.keys(json([...args, "--task-kind", "bulk-structured"]).value[field]).length === 0);
-    command([...args, "--task-kind", "bulk-structured", ...chosen], 2);
-  }
-  writeFileSync(overviewPath, validV3);
-  json(["worker-policy", "--action", "set", "--project-id", projectId, "--mode", "platform-default", "--approved-by", "退出v3"]);
-  check("v3可退回平台默认", Object.keys(json([...stageArgs, "--task-kind", "bulk-structured"]).value.continuationParameters).length === 0);
-  command([...resolveArgs, "--task-kind", "bulk-structured", ...chosen], 2);
-
-  const queryRoot = join(scratch, "query-only");
-  cpSync(join(repositoryRoot, "模板交付包"), queryRoot, { recursive: true });
-  mkdirSync(join(queryRoot, "projects", projectId), { recursive: true });
-  writeFileSync(join(queryRoot, "projects", projectId, "项目总览.md"), validV3);
-  const queryBefore = snapshot(queryRoot);
-  for (const action of ["show", "resolve", "resolve-stage"]) {
-    const result = spawnSync(process.execPath, [join(queryRoot, "scripts/beyond-control.mjs"), "worker-policy", "--action", action, "--project-id", projectId, "--task-kind", "bulk-structured"], { cwd: queryRoot, encoding: "utf8", windowsHide: true });
-    check(`${action}不初始化Git或工作台且不写文件`, result.status === 0 && snapshot(queryRoot) === queryBefore, result.stderr);
-  }
-} finally {
-  rmSync(scratch, { recursive: true, force: true });
-}
-
-if (errors.length) {
-  console.error(`Worker策略回归失败：${errors.length}项\n- ${errors.join("\n- ")}`);
-  process.exit(1);
-}
-
-console.log(`Worker策略回归通过：${passed}项`);
+  json(["worker-policy","--action","set","--project-id",projectId,"--mode","platform-default","--approved-by","恢复平台默认"]);
+  check("退出不重置原线程",Object.keys(json([...stage,"--task-kind","bulk-structured"]).continuationParameters).length===0);
+  const query=join(scratch,"query-only"); cpSync(product,query,{recursive:true});
+  mkdirSync(join(query,"projects",projectId),{recursive:true}); writeFileSync(join(query,"projects",projectId,"项目总览.md"),valid);
+  const queryBefore=snapshot(query);
+  for(const action of ["show","resolve","resolve-stage"]) { json(["worker-policy","--action",action,"--project-id",projectId,"--task-kind","bulk-structured"],query); check("查询不初始化 "+action,snapshot(query)===queryBefore); }
+} finally { rmSync(scratch,{recursive:true,force:true}); }
+if(errors.length) { console.error("Worker策略回归失败："+errors.length+"项\n- "+errors.join("\n- ")); process.exitCode=1; }
+else console.log("Worker策略回归通过："+passed+"项");

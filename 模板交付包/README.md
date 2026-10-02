@@ -120,3 +120,11 @@ node scripts/beyond-control.mjs runtime --request "<由BEYOND生成的JSON请求
 `--request`接收文件路径，不接收JSON正文。`worker-result.enqueue/list/ack`请求固定使用`schemaVersion + action + input`外层；`list`至少带当前`projectId`，`ack`带`projectId + taskId + receiptId`。这三类动作可省略`requestId`，由运行内核自动生成。
 
 当pending与活动任务或已提交事务的关系不清时，PM可用只读`workbench.inspect`把回执分为正常核对、仅补ack或保留冲突三类；它只需`projectId`、也可省略`requestId`，并且不验收、不改状态、不删除回执。
+
+## 5. 可选原生CLI执行
+
+明确选择CLI时可走`PM → Worker ↔ CLI → PM`，也可由PM或Worker直接负责CLI目标。调用者派发后不陪跑；每次后台程序等CLI实际退出、结果保存和派发者本轮结束，再通知原调用者。调用者核对产物与验收，必要时继续同一CLI会话，而不是把进程退出当作目标完成。
+
+配置、请求和停止入口统一见[CLI目标协作机制](docs/AI编程协同机制/机制/04-CLI目标协作机制.md)。第三方API使用独立CLI目录及认证，产品只引用配置位置，不读取密钥、不改桌面订阅。CLI仍可按任务读取相关项目资料与Action Skills；模型和权限取该CLI自己的实际配置，不继承桌面PM。工作事件、错误及结果可从受管入口查看，不提供内部推理，也不宣称右侧终端已有输入控制。
+
+此分支目前支持有可核验本机记录和消息入口的Codex Desktop，以及本机Windows/Linux原生CLI。缺少消息能力时不自动启动；消息送达不保证负责人已经处理，真实宿主未验证的场景须如实标记。停用CLI不影响原Worker路径；安装验真只检查随包脚本与机制文档，不要求安装CLI、配置API或联网认证。

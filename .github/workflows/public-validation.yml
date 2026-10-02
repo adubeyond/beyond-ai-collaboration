@@ -53,6 +53,8 @@ jobs:
         run: node scripts/check-project-entry-migration.mjs
       - name: Validate workbench upgrade migration
         run: node --test scripts/check-workbench-upgrade-migration.mjs
+      - name: Validate CLI store, execution, notification, routing, recovery, and goal loops
+        run: node --test scripts/check-cli-task-store.mjs scripts/check-cli-launcher.mjs scripts/check-cli-notification.mjs scripts/check-cli-workbench.mjs scripts/check-cli-routing.mjs scripts/check-cli-recovery.mjs scripts/check-cli-goal-loop.mjs
       - name: Validate implementation paths
         run: node scripts/check-implementation-paths.mjs
       - name: Run minimal example tests
