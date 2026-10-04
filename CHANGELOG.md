@@ -14,6 +14,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Visible external Windows terminals and explicit user-terminal attachment; full-access/no-approval native turns while preserving business authorization boundaries.
 - Native-mode lifecycle, failure, identity, stop and event-order tests alongside the existing Desktop and exec-log regression suite. Legacy CLI profiles and Worker protocols remain unchanged.
 
+### Fixed
+
+- Apply the existing bounded Windows I/O retry to a lock owner's file read during receipt recovery. Persistent denial still fails closed, and lock ownership and callback/receipt protocols are unchanged.
+
 ## [3.2.9] - 2026-10-02
 
 ### Fixed

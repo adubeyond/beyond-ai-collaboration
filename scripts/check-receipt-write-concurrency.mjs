@@ -201,6 +201,40 @@ test('persistent directory denial fails closed without deleting old receipt or l
   assert.equal(f.store.list({ projectId: f.input.projectId }).records[0].receiptId, f.old.receiptId);
 });
 
+for (const persistent of [false, true]) {
+  test(`${persistent ? 'persistent' : 'transient'} Windows owner-file denial uses the bounded retry without losing pending`, async t => {
+    const f = fixture(t), crashed = f.run('crashed', 'acknowledge', f.ack, true);
+    await f.entered(crashed); crashed.process.kill(); await crashed.done;
+    const lock = path.join(f.root, 'locks', path.basename(f.store.receiptPath(f.input.projectId, f.input.taskId), '.json') + '.lock');
+    const owners = fs.readdirSync(lock), ownerFile = path.join(lock, owners[0]);
+    const read = fs.readFileSync; let attempts = 0;
+    fs.readFileSync = function(file, ...args) {
+      if (path.resolve(String(file)) === ownerFile) {
+        attempts += 1;
+        if (persistent || attempts === 1) throw Object.assign(new Error('injected owner-file denial'), { code: persistent ? 'EACCES' : 'EPERM' });
+      }
+      return read.call(this, file, ...args);
+    };
+    try {
+      if (persistent) {
+        assert.throws(() => f.store.enqueue({ ...f.input, finalText: '已完成：不可写入' }), error => error.code === 'EACCES');
+        assert.equal(attempts, 20);
+      } else {
+        assert.equal(f.store.enqueue({ ...f.input, finalText: '已完成：owner读取恢复' }).mode, 'replaced');
+        assert.ok(attempts >= 2);
+      }
+    } finally { fs.readFileSync = read; }
+    if (persistent) {
+      assert.deepEqual(fs.readdirSync(lock), owners);
+      assert.deepEqual(fs.readdirSync(path.join(f.root, 'locks')), [path.basename(lock)]);
+      assert.equal(f.store.list({ projectId: f.input.projectId }).records[0].receiptId, f.old.receiptId);
+    } else {
+      assert.deepEqual(fs.readdirSync(path.join(f.root, 'locks')), []);
+      assert.equal(f.store.list({ projectId: f.input.projectId }).records[0].finalText, '已完成：owner读取恢复');
+    }
+  });
+}
+
 test('live lock times out without theft; failure releases only the contender directory', async t => {
   const f = fixture(t), ack = f.run('owner', 'acknowledge', f.ack, true);
   await f.entered(ack);

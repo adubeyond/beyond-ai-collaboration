@@ -167,7 +167,7 @@ export class WorkerResultReceiptStore {
             removeEmptyLockDirectory(lock);
           } else if (owners.length === 1 && /^owner-\d+-[0-9a-f-]+\.json$/i.test(owners[0])) {
             let owner;
-            try { owner = JSON.parse(fs.readFileSync(path.join(lock, owners[0]), 'utf8')); }
+            try { owner = JSON.parse(retryTransientFileOperation(() => fs.readFileSync(path.join(lock, owners[0]), 'utf8'))); }
             catch (readError) { if (readError?.code !== 'ENOENT') throw readError; }
             if (Number.isInteger(owner?.pid) && owner.pid > 0
               && owners[0] === `owner-${owner.pid}-${owner.nonce}.json` && !processAlive(owner.pid)) {
