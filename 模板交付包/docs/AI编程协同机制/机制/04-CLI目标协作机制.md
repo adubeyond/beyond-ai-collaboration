@@ -7,17 +7,19 @@
 - `PM → Worker ↔ CLI → Worker → PM`：原Worker持有任务和CLI会话，负责核验、纠偏、同会话续做。CLI每轮只通知该Worker；Worker最终完成或真实暂停时仍按原身份入口enqueue、回源和输出final。不能由PM接管已经归原Worker的CLI辅助。
 - `PM或Worker ↔ CLI`：当前调用者直接持有CLI目标、核验并继续同会话。PM可把明确的独立CLI结果登记为正式任务；没有原Worker时不编造Worker编号。已有Worker任务的CLI使用属于辅助，不另登记正式CLI目标。
 
-调用者派发成功后结束本轮派发，不等业务完成、不轮询或长时间陪跑。当前还有老板请求则继续答完；CLI后台程序只在实际CLI退出、结果稳定落盘且本次派发的桌面对话回合结束后，尝试一次通知原调用者。它是每次派发的有限后台程序，不安装Hook、notify配置、常驻服务或第二套调度器。
+调用者派发成功后结束本轮派发，不等业务完成、不轮询或长时间陪跑。当前还有老板请求则继续答完。日志模式在实际CLI退出后通知；原生交互模式在真正的`turn/completed`且结果稳定落盘后，确认负责人当前前台回合已结束，再尝试一次通知原调用者。空闲窗口不代表业务已完成，也不要求CLI整个进程先退出。交互辅助进程只服务绑定的这一个任务：关闭窗口后在当前轮结束时退出；负责人accept/pause/close后退出，不安装Hook、常驻系统服务或第二套调度器。
 
 ## 配置与启动
 
 使用已经单独配置第三方API的原生Codex CLI。认证留在该CLI专用`CODEX_HOME`，不能复用桌面登录目录；产品不读取密钥，不自动安装或改写认证。配置文件只引用原生命令、专用目录及实际模型：
 
 ```json
-{"schemaVersion":1,"runner":{"command":"<原生可执行文件绝对路径>","args":["<必要启动脚本，可省略此元素>"]},"codexHome":"<CLI专用绝对目录>","model":"<第三方API实际支持的模型>"}
+{"schemaVersion":1,"runner":{"command":"<codex原生可执行文件绝对路径>","args":[]},"codexHome":"<CLI专用绝对目录>","model":"<第三方API实际支持的模型>","mode":"interactive","effort":"medium","ui":"window"}
 ```
 
-不得在该文件放密钥、认证参数或隐式`--last`。CLI使用自己的平台权限；第三方API能响应不等于具有命令、文件、网络或生产授权。专业方法与项目资料沿用原任务授权，CLI按当前问题读一个匹配Action Skill及相关事实，不全量加载桌面历史；它不以`identity-worker`身份直接回PM。
+新配置选择`mode=interactive`，运行真正的Codex原生交互界面，不拿JSON日志冒充对话。Windows的`ui=window`打开独立可见终端；`ui=attach`返回命令，由用户在自己的终端连接同一会话（Linux使用此方式）。这是外部原生终端，不声称已经能往Desktop右侧终端输入。已有未指定mode的配置继续沿用exec日志模式，不改变旧任务。交互模式需要Node.js 24及支持认证app-server的Codex可执行文件，当前实测0.160.0；不支持时说明真实原因，不静默换回日志。
+
+不得在该文件放密钥、认证参数或隐式`--last`。第三方认证仍由CLI自己的专用目录读取。交互模式在服务、会话和每轮派单设置完全访问及`approval_policy=never`，不让用户逐命令审批；这只解决执行权限，不扩大任务授权，不自行授权生产发布。专业方法与项目资料沿用原任务授权，CLI按当前问题读一个匹配Action Skill及相关事实，不全量加载桌面历史；它不以`identity-worker`身份直接回PM。
 
 固定入口是`node <当前controlRoot>/scripts/cli/cli-bridge.mjs --request <JSON请求文件>`，工作目录必须是本任务真实`executionRoot`。启动、续跑入口从当前桌面进程和本轮记录核对真实调用者、回合与消息工具；不能从聊天猜线程或从其他项目寻找入口。消息能力不可用就不启动或续跑CLI、不声称它会自动回来。本地状态、结果、核验、停止与恢复仍可由继承身份匹配的原负责人调用，不依赖已经失效的消息通道。原路径照常可用。
 
@@ -57,7 +59,9 @@
 {"schemaVersion":1,"requestId":"cli-goal-run-2","action":"cli.resume","input":{"projectId":"<项目>","taskId":"<任务>","ownerThreadId":"<调用者>","expectedRunNumber":1,"expectedSessionId":"<保存的真实会话>","prompt":"<依据缺口的纠偏与剩余验收>"}}
 ```
 
-只能续跑已保存的那个会话；不能使用`--last`、新会话或同时启动第二个进程绕过现场。若后台未接管、会话缺失或退出事实不明，先核对影响，不能自动重开。模型调整须按任务及第三方实际能力明确配置，不继承PM桌面模型。
+只能续跑已保存的那个会话；不能使用`--last`、新会话或同时启动第二个进程绕过现场。原生窗口仍开着时，resume把新要求交回同一辅助进程和会话；窗口已正常退出时，从保存的sessionId重新连接，不丢上下文。若后台未接管、会话缺失或退出事实不明，先核对影响，不能自动重开。模型调整须按任务及第三方实际能力明确配置，不继承PM桌面模型；先detach空闲窗口，再调整配置并resume原会话，不在活跃轮里偷偷换模型。
+
+用户可在原生窗口输入补充或纠偏。真实新turn记入同一任务的新运行轮次并通知原负责人；这不自动满足原验收、改写目标或代替PM验收。负责人已经accept/pause/close的目标不接收自动续做。窗口丢失但辅助进程仍在时，用`cli.open`（同一身份input）重新打开同一会话；`cli.detach`关闭视图连接，当前轮若正在执行则等它实际结束再退出。停止业务执行仍使用下一节的`cli.stop`，不是detach。
 
 ## 业务收口与停止
 
@@ -76,5 +80,7 @@ runtime从受管结果及核验读取正式证据和验收结论；一次事务�
 老板明确关闭整个CLI任务时，仍用原`workbench.close`；input带`projectId / taskId / ownerThreadId / operationId / expectedStatus / businessState=已关闭 / ownerDirective=explicit-owner-instruction / closedBy / closedAt / closureReason / taskLocator / authorizationLocator / stateSha256`。必须有稳定退出状态，无未结束的CLI进程；未启动的登记用`stateSha256=not-started`。关闭不是完成，不删业务现场、不生成或消费Worker pending。用户换目标不自动改写旧任务或让旧结果验收新目标。
 
 ## 支持边界
+
+交互模式通过官方app-server连接原生TUI，连接仅绑定127.0.0.1，使用每次辅助进程生成的本地认证token；token不放命令行、结果或发布包。远程WebSocket接口仍是官方实验特性，本产品只将它作为经过版本能力检查的本机可选分支，不宣称上游保证生产可用。协议依据：[OpenAI官方app-server说明](https://learn.chatgpt.com/docs/app-server)。
 
 当前实现面向本机Windows/Linux原生CLI与可核验的Codex Desktop本机记录、官方消息工具入口；没有这些条件时明确报告不可用。远程跨主机、长期调度、常驻MCP服务、桌面终端输入控制和自动业务授权不在本机制内。模拟消息接口通过，只能证明程序时序，不能冒充真实Desktop自动唤醒、实际负责人分析或生产完成。
