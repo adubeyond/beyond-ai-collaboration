@@ -51,6 +51,7 @@ const expectedCliProductFiles = [
   "scripts/cli/cli-task-store.mjs", "scripts/cli/native-cli-runner.mjs",
   "scripts/cli/cli-bridge.mjs", "scripts/cli/desktop-host.mjs", "scripts/cli/cli-notify.mjs",
   "scripts/cli/process-identity.mjs",
+  "scripts/cli/app-server-rpc.mjs", "scripts/cli/interactive-client.mjs", "scripts/cli/interactive-cli-runner.mjs",
   "docs/AI编程协同机制/机制/04-CLI目标协作机制.md",
 ];
 

@@ -47,6 +47,7 @@ for (const [target, source] of [
     assert.ok(bytes.toString('utf8').includes(sourceLink), 'Release validation link missing');
     bytes = Buffer.from(bytes.toString('utf8').replaceAll(sourceLink, '(TEST-RESULTS.md)'));
     bytes = Buffer.from(bytes.toString('utf8').replaceAll('(v' + version + '-install.md)', '(INSTALL.md)'));
+    bytes = Buffer.from(bytes.toString('utf8').replaceAll('(../../模板交付包/', '(beyond-control/'));
   }
   payload.set(target, bytes);
 }

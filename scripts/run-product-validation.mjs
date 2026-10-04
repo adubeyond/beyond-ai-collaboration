@@ -15,7 +15,7 @@ for(const name of new Set(files)) {
 }
 execFileSync("git",["init","--quiet"],{cwd:candidate,windowsHide:true});
 const runtime=["check-m3-project-identity","check-project-runtime-routing","check-worker-result-receipts","check-receipt-write-concurrency","check-receipt-list-concurrency","check-accept-receipt-cache-expiry","check-m3-workbench-transaction","check-workbench-upgrade-migration","check-native-worker-return",
-"check-cli-task-store","check-cli-launcher","check-cli-notification","check-cli-workbench","check-cli-routing","check-cli-recovery","check-cli-goal-loop"].map(n=>"scripts/"+n+".mjs");
+"check-cli-task-store","check-cli-launcher","check-cli-notification","check-cli-workbench","check-cli-routing","check-cli-recovery","check-cli-goal-loop","check-cli-interactive"].map(n=>"scripts/"+n+".mjs");
 const commands=[
   {name:"runtime-and-cli",args:["--test","--test-concurrency=4",...runtime]},
   ...["check-public-content","check-implementation-paths","check-worker-policy-results","check-worker-policy-approval","check-local-worker-final","check-existing-project-adoption","check-install-integrity","check-project-entry-migration","check-project-initialization-runtime","check-historical-workbench-routing","check-workbench-convergence","check-shared-workspace-git"].map(n=>({name:n,args:["scripts/"+n+".mjs",...(n==="check-public-content"?["--strict-candidate"]:[])]})),

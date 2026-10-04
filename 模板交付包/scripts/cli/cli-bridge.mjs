@@ -9,11 +9,17 @@ import { currentProcessIdentity, processIsGone } from './process-identity.mjs';
 import { ProjectIdentityProvider } from '../runtime/project-identity-provider.mjs';
 import { createDesktopHost, desktopHome } from './desktop-host.mjs';
 import { notifyWhenReady } from './cli-notify.mjs';
+import { checkInteractiveCapability, runInteractiveCli } from './interactive-cli-runner.mjs';
+import { readInteractiveEndpoint, callInteractive, openInteractiveWindow } from './interactive-client.mjs';
 
 export function readProfile(file) {
   if (!path.isAbsolute(file)) throw new Error('CLI profile absolute path required');
   const profile = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (Object.keys(profile).some(key => !['schemaVersion', 'runner', 'codexHome', 'model'].includes(key)) || Object.keys(profile.runner ?? {}).some(key => !['command', 'args'].includes(key))) throw new Error('CLI profile cannot contain credentials or undocumented overrides');
+  if (Object.keys(profile).some(key => !['schemaVersion', 'runner', 'codexHome', 'model', 'mode', 'effort', 'ui'].includes(key)) || Object.keys(profile.runner ?? {}).some(key => !['command', 'args'].includes(key))) throw new Error('CLI profile cannot contain credentials or undocumented overrides');
+  if (profile.mode !== undefined && !['exec', 'interactive'].includes(profile.mode)) throw new Error('invalid CLI mode');
+  if (profile.effort !== undefined && !['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].includes(profile.effort)) throw new Error('invalid CLI effort');
+  if (profile.ui !== undefined && (profile.mode !== 'interactive' || !['window', 'attach'].includes(profile.ui))) throw new Error('invalid CLI view');
+  if (profile.mode === 'interactive' && process.platform !== 'win32' && profile.ui !== 'attach') throw new Error('Native CLI on this platform requires ui=attach and a user terminal');
   const home = desktopHome();
   const lexical = file => {
     const absolute = path.resolve(file);
@@ -61,7 +67,7 @@ async function startManager(store, binding, run, profile, prompt, context) {
     child.on('message', message => {
       if (message.type !== 'accepted' && message.type !== 'rejected') return;
       clearTimeout(timer); child.disconnect(); child.unref();
-      if (message.type === 'rejected') reject(new Error(message.error)); else resolve({ ...run, status: 'running', stateLocator: store.locator(run) });
+      if (message.type === 'rejected') reject(new Error(message.error)); else resolve({ ...run, sessionId: message.sessionId ?? run.sessionId, status: 'running', stateLocator: store.locator(run), ...(message.attachCommand ? { attachCommand: message.attachCommand } : {}) });
     });
     child.once('spawn', () => {
       try {
@@ -82,6 +88,7 @@ export async function launchCliRequest(request, context) {
     const { prompt, ...supplied } = input;
     if (supplied.ownerTurnId !== context.ownerTurnId) throw new Error('CLI source turn identity mismatch');
     const profile = readProfile(supplied.profilePath); validateBinding(supplied, context, store);
+    if (profile.mode === 'interactive') checkInteractiveCapability(profile);
     const binding = store.create(supplied);
     const run = store.beginRun(binding, { requestId: request.requestId, prompt, expectedRunNumber: 0, expectedSessionId: null, ownerTurnId: context.ownerTurnId });
     return startManager(store, binding, run, profile, prompt, context);
@@ -90,9 +97,25 @@ export async function launchCliRequest(request, context) {
   if (request.action === 'cli.status') return binding;
   if (request.action === 'cli.result') return store.readResult(input, input.runNumber);
   if (request.action === 'cli.review') return store.recordReview(input);
+  if (request.action === 'cli.open') {
+    if (!readInteractiveEndpoint(store, binding)) throw new Error('Native view is not running; use explicit same-session resume');
+    return openInteractiveWindow(store, binding);
+  }
+  if (request.action === 'cli.detach') {
+    const result = await callInteractive(store, binding, 'detach');
+    return result ?? { status: 'already-detached' };
+  }
   if (request.action === 'cli.resume') {
     const profile = readProfile(binding.profilePath);
+    const endpoint = profile.mode === 'interactive' ? readInteractiveEndpoint(store, binding) : null;
+    if (profile.mode === 'interactive') checkInteractiveCapability(profile);
+    if (endpoint && endpoint.profileSha256 !== digest(profile)) throw new Error('Live native profile changed; detach idle view before changing model');
     const run = store.beginRun(input, { requestId: request.requestId, prompt: input.prompt, expectedRunNumber: input.expectedRunNumber, expectedSessionId: input.expectedSessionId, ownerTurnId: context.ownerTurnId });
+    if (endpoint) {
+      const current = store.read(binding);
+      if (current.status !== 'starting') return { ...run, status: current.status, stateLocator: store.locator(run) };
+      return callInteractive(store, binding, 'resume', { run, profile, prompt: input.prompt });
+    }
     return startManager(store, binding, run, profile, input.prompt, context);
   }
   if (request.action === 'cli.stop' || request.action === 'cli.recover') {
@@ -134,9 +157,13 @@ if (process.argv[2] === '--manager' && process.send) {
       const sourceEnd = host ? host.waitForSourceTurnEnd({ ownerThreadId: payload.run.ownerThreadId, ownerTurnId: payload.run.ownerTurnId, signal: abort.signal }) : null;
       sourceEnd?.catch(() => {});
       store.setProcess(payload.run, identity);
-      process.send({ type: 'accepted' });
       try {
-        await runNativeCli({ ...payload, store, onTerminal: host ? () => notifyWhenReady({ store, identity: payload.run, runNumber: payload.run.runNumber, host, sourceEnd }) : undefined });
+        if (payload.profile.mode === 'interactive') {
+          await runInteractiveCli({ ...payload, store, host, ready: (result, error) => { if (process.connected) process.send(error ? { type: 'rejected', error: error.message } : { type: 'accepted', ...result }); } });
+        } else {
+          process.send({ type: 'accepted' });
+          await runNativeCli({ ...payload, store, onTerminal: host ? () => notifyWhenReady({ store, identity: payload.run, runNumber: payload.run.runNumber, host, sourceEnd }) : undefined });
+        }
       } finally { abort.abort(); }
     } catch (error) { if (process.connected) process.send({ type: 'rejected', error: error.message }); process.exitCode = 1; }
   });

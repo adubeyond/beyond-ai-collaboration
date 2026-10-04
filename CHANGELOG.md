@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.10] - 2026-10-04
+
+### Added
+
+- Opt-in authenticated loopback app-server and real native CLI TUI, with persistent sessions, same-session owner/UI continuations, stable terminal results, and foreground-safe owner notification.
+- Visible external Windows terminals and explicit user-terminal attachment; full-access/no-approval native turns while preserving business authorization boundaries.
+- Native-mode lifecycle, failure, identity, stop and event-order tests alongside the existing Desktop and exec-log regression suite. Legacy CLI profiles and Worker protocols remain unchanged.
+
 ## [3.2.9] - 2026-10-02
 
 ### Fixed

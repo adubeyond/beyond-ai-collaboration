@@ -29,7 +29,7 @@ These documents explain the public product, its operating model, and the first r
 | Previous release | [v3.1.7 Upgrade Guide](releases/v3.1.7.md) | Restore platform terminal delivery, protect a busy PM, and activate entry or Skill replacement after restart |
 | Previous release | [v3.2.0 Upgrade Guide](releases/v3.2.0.md) | Use the formal Worker final, one native wakeup, and idempotent workbench transactions for lossless non-interrupting terminal closeout |
 | Previous release | [v3.2.1 Upgrade Guide](releases/v3.2.1.md) | Prevent post-wakeup Worker activity and recursive copies of generated test caches or local backups |
-| Current release | [v3.2.9 Upgrade Guide](releases/v3.2.9.md) | Sol-first defaults, Luna batches, and explicitly selected Astra escalation |
+| Current release | [v3.2.10 Upgrade Guide](releases/v3.2.10.md) | Sol-first defaults, Luna batches, and explicitly selected Astra escalation |
 | Previous release | [v3.2.8 Upgrade Guide](releases/v3.2.8.md) | Single GPT-6.1 policy, optional CLI goal loops, and upgrade compatibility |
 | [v3.2.7 Upgrade Guide](releases/v3.2.7.md) | GPT-6 policy, callback turn identity, large-record recovery and concurrent receipt safety |
 | Previous release | [v3.2.6 Upgrade Guide](releases/v3.2.6.md) | Scoped and whole-project PMs, approved model switching and local final recovery |

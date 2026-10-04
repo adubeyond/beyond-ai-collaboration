@@ -10,7 +10,7 @@ export function redact(text) {
   return String(text).replace(/(Bearer\s+)[^\s"']+/gi, '$1[REDACTED]')
     .replace(/((?:api[_-]?key|access[_-]?token|password|authorization)["']?\s*[:=]\s*["']?)[^\s,"'}]+/gi, '$1[REDACTED]');
 }
-function cliEnvironment(home) {
+export function cliEnvironment(home) {
   const env = { ...process.env, CODEX_HOME: home };
   for (const key of Object.keys(env)) if (/^(OPENAI_|CODEX_(THREAD|TURN|APP|AUTH|API|SESSION))/.test(key)) delete env[key];
   delete env.NODE_TEST_CONTEXT;
