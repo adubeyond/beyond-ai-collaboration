@@ -7,7 +7,9 @@ import { CliTaskStore } from '../模板交付包/scripts/cli/cli-task-store.mjs'
 const modules = async () => ({ ...await import('../模板交付包/scripts/cli/desktop-host.mjs'), ...await import('../模板交付包/scripts/cli/cli-notify.mjs') });
 function fixture(t, schema = 'valid', reply = 'ok') {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-cli-notify-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  // The fake MCP child has just been killed; Windows can retain its cwd handle briefly.
+  // Retry only this fixture's cleanup, without weakening any notification assertion.
+  t.after(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 }));
   const ownerThreadId = 'owner-one', ownerTurnId = 'turn-one', sourceRecordPath = path.join(root, 'rollout-owner-one.jsonl');
   fs.writeFileSync(sourceRecordPath, JSON.stringify({ type: 'session_meta', payload: { id: ownerThreadId } })+'\n'+JSON.stringify({ type: 'event_msg', payload: { type: 'task_started', turn_id: ownerTurnId } })+'\n');
   const pluginRoot = path.join(root, 'plugins'), plugin = path.join(pluginRoot, 'codex-app-tools', '7.8.9'); fs.mkdirSync(path.join(plugin, '.codex-plugin'), { recursive: true });
