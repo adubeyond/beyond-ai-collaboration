@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "provenance": "由2026-10-07真实回合中的重复确认、局部交付、依赖等待重建；标识和业务细节已最小化。不是实时任务，不是完整原会话重放。",
+  "cases": [
+    {
+      "id": "confirmation-only", "role": "PM",
+      "request": "老板：现在页面能用什么？别再给我一堆过程。",
+      "facts": "原W5任务是完整页面接入，尚未完成。其本轮已结束，final为进行中：原接口负责人已复核查询格式错误消除；字段准备和搜索不可用仍在等W2，正文刷新错误待W1实际诊断。仅确认已有事实，本轮没有业务工具。上述三个事实PM已核对，W1/W2正在执行，无新输入、无W5可独立继续动作、无待裁决；pending为空。当前能用：登录、已加载公告正文、保存并刷新保留；当前不能用：完整搜索。",
+      "expectedActions": [], "expectedState": "进行中"
+    },
+    {
+      "id": "confirmation-with-missed-work", "role": "PM",
+      "request": "收到W2回报，请按原目标处理。",
+      "facts": "任务原授权修复并验证12站。W2回合completed且idle，无pending，final进行中：确认前2站修好，其余10站尚未调查，已有安全调查入口，没有依赖、检查点或权限缺口，等待PM安排。前2站事实此前已处理，但其余10站没有后续执行。",
+      "expectedActions": ["send:W2"], "expectedState": "进行中"
+    },
+    {
+      "id": "unchanged-dependency", "role": "PM",
+      "request": "W3又回了一条进行中，处理一下。",
+      "facts": "W3本轮已结束，最后一次回报说明企业分节只能等待W6真实成员输入；自己其他授权动作已完成，成员数未知，不能当零。工作台已准确记录等待W6正式输入。W6已有后续运行回合在获取输入。依赖未变化，无pending，无新增风险，无须用户决定。",
+      "expectedActions": [], "expectedState": "进行中"
+    },
+    {
+      "id": "dependency-released", "role": "PM",
+      "request": "W1交接结果到了，继续处理。",
+      "facts": "W1本轮completed，回报进行中：W2此前等待的候选部署已完成，版本和测试入口已核对；W1整体任务尚未完成且无pending，自己剩余收尾仅依赖W2真实查询验证结果，没有其他可独立动作。W2是本PM负责的原执行者，idle，原任务已授权在该候选继续真实查询验证，唯一等待条件已满足，无新用户取舍。别的任务不受影响。",
+      "expectedActions": ["send:W2"], "expectedState": "进行中"
+    },
+    {
+      "id": "already-resumed", "role": "PM",
+      "request": "处理W2的进展回调。",
+      "facts": "回调对应W2的t8，已completed且final进行中，未完成项是剩余站点验证。本次平台读取同时证明t9已启动，输入正是原PM刚发的剩余站点续做，t9正在执行。t8 final已核对，pending为空，没有新的范围变更。",
+      "expectedActions": [], "expectedState": "进行中"
+    },
+    {
+      "id": "readonly-user-override", "role": "PM",
+      "request": "老板：这轮只解释为什么停了，别恢复、派发或修改任务。",
+      "facts": "W2刚回传进行中；回合completed且idle，其余10站可在原范围继续，没有真实阻断。无pending。当前请求明确只读。",
+      "expectedActions": [], "expectedState": "进行中"
+    },
+    {
+      "id": "user-checkpoint", "role": "PM",
+      "request": "W2设计结果回来了。",
+      "facts": "原任务包含设计与实现，但老板明确要求设计完成先给他看，未经确认不得实现。W2回合completed，final进行中，设计已交付；无pending、尚未收到老板确认。",
+      "expectedActions": [], "expectedState": "进行中"
+    },
+    {
+      "id": "mixed-business-results", "role": "PM",
+      "request": "老板：这三条现在分别怎么样，哪个需要我提供东西？",
+      "facts": "三个本PM登记任务回调都已到达。对应回合均completed、final可读且已与主证据核对。W1约定查询格式修复完整完成，有匹配完成回执R1。W2无pending，final进行中：只做了部分，原授权剩余测试可直接继续，idle。W3账号已证实失效，无替代账号、无剩余安全动作，已形成匹配暂停回执R3，唯一恢复条件老板提供新测试账号。无其他任务。工作台三项当前均进行中。",
+      "expectedActions": ["accept:W1", "ack:W1", "send:W2", "pause:W3", "ack:W3"], "expectedState": "混合"
+    },
+    {
+      "id": "same-return-repeated", "role": "PM",
+      "request": "老板：页面现在能用吗？另外下面又进来了W2摘要、W5转述和一次固定进展提醒。",
+      "facts": "三条消息都指向W2同一个t4结果：格式错误已消除、搜索字段仍准备。PM已核对t4，已向W2发送补齐字段并真实验收的续做；有t5已启动的记录。W5只是转述，无新动作或故障。当前登录/正文/保存可用、搜索不可用。没有新pending。",
+      "expectedActions": [], "expectedState": "进行中"
+    },
+    {
+      "id": "new-fault-is-not-duplicate", "role": "PM",
+      "request": "又收到一条进行中，处理一下。",
+      "facts": "W2旧t4格式修复已核对。新t5已结束，final仍以进行中开头，但首次报告同版本正常账号请求间歇503，已有定位入口；原任务涵盖修复及稳定性验证，剩余调查在原授权内可做，未开始下一轮，idle。无pending，不存在用户检查点。",
+      "expectedActions": ["send:W2"], "expectedState": "进行中"
+    },
+    {
+      "id": "worker-partial-handoff", "role": "Worker",
+      "request": "接口负责人刚确认收到你交付的页面候选。继续原任务。",
+      "facts": "当前是W5唯一Worker；完整页面接入仍有已授权、可独立开发和本地验证的筛选和路由未完成。这些动作不依赖候选部署。接口负责人只说收到，没有新阻断、用户检查点或平台执行边界。",
+      "expectedActions": ["continue_local:W5"], "expectedState": "进行中"
+    },
+    {
+      "id": "worker-execution-boundary", "role": "Worker",
+      "request": "按身份规则结束本轮并交接当前进展。",
+      "facts": "W2整体结果未完成，现场已稳定。本轮确已到平台执行边界，只能提交最后一次回源和final，不能继续业务工具。仍有明确可接续的剩余测试，原授权有效。来源PM明确要求本次同时提供给下游使用的交接事实。没有真实暂停原因。",
+      "expectedActions": ["progress_callback:PM"], "expectedState": "进行中"
+    },
+    {
+      "id": "new-terminal-missing-receipt", "role": "PM",
+      "request": "处理W2完成回调。",
+      "facts": "这是使用当前回执契约的新任务。W2当前回合已completed且idle，final已完成，业务证据满足原验收，但final说明enqueue失败。项目pending为空，唯一缺口是合规终态回执，原Worker可纠正提交。",
+      "expectedActions": ["send:W2"], "expectedState": "进行中"
+    },
+    {
+      "id": "true-pause", "role": "Worker",
+      "request": "完成原测试环境验证；按真实结果回报。",
+      "facts": "唯一Worker W3已通过原入口和既有安全路径确认必需测试账号失效，没有替代账号或剩余安全动作，必须老板提供新账号。现场已稳定，无其他工具未结束，无已有终态发送。本任务已登记，控制入口可用。",
+      "expectedActions": ["enqueue:W3", "terminal_callback:PM"], "expectedState": "已暂停"
+    },
+    {
+      "id": "foreground-and-ready-downstream", "role": "PM",
+      "request": "老板：用人话回答三件事：现在能用什么？搜索为什么还不能用？下一步谁来做？",
+      "facts": "当前登录/公告正文/保存并刷新可用；搜索字段尚在准备，不能声称全站可用。回答期间收到27条同一修复的确认/转述，均已核对，不改变现状；另有一条W1真正新交接：候选已部署，解除本PM原W2真实查询验证的唯一等待。W2当前idle，原授权有效。W1整体仍进行中，无pending，自己剩余收尾只等W2验证结果，没有独立动作。不存在新的用户取舍。",
+      "expectedActions": ["send:W2"], "expectedState": "进行中"
+    },
+    {
+      "id": "two-similar-distinct-tasks", "role": "PM",
+      "request": "两条回调都说进行中，处理一下。",
+      "facts": "W2和W4是本PM两个不同登记任务，都有已结束可读的新回合。W2尚有原范围剩余查询验证；W4尚有原范围收藏状态修复。两者均idle，均有明确安全动作，无依赖、检查点或pending。文字相似但对象、成果与剩余工作不同。",
+      "expectedActions": ["send:W2", "send:W4"], "expectedState": "进行中"
+    }
+  ]
+}

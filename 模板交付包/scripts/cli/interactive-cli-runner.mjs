@@ -146,7 +146,7 @@ export async function runInteractiveCli({ binding, run: initialRun, profile, pro
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     rpc = await connect(wsUrl, token, { onNotification: message => { queue = queue.then(() => receive(message)).catch(fatal); }, onDisconnect: error => { void fatal(error); } });
-    await rpc.request('initialize', { clientInfo: { name: 'beyond_native_cli', title: 'BEYOND native CLI owner', version: '3.2.10' }, capabilities: { experimentalApi: true } }); rpc.initialized();
+    await rpc.request('initialize', { clientInfo: { name: 'beyond_native_cli', title: 'BEYOND native CLI owner', version: '3.2.11' }, capabilities: { experimentalApi: true } }); rpc.initialized();
     const thread = await rpc.request(sessionId ? 'thread/resume' : 'thread/start', { ...(sessionId ? { threadId: sessionId } : { ephemeral: false }), cwd: binding.executionRoot, model: profile.model, approvalPolicy: 'never', sandbox: 'danger-full-access' });
     if (sessionId && thread.thread.id !== sessionId) throw new Error('Native session identity changed');
     sessionId = thread.thread.id; store.bindSession(run, sessionId);

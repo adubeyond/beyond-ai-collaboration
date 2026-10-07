@@ -57,6 +57,8 @@ jobs:
         run: node --test scripts/check-cli-task-store.mjs scripts/check-cli-launcher.mjs scripts/check-cli-notification.mjs scripts/check-cli-workbench.mjs scripts/check-cli-routing.mjs scripts/check-cli-recovery.mjs scripts/check-cli-goal-loop.mjs scripts/check-cli-interactive.mjs
       - name: Validate implementation paths
         run: node scripts/check-implementation-paths.mjs
+      - name: Validate progress-decision fixtures and evaluator
+        run: node scripts/probe-pm-progress-decisions.mjs --check-fixtures
       - name: Run minimal example tests
         working-directory: examples/minimal-project
         run: npm test

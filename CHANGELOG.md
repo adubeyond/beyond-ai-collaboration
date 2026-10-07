@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.11] - 2026-10-07
+
+### Fixed
+
+- Continue unfinished authorized work after a partial handoff instead of ending on receipt acknowledgments. A dependency blocks only the affected work.
+- Base PM continuation on remaining actions, changed dependencies and evidence of an already-started turn, rather than automatically restarting every `进行中` reply.
+- Consolidate repeated confirmations without dropping distinct tasks, new faults or released dependencies. Preserve the foreground user request and report honest current execution/waiting status.
+- Keep terminal callbacks, receipts, acceptance, pause/resume and the model matrix unchanged. This release adds no scheduler, task state or production installation.
+
+### Validation
+
+- Add blinded model-decision scenarios and evaluator checks. See the versioned validation report for actual samples and limitations; static checks are not a claim of live message-delivery reliability.
+
 ## [3.2.10] - 2026-10-04
 
 ### Added
