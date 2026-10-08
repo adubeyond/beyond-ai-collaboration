@@ -12,9 +12,16 @@ export function processStart(pid) {
   throw new Error('process identity is unsupported on this host');
 }
 export function currentProcessIdentity() { return current ??= { pid: process.pid, startedAt: processStart(process.pid) }; }
-export function processIsGone(identity) {
+export function processIsGone(identity, { signal = pid => process.kill(pid, 0), readStart = processStart } = {}) {
   if (!Number.isSafeInteger(identity?.pid) || identity.pid < 1 || !identity.startedAt) throw new Error('saved process proof unavailable');
-  try { process.kill(identity.pid, 0); } catch (error) { if (error.code === 'ESRCH') return true; throw new Error('process liveness is unknown'); }
+  const gone = () => { try { signal(identity.pid); return false; } catch (error) { if (error.code === 'ESRCH') return true; throw new Error('process liveness is unknown'); } };
+  if (gone()) return true;
   // A reused PID belongs to another process; never signal or wait for that new process.
-  return processStart(identity.pid) !== identity.startedAt;
+  try { return readStart(identity.pid) !== identity.startedAt; }
+  catch (error) {
+    // Exit can occur between the liveness check and reading the start identity.
+    // Only a fresh ESRCH proves exit; access denial remains unknown, not gone.
+    if (gone()) return true;
+    throw error;
+  }
 }

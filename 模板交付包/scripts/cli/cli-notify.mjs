@@ -15,7 +15,8 @@ export async function notifyWhenReady({ store, identity, runNumber, host, source
     if (!capability.available) return store.finishNotification(identity, runNumber, { status: 'unavailable', error: capability.reason });
     const resultPath = path.join(store.runDir(identity, runNumber), 'result.json');
     const prompt = ['CLI_RESULT_READY（本轮运行结果待负责人核验，不代表业务完成）', `projectId=${identity.projectId}`, `taskId=${identity.taskId}`, `runNumber=${runNumber}`, `status=${result.status}`, `resultPath=${resultPath}`, `sha256=${sha256File(resultPath)}`, '请定点核对本轮结果、业务证据和当前用户指令。目标未满足时纠正并续跑同一会话；保持当前主问题完整。不新开 CLI、不把本通知当 Worker 终态回执。'].join('\n');
-    const outcome = await host.send({ ownerThreadId: identity.ownerThreadId, prompt });
-    return store.finishNotification(identity, runNumber, { ...outcome, sentAt: new Date().toISOString() });
+    const beforeSend = () => store.read(identity).runNumber === runNumber && !store.readReview(identity, runNumber);
+    const outcome = await host.send({ ownerThreadId: identity.ownerThreadId, prompt, beforeSend });
+    return store.finishNotification(identity, runNumber, { ...outcome, ...(outcome.status === 'unavailable' ? {} : { sentAt: new Date().toISOString() }) });
   } catch (error) { return store.finishNotification(identity, runNumber, { status: 'unavailable', error: error.message }); }
 }

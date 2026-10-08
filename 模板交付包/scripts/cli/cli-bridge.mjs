@@ -11,10 +11,30 @@ import { createDesktopHost, desktopHome } from './desktop-host.mjs';
 import { notifyWhenReady } from './cli-notify.mjs';
 import { checkInteractiveCapability, runInteractiveCli } from './interactive-cli-runner.mjs';
 import { readInteractiveEndpoint, callInteractive, openInteractiveWindow } from './interactive-client.mjs';
+import { readZcodeProfile, checkZcodeCapability } from './zcode-profile.mjs';
+import { runZcodeCli } from './zcode-cli-runner.mjs';
+import { readClaudeProfile, checkClaudeCapability } from './claude-profile.mjs';
+import { runVisibleCli } from './visible-cli-runner.mjs';
+import { openClaudeWindow } from './claude-client.mjs';
 
-export function readProfile(file) {
+function checkNativeCapability(profile) {
+  return (profile.provider === 'claude' ? checkClaudeCapability : profile.provider === 'zcode' ? checkZcodeCapability : checkInteractiveCapability)(profile);
+}
+
+export function readProfile(file, configuration = {}) {
   if (!path.isAbsolute(file)) throw new Error('CLI profile absolute path required');
   const profile = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!configuration || typeof configuration !== 'object' || Array.isArray(configuration) || Object.keys(configuration).some(key => !['model', 'effort'].includes(key))) throw new Error('CLI configuration only accepts model and effort');
+  if (configuration.model !== undefined) {
+    if (typeof configuration.model !== 'string' || !configuration.model.trim() || /[\r\n]/.test(configuration.model)) throw new Error('CLI configuration requires a nonempty model');
+    profile.model = configuration.model;
+  }
+  if (Object.hasOwn(configuration, 'effort')) {
+    if (configuration.effort === null) delete profile.effort;
+    else profile.effort = configuration.effort;
+  }
+  if (profile.provider === 'zcode') return readZcodeProfile(profile);
+  if (profile.provider === 'claude') return readClaudeProfile(profile);
   if (Object.keys(profile).some(key => !['schemaVersion', 'runner', 'codexHome', 'model', 'mode', 'effort', 'ui'].includes(key)) || Object.keys(profile.runner ?? {}).some(key => !['command', 'args'].includes(key))) throw new Error('CLI profile cannot contain credentials or undocumented overrides');
   if (profile.mode !== undefined && !['exec', 'interactive'].includes(profile.mode)) throw new Error('invalid CLI mode');
   if (profile.effort !== undefined && !['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].includes(profile.effort)) throw new Error('invalid CLI effort');
@@ -85,12 +105,12 @@ export async function launchCliRequest(request, context) {
   const input = request.input, store = new CliTaskStore({ controlRoot: context.controlRoot });
   if (input.ownerThreadId !== context.ownerThreadId) throw new Error('CLI owner identity mismatch');
   if (request.action === 'cli.start') {
-    const { prompt, ...supplied } = input;
+    const { prompt, configuration = {}, ...supplied } = input;
     if (supplied.ownerTurnId !== context.ownerTurnId) throw new Error('CLI source turn identity mismatch');
-    const profile = readProfile(supplied.profilePath); validateBinding(supplied, context, store);
-    if (profile.mode === 'interactive') checkInteractiveCapability(profile);
+    const profile = readProfile(supplied.profilePath, configuration); validateBinding(supplied, context, store);
+    if (profile.mode === 'interactive') checkNativeCapability(profile);
     const binding = store.create(supplied);
-    const run = store.beginRun(binding, { requestId: request.requestId, prompt, expectedRunNumber: 0, expectedSessionId: null, ownerTurnId: context.ownerTurnId });
+    const run = store.beginRun(binding, { requestId: request.requestId, prompt, expectedRunNumber: 0, expectedSessionId: null, ownerTurnId: context.ownerTurnId, profile, configuration: { model: profile.model, effort: profile.effort ?? null } });
     return startManager(store, binding, run, profile, prompt, context);
   }
   const binding = store.read(input); validateBinding(binding, context, store);
@@ -98,7 +118,9 @@ export async function launchCliRequest(request, context) {
   if (request.action === 'cli.result') return store.readResult(input, input.runNumber);
   if (request.action === 'cli.review') return store.recordReview(input);
   if (request.action === 'cli.open') {
-    if (!readInteractiveEndpoint(store, binding)) throw new Error('Native view is not running; use explicit same-session resume');
+    const endpoint = readInteractiveEndpoint(store, binding);
+    if (!endpoint) throw new Error('Native view is not running; use explicit same-session resume');
+    if (['zcode', 'claude'].includes(endpoint.provider)) return { status: 'already-open', ...endpoint.view };
     return openInteractiveWindow(store, binding);
   }
   if (request.action === 'cli.detach') {
@@ -106,11 +128,13 @@ export async function launchCliRequest(request, context) {
     return result ?? { status: 'already-detached' };
   }
   if (request.action === 'cli.resume') {
-    const profile = readProfile(binding.profilePath);
+    if (input.configuration !== undefined) readProfile(binding.profilePath, input.configuration);
+    const configuration = { ...(binding.configuration ?? {}), ...(input.configuration ?? {}) };
+    const profile = readProfile(binding.profilePath, configuration);
     const endpoint = profile.mode === 'interactive' ? readInteractiveEndpoint(store, binding) : null;
-    if (profile.mode === 'interactive') checkInteractiveCapability(profile);
+    if (profile.mode === 'interactive') checkNativeCapability(profile);
     if (endpoint && endpoint.profileSha256 !== digest(profile)) throw new Error('Live native profile changed; detach idle view before changing model');
-    const run = store.beginRun(input, { requestId: request.requestId, prompt: input.prompt, expectedRunNumber: input.expectedRunNumber, expectedSessionId: input.expectedSessionId, ownerTurnId: context.ownerTurnId });
+    const run = store.beginRun(input, { requestId: request.requestId, prompt: input.prompt, expectedRunNumber: input.expectedRunNumber, expectedSessionId: input.expectedSessionId, ownerTurnId: context.ownerTurnId, profile, configuration: { model: profile.model, effort: profile.effort ?? null } });
     if (endpoint) {
       const current = store.read(binding);
       if (current.status !== 'starting') return { ...run, status: current.status, stateLocator: store.locator(run) };
@@ -159,7 +183,8 @@ if (process.argv[2] === '--manager' && process.send) {
       store.setProcess(payload.run, identity);
       try {
         if (payload.profile.mode === 'interactive') {
-          await runInteractiveCli({ ...payload, store, host, ready: (result, error) => { if (process.connected) process.send(error ? { type: 'rejected', error: error.message } : { type: 'accepted', ...result }); } });
+          const runner = payload.profile.provider === 'claude' ? runVisibleCli : payload.profile.provider === 'zcode' ? runZcodeCli : runInteractiveCli;
+          await runner({ ...payload, store, host, ...(payload.profile.provider === 'claude' ? { openWindow: openClaudeWindow } : {}), ready: (result, error) => { if (process.connected) process.send(error ? { type: 'rejected', error: error.message } : { type: 'accepted', ...result }); } });
         } else {
           process.send({ type: 'accepted' });
           await runNativeCli({ ...payload, store, onTerminal: host ? () => notifyWhenReady({ store, identity: payload.run, runNumber: payload.run.runNumber, host, sourceEnd }) : undefined });

@@ -8,6 +8,20 @@ import { spawnSync } from 'node:child_process';
 import { CliTaskStore, digest, sha256File } from '../模板交付包/scripts/cli/cli-task-store.mjs';
 import { launchCliRequest, readProfile } from '../模板交付包/scripts/cli/cli-bridge.mjs';
 import { runNativeCli, processStart } from '../模板交付包/scripts/cli/native-cli-runner.mjs';
+import { processIsGone } from '../模板交付包/scripts/cli/process-identity.mjs';
+
+test('exit between liveness and start-time lookup is gone; permission denial is not', () => {
+  const identity = { pid: 12345, startedAt: 'original' };
+  const missing = () => { const error = new Error('exited'); error.code = 'ESRCH'; throw error; };
+  const unreadable = () => { throw new Error('process start identity unavailable'); };
+  let checked = 0;
+  assert.equal(processIsGone(identity, { signal: () => { if (++checked === 2) missing(); }, readStart: unreadable }), true);
+  assert.equal(checked, 2);
+  assert.throws(() => processIsGone(identity, { signal: () => {}, readStart: unreadable }), /identity unavailable/);
+  assert.throws(() => processIsGone(identity, { signal: () => { const error = new Error('denied'); error.code = 'EPERM'; throw error; }, readStart: () => 'original' }), /liveness is unknown/);
+  assert.equal(processIsGone(identity, { signal: () => {}, readStart: () => 'new-process' }), true);
+  assert.equal(processIsGone(identity, { signal: () => {}, readStart: () => 'original' }), false);
+});
 
 function fixture(t) {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'beyond-cli-recovery-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -84,9 +98,20 @@ test('stop submitted before thread.started still stops the exact run after its s
   f.store.requestStop(f.binding,{stateSha256:digest(f.store.read(f.binding)),expectedSessionId:null,reason:'stop immediately',requestId:'stop'});
   const stopFile=path.join(f.store.runDir(run,1),'stop.json'),pending=fs.readFileSync(stopFile);fs.unlinkSync(stopFile);
   const bind=f.store.bindSession.bind(f.store);f.store.bindSession=(r,s)=>{const value=bind(r,s);fs.writeFileSync(stopFile,pending);return value;};
-  const file=path.join(f.root,'late.cjs');fs.writeFileSync(file,`console.log(JSON.stringify({type:'thread.started',thread_id:'late-session'}));process.stdin.resume();setTimeout(()=>process.exit(0),2000);`);
-  const result=await Promise.race([runNativeCli({binding:f.binding,run,profile:{...f.profile,runner:{command:process.execPath,args:[file]}},prompt:'work',store:f.store}),new Promise((_,reject)=>{const timer=setTimeout(()=>reject(new Error('stop race timed out')),6000);timer.unref();})]);
-  assert.equal(result.status,'stopped');
+  // No natural exit: success must be caused by the requested stop, not a timer.
+  const file=path.join(f.root,'late.cjs');fs.writeFileSync(file,`console.log(JSON.stringify({type:'thread.started',thread_id:'late-session'}));process.stdin.resume();setInterval(()=>{},1000);`);
+  let childProof,timer,settled=false;
+  const setChild=f.store.setChildProcess.bind(f.store);f.store.setChildProcess=(r,p)=>{childProof=p;return setChild(r,p);};
+  const execution=runNativeCli({binding:f.binding,run,profile:{...f.profile,runner:{command:process.execPath,args:[file]}},prompt:'work',store:f.store});
+  try {
+    const result=await Promise.race([execution,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('stop race timed out')),16000);timer.unref();})]);
+    settled=true;
+    assert.equal(result.status,'stopped',JSON.stringify(result));
+  } finally {
+    clearTimeout(timer);
+    // Failure cleanup is limited to this fixture's child, verified against PID reuse.
+    if(!settled&&childProof?.pid&&childProof.startedAt&&processStart(childProof.pid)===childProof.startedAt){process.kill(childProof.pid,'SIGTERM');await execution.catch(()=>{});}
+  }
 });
 test('log append failure becomes a stable failed result rather than crashing the manager',async t=>{
   const f=fixture(t),run=f.store.beginRun(f.binding,f.begin);

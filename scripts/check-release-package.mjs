@@ -11,6 +11,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 assert.ok(process.argv[2], 'Pass the extracted release root');
 const release = path.resolve(process.argv[2]);
+const baselineRef = process.argv[3] || 'v3.2.11';
+const releaseVersion = JSON.parse(fs.readFileSync(path.join(release, 'release-manifest.json'), 'utf8')).releaseVersion;
+assert.match(releaseVersion, /^\d+\.\d+\.\d+$/);
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-package-upgrade-'));
 const project = path.join(scratch, 'project');
 const control = path.join(project, 'beyond-control');
@@ -39,7 +42,7 @@ function command(args, script = 'scripts/beyond-control.mjs') {
   return r.stdout;
 }
 
-const baseline = await Zip.loadAsync(execFileSync('git', ['archive', '--format=zip', 'v3.2.10', '模板交付包'], { cwd: root, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }));
+const baseline = await Zip.loadAsync(execFileSync('git', ['archive', '--format=zip', baselineRef, '模板交付包'], { cwd: root, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }));
 for (const [name, entry] of Object.entries(baseline.files)) {
   if (entry.dir) continue;
   assert.ok(name.startsWith('模板交付包/'));
@@ -80,7 +83,7 @@ for (const [name, hash] of Object.entries(protectedBefore)) assert.equal(afterCo
 for (const name of fs.readdirSync(path.join(release, 'beyond-control/skills'))) fs.cpSync(path.join(release, 'beyond-control/skills', name), path.join(skills, name), { recursive: true });
 command(['install-project-entry', '--project-root', project, '--confirm-fusion', 'yes']);
 const integrity = command(['--installed-skills-root', skills, '--project-agents', path.join(project, 'AGENTS.md')], 'scripts/verify-install-integrity.mjs');
-assert.match(integrity, /3\.2\.11/);
+assert.ok(integrity.includes('BEYOND ' + releaseVersion));
 assert.match(fs.readFileSync(path.join(project, 'AGENTS.md'), 'utf8'), /Keep the native business rules/);
 const policy = JSON.parse(command(['worker-policy', '--action', 'resolve-stage', '--project-id', projectId, '--task-kind', 'ordinary-engineering']));
 assert.equal(policy.requiresSelection, true); assert.deepEqual(policy.continuationParameters, {});
@@ -92,4 +95,4 @@ assert.equal(store.snapshot().tasks.paused.status, '已暂停');
 for (const name of Object.keys(upgraded).filter(name => !Object.hasOwn(before, name))) fs.unlinkSync(contained(project, name));
 for (const name of Object.keys(before)) write(contained(project, name), fs.readFileSync(contained(backup, name)));
 assert.deepEqual(snapshot(project), before);
-console.log(JSON.stringify({ passed: true, baseline: 'v3.2.10', release: '3.2.11', productFiles: manifest.files.length, protectedFiles: Object.keys(protectedBefore).length, nativeRulesPreserved: true, tasksUnchanged: true, historicalApprovalNotReinterpreted: true, rollbackBytesEqual: true, scratch, liveProjectWrites: false }, null, 2));
+console.log(JSON.stringify({ passed: true, baseline: baselineRef, release: releaseVersion, productFiles: manifest.files.length, protectedFiles: Object.keys(protectedBefore).length, nativeRulesPreserved: true, tasksUnchanged: true, historicalApprovalNotReinterpreted: true, rollbackBytesEqual: true, scratch, liveProjectWrites: false }, null, 2));

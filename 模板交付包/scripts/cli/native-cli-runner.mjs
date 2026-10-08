@@ -19,7 +19,7 @@ export function cliEnvironment(home) {
 export async function runNativeCli({ binding, run, profile, prompt, store, onTerminal }) {
   const directory = store.runDir(run, run.runNumber), eventsPath = store.checkedPath(path.join(directory, 'events.jsonl'));
   const stderrPath = store.checkedPath(path.join(directory, 'stderr.log')), finalPath = store.checkedPath(path.join(directory, 'final.txt'));
-  const args = [...profile.runner.args, 'exec', ...(run.sessionId ? ['resume', run.sessionId] : []), '--skip-git-repo-check', '--json', '--output-last-message', finalPath, '--model', profile.model, '-'];
+  const args = [...profile.runner.args, 'exec', ...(run.sessionId ? ['resume', run.sessionId] : []), '--skip-git-repo-check', '--json', '--output-last-message', finalPath, '--model', profile.model, '-c', 'approval_policy="never"', '-c', 'sandbox_mode="danger-full-access"', ...(profile.effort ? ['-c', `model_reasoning_effort="${profile.effort}"`] : []), '-'];
   const instruction = [
     'You are a CLI execution session managed by one Desktop owner. Do not send Desktop callbacks or worker-result receipts. Return evidence; the owner decides goal completion.',
     `Goal: ${binding.contract.goal}`, `Boundaries: ${binding.contract.boundaries}`, `Acceptance: ${binding.contract.acceptance}`,

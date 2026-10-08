@@ -104,13 +104,13 @@ export class CliTaskStore {
     if (state.currentResultPath && state.currentResultPath !== path.join(this.runDir(identity, state.runNumber), 'result.json')) throw new Error('CLI result path mismatch');
     return state;
   }
-  beginRun(identity, { requestId, prompt, expectedRunNumber, expectedSessionId, ownerTurnId, faultAt = null }) {
+  beginRun(identity, { requestId, prompt, expectedRunNumber, expectedSessionId, ownerTurnId, profile, configuration, faultAt = null }) {
     validIdentifier(requestId);
     if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('CLI prompt required');
     if (ownerTurnId !== undefined) validIdentifier(ownerTurnId);
     return this.withLock(identity, () => {
       const state = this.read(identity), requestFile = this.checkedPath(path.join(this.taskDir(identity), 'requests', `${requestId}.json`));
-      const fingerprint = digest({ requestId, prompt, expectedRunNumber, expectedSessionId });
+      const fingerprint = digest({ requestId, prompt, expectedRunNumber, expectedSessionId, ...(profile ? { profile } : {}), ...(configuration ? { configuration } : {}) });
       let run;
       if (fs.existsSync(requestFile)) {
         const previous = this.readJson(requestFile);
@@ -126,7 +126,7 @@ export class CliTaskStore {
         if (this.readReview(identity, state.runNumber)?.decision !== 'continue') throw new Error('CLI continuation review required');
       }
       const number = state.runNumber + 1, dir = this.checkedPath(this.runDir(identity, number), { createDirectory: true });
-      run ??= { ...Object.fromEntries(['projectId', 'taskId', 'ownerThreadId'].map(k => [k, identity[k]])), runNumber: number, requestId, sessionId: state.sessionId, ownerTurnId: ownerTurnId ?? state.ownerTurnId, status: 'starting', resultPath: path.join(dir, 'result.json') };
+      run ??= { ...Object.fromEntries(['projectId', 'taskId', 'ownerThreadId'].map(k => [k, identity[k]])), runNumber: number, requestId, sessionId: state.sessionId, ownerTurnId: ownerTurnId ?? state.ownerTurnId, status: 'starting', resultPath: path.join(dir, 'result.json'), ...(profile ? { profile: clone(profile) } : {}) };
       if (run.runNumber !== number || run.sessionId !== state.sessionId) throw new Error('CLI replay intent mismatch');
       const immutable = (file, value) => { if (fs.existsSync(file)) { if (digest(this.readJson(file)) !== digest(value)) throw new Error('CLI run intent conflict'); } else atomicJson(file, value); };
       this.checkedPath(path.dirname(requestFile), { createDirectory: true });
@@ -136,7 +136,7 @@ export class CliTaskStore {
       if (faultAt === 'afterRun') throw new Error('injected fault afterRun');
       immutable(path.join(dir, 'input.json'), { prompt, fingerprint });
       if (faultAt === 'afterInput') throw new Error('injected fault afterInput');
-      atomicJson(this.locator(identity), { ...state, runNumber: number, status: 'starting', ownerTurnId: run.ownerTurnId, currentResultPath: null, managerPid: null, processIdentity: null, updatedAt: now() });
+      atomicJson(this.locator(identity), { ...state, ...(configuration ? { configuration: clone(configuration) } : {}), runNumber: number, status: 'starting', ownerTurnId: run.ownerTurnId, currentResultPath: null, managerPid: null, processIdentity: null, updatedAt: now() });
       return run;
     });
   }
@@ -197,6 +197,8 @@ export class CliTaskStore {
       if (result.sessionId !== undefined && result.sessionId !== state.sessionId) throw new Error('CLI session mismatch');
       for (const key of ['projectId', 'taskId', 'ownerThreadId']) if (result[key] !== undefined && result[key] !== state[key]) throw new Error('CLI result identity mismatch');
       const normalized = { projectId: state.projectId, taskId: state.taskId, ownerThreadId: state.ownerThreadId, runNumber: run.runNumber, sessionId: state.sessionId, status: result.status, exitCode: result.exitCode ?? null, finalText: result.finalText ?? '', eventsPath: path.join(dir, 'events.jsonl'), stderrPath: path.join(dir, 'stderr.log'), error: result.error ?? null, completedAt: validTime(result.completedAt ?? now()) };
+      const runProfile = this.readJson(path.join(dir, 'run.json')).profile;
+      if (runProfile) normalized.configuration = { provider: runProfile.provider ?? 'codex', model: runProfile.model, effort: runProfile.effort ?? (runProfile.mode === 'interactive' && !runProfile.provider ? 'medium' : null) };
       const file = path.join(dir, 'result.json'); this.checkedPath(file);
       if (fs.existsSync(file)) throw new Error('CLI result already stable; stale write rejected');
       atomicJson(file, normalized);

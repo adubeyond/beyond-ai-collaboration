@@ -52,6 +52,8 @@ const expectedCliProductFiles = [
   "scripts/cli/cli-bridge.mjs", "scripts/cli/desktop-host.mjs", "scripts/cli/cli-notify.mjs",
   "scripts/cli/process-identity.mjs",
   "scripts/cli/app-server-rpc.mjs", "scripts/cli/interactive-client.mjs", "scripts/cli/interactive-cli-runner.mjs",
+  "scripts/cli/zcode-profile.mjs", "scripts/cli/zcode-cli-runner.mjs", "scripts/cli/zcode-client.mjs", "scripts/cli/zcode-tui-hook.mjs",
+  "scripts/cli/visible-cli-runner.mjs", "scripts/cli/claude-profile.mjs", "scripts/cli/claude-client.mjs", "scripts/cli/claude-hook.mjs",
   "docs/AI编程协同机制/机制/04-CLI目标协作机制.md",
 ];
 
