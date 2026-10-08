@@ -43,8 +43,8 @@ function fixture(t, schema = 'valid', reply = 'ok', replyDelay = 0, { handoffDel
 }
 const delay = ms => new Promise(r => setTimeout(r, ms));
 const event = (f, type, turn_id) => fs.appendFileSync(f.sourceRecordPath, JSON.stringify({ type: 'event_msg', payload: { type, turn_id } })+'\n');
-async function until(check) {
-  const deadline = Date.now() + 15000;
+async function until(check, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
   while (!check()) { if (Date.now() > deadline) throw new Error('fixture condition timeout'); await delay(20); }
 }
 function actor(t, f, options = {}) {
@@ -121,7 +121,9 @@ test('successful response before persisted turn start does not release owner sen
   await delay(100);
   assert.equal(fs.readFileSync(f.calls, 'utf8').trim().split('\n').length, 1);
   event(f, 'task_started', 'persisted-first-handoff'); event(f, 'task_complete', 'persisted-first-handoff');
-  await until(() => fs.readFileSync(f.calls, 'utf8').trim().split('\n').length === 2);
+  // The queued process may still be verifying its predecessor through a cold
+  // Windows PowerShell lookup. This test checks ordering, not machine speed.
+  await until(() => fs.readFileSync(f.calls, 'utf8').trim().split('\n').length === 2, 60000);
   event(f, 'task_started', 'persisted-second-handoff'); event(f, 'task_complete', 'persisted-second-handoff');
   assert.equal((await first.result).status, 'delivered'); assert.equal((await second.result).status, 'delivered');
 });
@@ -199,6 +201,75 @@ test('manager exit releases a stale owner gate without deleting another owner pr
   const phases = fs.readFileSync(f.trace, 'utf8').trim().split('\n').map(JSON.parse).filter(item => item.pid !== firstMcpPid).map(item => item.phase);
   assert.deepEqual(phases, ['start', 'end', 'start', 'end', 'start', 'end']);
 });
+test('transient lock rename denial after previous directory removal does not lose a notification', async t => {
+  const { createDesktopHost } = await modules(), f = fixture(t); f.end();
+  const original = fs.renameSync; let attempts = 0;
+  const mocked = t.mock.method(fs, 'renameSync', (from, to) => {
+    if (/beyond-cli-send-[a-f0-9]+\.lock$/.test(String(to))) {
+      attempts += 1;
+      if (attempts === 1) { assert.equal(fs.existsSync(to), false); throw Object.assign(new Error('fixture deleted directory handle'), { code: 'EPERM' }); }
+    }
+    return original(from, to);
+  });
+  try {
+    assert.equal((await createDesktopHost(f).send({ ownerThreadId: f.ownerThreadId, prompt: 'once' })).status, 'delivered');
+    assert.equal(attempts, 2);
+    assert.equal(fs.readFileSync(f.calls, 'utf8').trim().split('\n').length, 1);
+  } finally { mocked.mock.restore(); }
+});
+
+test('persistent lock rename denial stops without sending or bypassing permission', async t => {
+  const { createDesktopHost } = await modules(), f = fixture(t); f.end();
+  const original = fs.renameSync; let attempts = 0, prepared;
+  const mocked = t.mock.method(fs, 'renameSync', (from, to) => {
+    if (/beyond-cli-send-[a-f0-9]+\.lock$/.test(String(to))) {
+      attempts += 1; prepared = from;
+      throw Object.assign(new Error('fixture persistent rename denial'), { code: 'EACCES' });
+    }
+    return original(from, to);
+  });
+  try {
+    const result = await createDesktopHost(f).send({ ownerThreadId: f.ownerThreadId, prompt: 'must-not-send' });
+    assert.equal(result.status, 'unavailable'); assert.match(result.error, /persistent rename denial/);
+    assert.equal(attempts, 20); assert.equal(fs.existsSync(f.calls), false); assert.equal(fs.existsSync(prepared), false);
+  } finally { mocked.mock.restore(); }
+});
+
+test('transient proof cleanup denial retries the file but sends the notification only once', async t => {
+  const { createDesktopHost } = await modules(), f = fixture(t); f.end();
+  const original = fs.unlinkSync; let denied = false, attempts = 0;
+  const mocked = t.mock.method(fs, 'unlinkSync', file => {
+    if (/beyond-cli-send-[a-f0-9]+\.lock[\\/][a-f0-9-]+\.json$/.test(String(file))) {
+      attempts += 1;
+      if (!denied) { denied = true; throw Object.assign(new Error('fixture sharing violation'), { code: 'EPERM' }); }
+    }
+    return original(file);
+  });
+  try {
+    assert.equal((await createDesktopHost(f).send({ ownerThreadId: f.ownerThreadId, prompt: 'once' })).status, 'delivered');
+    assert.equal(attempts, 2);
+    assert.equal(fs.readFileSync(f.calls, 'utf8').trim().split('\n').length, 1);
+  } finally { mocked.mock.restore(); }
+});
+
+test('persistent stale-proof permission denial preserves evidence and sends nothing', async t => {
+  const { createDesktopHost } = await modules(), f = fixture(t); f.end();
+  const canonical = process.platform === 'win32' ? fs.realpathSync(f.root).toLowerCase() : fs.realpathSync(f.root);
+  const key = crypto.createHash('sha256').update(JSON.stringify([canonical, f.ownerThreadId])).digest('hex');
+  const lock = path.join(os.tmpdir(), `beyond-cli-send-${key}.lock`), proof = path.join(lock, crypto.randomUUID()+'.json');
+  fs.mkdirSync(lock); fs.writeFileSync(proof, JSON.stringify({ pid: process.pid, startedAt: 'former-process-with-reused-pid' }));
+  const original = fs.unlinkSync; let attempts = 0;
+  const mocked = t.mock.method(fs, 'unlinkSync', file => {
+    if (file === proof) { attempts += 1; throw Object.assign(new Error('fixture persistent denial'), { code: 'EACCES' }); }
+    return original(file);
+  });
+  try {
+    const result = await createDesktopHost(f).send({ ownerThreadId: f.ownerThreadId, prompt: 'must-not-send' });
+    assert.equal(result.status, 'unavailable'); assert.match(result.error, /persistent denial/);
+    assert.equal(attempts, 20); assert.equal(fs.existsSync(proof), true); assert.equal(fs.existsSync(f.calls), false);
+  } finally { mocked.mock.restore(); fs.unlinkSync(proof); fs.rmdirSync(lock); }
+});
+
 test('result first waits for source end; failure without session notifies only once', async t => {
   const { createDesktopHost, notifyWhenReady } = await modules(); const f = fixture(t);
   const host = createDesktopHost(f); assert.equal((await host.checkCapability()).available, true);

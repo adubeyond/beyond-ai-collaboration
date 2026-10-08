@@ -71,6 +71,18 @@ function validMessageTool(tool) {
     && ['threadId', 'prompt'].every(key => schema.required?.includes(key))
     && schema.required.every(key => ['threadId', 'prompt'].includes(key));
 }
+async function unlinkProof(file) {
+  // Windows can briefly keep a read/delete handle during competing stale-owner
+  // recovery. Retry only this exact proof, never the notification or a new owner.
+  for (let attempt = 0; ; attempt += 1) {
+    try { fs.unlinkSync(file); return; }
+    catch (error) {
+      if (error.code === 'ENOENT') return;
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(error.code) || attempt >= 19) throw error;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+}
 // Managers are separate processes. A promise mutex would not protect the Desktop
 // conversation from simultaneous turn/start requests. Only delivery is serialized.
 async function withOwnerSend(home, owner, action) {
@@ -81,12 +93,20 @@ async function withOwnerSend(home, owner, action) {
   fs.mkdirSync(prepared, { mode: 0o700 });
   try { fs.writeFileSync(path.join(prepared, leaf), JSON.stringify(currentProcessIdentity()), { flag: 'wx', mode: 0o600 }); }
   catch (error) { if (fs.existsSync(path.join(prepared, leaf))) fs.unlinkSync(path.join(prepared, leaf)); fs.rmdirSync(prepared); throw error; }
-  let acquired = false, observed, nextProbe = 0;
+  let acquired = false, observed, nextProbe = 0, acquireDenials = 0;
   try {
     while (!acquired) {
       try { fs.renameSync(prepared, lock); acquired = true; }
       catch (error) {
-        if (!['EEXIST', 'ENOTEMPTY', 'EPERM', 'EACCES'].includes(error.code) || !fs.existsSync(lock)) throw error;
+        if (!['EEXIST', 'ENOTEMPTY', 'EPERM', 'EACCES', 'EBUSY'].includes(error.code)) throw error;
+        if (!fs.existsSync(lock)) {
+          // The previous owner can remove the directory between rename failing
+          // and this check. Windows may retain its delete handle a little longer.
+          if (['EPERM', 'EACCES', 'EBUSY'].includes(error.code) && acquireDenials++ >= 19) throw error;
+          await new Promise(resolve => setTimeout(resolve, 50));
+          continue;
+        }
+        acquireDenials = 0;
         let entries;
         try {
           if (fs.lstatSync(lock).isSymbolicLink()) throw new Error('Desktop send gate linked path rejected');
@@ -109,7 +129,7 @@ async function withOwnerSend(home, owner, action) {
             if (gone) {
               // Delete only this owner's unique filename, then only an empty dir.
               // A competing recovery cannot remove a replacement owner's proof.
-              fs.unlinkSync(path.join(lock, observed));
+              await unlinkProof(path.join(lock, observed));
               try { fs.rmdirSync(lock); } catch (e) { if (!['ENOENT', 'ENOTEMPTY', 'EEXIST', 'EPERM'].includes(e.code)) throw e; }
               continue;
             }
@@ -121,7 +141,7 @@ async function withOwnerSend(home, owner, action) {
     return await action(`${lock}.handoff.json`);
   } finally {
     const owned = acquired ? lock : prepared;
-    fs.unlinkSync(path.join(owned, leaf));
+    await unlinkProof(path.join(owned, leaf));
     try { fs.rmdirSync(owned); } catch (error) { if (!acquired || !['ENOENT', 'ENOTEMPTY', 'EEXIST', 'EPERM'].includes(error.code)) throw error; }
   }
 }
@@ -245,7 +265,7 @@ export function createDesktopHost({ env = process.env, pluginRoot, sourceRecordP
             // A timed-out or dead sender may already have submitted a turn. Its
             // successor must not issue another turn/start against the old view.
             await waitForSourceAdvance(validIdentifier(proof.afterTurnId));
-            fs.unlinkSync(handoffPath);
+            await unlinkProof(handoffPath);
           }
           async function waitForCurrentEnd() {
             for (;;) {
@@ -267,7 +287,7 @@ export function createDesktopHost({ env = process.env, pluginRoot, sourceRecordP
             const reply = await request('tools/call', { name: 'send_message_to_thread', arguments: { threadId: owner, prompt }, _meta: { 'x-codex-turn-metadata': { thread_id: owner } } });
             if (!reply.isError) {
               await waitForSourceAdvance(afterTurnId);
-              fs.unlinkSync(handoffPath);
+              await unlinkProof(handoffPath);
             }
             return reply;
           });
