@@ -83,6 +83,20 @@ runtime从受管结果及核验读取正式证据和验收结论；一次事务�
 
 老板明确关闭整个CLI任务时，仍用原`workbench.close`；input带`projectId / taskId / ownerThreadId / operationId / expectedStatus / businessState=已关闭 / ownerDirective=explicit-owner-instruction / closedBy / closedAt / closureReason / taskLocator / authorizationLocator / stateSha256`。必须有稳定退出状态，无未结束的CLI进程；未启动的登记用`stateSha256=not-started`。关闭不是完成，不删业务现场、不生成或消费Worker pending。用户换目标不自动改写旧任务或让旧结果验收新目标。
 
+## 负责人移交
+
+用户明确要求把直接登记的 CLI 任务交给另一位 PM 时，用同一入口的 `cli.transfer`；不另建任务、不重开会话、不改变默认 Worker 唯一执行者规则。仅移交已结束且稳定保存结果的正式 CLI 任务；正在执行的轮次、未知退出状态和属于原 Worker 的辅助 CLI 不强行接管。空闲原生窗口由入口正常 detach，确认保存的进程均已退出后再变更负责人。
+
+```json
+{"schemaVersion":1,"requestId":"handoff-cli-goals","action":"cli.transfer","input":{"projectId":"<项目>","fromOwnerThreadId":"<原负责人>","toOwnerThreadId":"<新负责人>","authorizationLocator":"<老板明确移交指令入口>","expectedWorkbenchStateRevision":1,"tasks":[{"taskId":"<任务>","expectedStatus":"进行中","expectedStateSha256":"<task.json解析对象的SHA256>","expectedRunNumber":1,"expectedSessionId":"<保存的会话>","expectedResultSha256":"<result.json文件SHA256>"}]}}
+```
+
+由原负责人或接手人调用，先核对真实项目、任务与原负责人；不根据项目名称猜归属。每个任务保存移交前像与过程记录，工作台统一更新负责人，状态仍是原来的进行中或已暂停。中断时重放同一请求继续；移交尚未完成的任务不续跑或收口，不影响无关任务推进。
+
+历史运行、回答、复核和通知不改写。新负责人先读原目标、项目事实与已有结果，独立复核缺口，再在同一 sessionId 续做或按已有业务标准验收；不继承前任的验收结论。新轮通知新负责人，旧结果不重复通知。移交不是完成、验收或新的业务授权。
+
+项目自己的验收条件写在已有项目文档、任务 contract 和业务测试中，通过 factEntries 引用。通用 runtime 只核对身份、稳定结果、负责人复核与事务一致性，不硬编码某个项目、站点、日期窗口或业务字段。升级保留历史自定义字段和证据，但不把旧字段继续作为通用流程门槛；取消或关闭任务也不等于业务修复成功。
+
 ## 支持边界
 
 Codex交互模式通过官方app-server连接原生TUI，连接仅绑定127.0.0.1，使用每次辅助进程生成的本地认证token；token不放命令行、结果或发布包。远程WebSocket接口仍是官方实验特性，本产品只将它作为经过版本能力检查的本机可选分支，不宣称上游保证生产可用。协议依据：[OpenAI官方app-server说明](https://learn.chatgpt.com/docs/app-server)。

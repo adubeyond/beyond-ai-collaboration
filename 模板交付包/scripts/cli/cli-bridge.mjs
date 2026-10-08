@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { CliTaskStore, atomicJson, digest, validIdentifier } from './cli-task-store.mjs';
+import { CliTaskStore, atomicJson, digest, sha256File, validIdentifier } from './cli-task-store.mjs';
 import { runNativeCli, processStart } from './native-cli-runner.mjs';
 import { currentProcessIdentity, processIsGone } from './process-identity.mjs';
 import { ProjectIdentityProvider } from '../runtime/project-identity-provider.mjs';
@@ -16,6 +16,7 @@ import { runZcodeCli } from './zcode-cli-runner.mjs';
 import { readClaudeProfile, checkClaudeCapability } from './claude-profile.mjs';
 import { runVisibleCli } from './visible-cli-runner.mjs';
 import { openClaudeWindow } from './claude-client.mjs';
+import { WorkbenchTransactionStore } from '../runtime/workbench-transaction.mjs';
 
 function checkNativeCapability(profile) {
   return (profile.provider === 'claude' ? checkClaudeCapability : profile.provider === 'zcode' ? checkZcodeCapability : checkInteractiveCapability)(profile);
@@ -73,6 +74,88 @@ function validateBinding(binding, context, store) {
     }
   }
 }
+
+async function detachForTransfer(store, identity) {
+  const savedFile = store.checkedPath(path.join(store.taskDir(identity), 'interactive.json'));
+  // A crash may have changed the closed endpoint's owner before task.json. The
+  // transfer record validates that partial state; never reopen it just to detach.
+  if (fs.existsSync(savedFile) && store.readJson(savedFile).status === 'closed') return;
+  const endpoint = readInteractiveEndpoint(store, identity);
+  if (!endpoint) return;
+  if (endpoint.status !== 'idle' || endpoint.activeTurnId) throw new Error('CLI transfer cannot detach active business');
+  const result = await callInteractive(store, identity, 'detach');
+  if (result?.status === 'detach-after-turn') throw new Error('CLI became active; transfer stopped without changing ownership');
+  const file = store.checkedPath(path.join(store.taskDir(identity), 'interactive.json'));
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const saved = store.readJson(file);
+    if (saved.status === 'closed' && processIsGone(saved.manager) && processIsGone(saved.server)) return;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw new Error('CLI idle helper exit unconfirmed; ownership was not changed');
+}
+async function transferOwners(request, context, store) {
+  const input = request.input, operationId = validIdentifier(`cli-transfer-${request.requestId}`);
+  for (const key of ['projectId', 'fromOwnerThreadId', 'toOwnerThreadId']) validIdentifier(input[key]);
+  if (input.fromOwnerThreadId === input.toOwnerThreadId || ![input.fromOwnerThreadId, input.toOwnerThreadId].includes(context.ownerThreadId)) throw new Error('CLI transfer caller identity mismatch');
+  if (typeof input.authorizationLocator !== 'string' || !input.authorizationLocator.trim()) throw new Error('CLI transfer authorization required');
+  if (!Number.isSafeInteger(input.expectedWorkbenchStateRevision) || input.expectedWorkbenchStateRevision < 0) throw new Error('CLI transfer workbench basis required');
+  if (!Array.isArray(input.tasks) || !input.tasks.length || new Set(input.tasks.map(item => item?.taskId)).size !== input.tasks.length) throw new Error('CLI transfer unique task set required');
+  const provider = new ProjectIdentityProvider({ controlRoot: context.controlRoot, runtimeRoot: path.join(context.controlRoot, 'local/runtime/project-identity') });
+  const canonical = provider.validateSameRootProject(input.projectId, { executionRoot: context.executionRoot });
+  const workbench = new WorkbenchTransactionStore({ runtimeRoot: path.join(context.controlRoot, 'local/runtime/workbench'), viewPath: path.join(context.controlRoot, 'local/当前工作台.md'), historyRoot: path.join(context.controlRoot, 'local/history/workbench') });
+  const snapshot = workbench.snapshot();
+  const prepared = input.tasks.map(item => {
+    validIdentifier(item.taskId); validIdentifier(item.expectedSessionId);
+    if (!Number.isSafeInteger(item.expectedRunNumber) || item.expectedRunNumber < 1 || ['expectedStateSha256', 'expectedResultSha256'].some(key => !/^[a-f0-9]{64}$/.test(item[key] ?? ''))) throw new Error('CLI transfer exact task fingerprint required');
+    const original = { projectId: input.projectId, taskId: item.taskId, ownerThreadId: input.fromOwnerThreadId };
+    const file = store.checkedPath(path.join(store.transferDirectory(original, operationId), 'transfer.json'));
+    const record = fs.existsSync(file) ? store.readJson(file) : null;
+    const intent = { operationId, projectId: input.projectId, fromOwnerThreadId: input.fromOwnerThreadId, toOwnerThreadId: input.toOwnerThreadId, authorizationLocator: input.authorizationLocator, taskId: item.taskId, expectedStateSha256: item.expectedStateSha256, expectedResultSha256: item.expectedResultSha256, expectedRunNumber: item.expectedRunNumber, expectedSessionId: item.expectedSessionId };
+    if (record && Object.entries(intent).some(([key, value]) => record[key] !== value)) throw new Error('CLI transfer request conflict');
+    const task = snapshot.tasks[item.taskId];
+    const expectedStatus = item.expectedStatus ?? record?.expectedWorkbenchStatus ?? task?.status;
+    if (!['进行中', '已暂停'].includes(expectedStatus)) throw new Error('CLI transfer requires an active workbench task');
+    // A completed replay returns the saved transaction, even after the successor resumed or archived it.
+    if (record?.phase === 'completed' && snapshot.operations?.[operationId]) return { intent, record, expectedStatus };
+    const state = store.readJson(store.locator(original));
+    if (![input.fromOwnerThreadId, input.toOwnerThreadId].includes(state.ownerThreadId)) throw new Error('CLI transfer source owner mismatch');
+    if (!task || task.projectId !== input.projectId || task.status !== expectedStatus || task.execution?.kind !== 'cli'
+      || ![input.fromOwnerThreadId, input.toOwnerThreadId].includes(task.execution.ownerThreadId) || path.resolve(task.execution.stateLocator) !== store.locator(original)) throw new Error('CLI transfer workbench task changed');
+    if (path.resolve(state.executionRoot) !== path.resolve(canonical.canonicalProjectRoot)) {
+      if (!state.projectRoute) throw new Error('CLI cross-root transfer requires projectRoute');
+      provider.validateWorkerRoute(input.projectId, state.projectRoute, { executionRoot: state.executionRoot });
+    }
+    if (state.ownerThreadId === input.toOwnerThreadId) {
+      if (!record) throw new Error('CLI transfer evidence missing');
+      store.verifyTransferredTransfer(intent);
+    } else {
+      const result = store.readResult(original, state.runNumber);
+      if (digest(state) !== intent.expectedStateSha256 || state.taskMode !== 'formal' || state.status !== 'completed' || state.managerPid || state.processIdentity || result.status !== 'completed'
+        || state.runNumber !== intent.expectedRunNumber || state.sessionId !== intent.expectedSessionId || sha256File(state.currentResultPath) !== intent.expectedResultSha256) throw new Error('CLI transfer stable result or fingerprint mismatch');
+      if (['accept', 'close'].includes(store.readReview(original, state.runNumber)?.decision)) throw new Error('CLI terminal review must close before transfer');
+    }
+    if (record?.expectedWorkbenchTaskSha256 && task.execution.ownerThreadId === input.fromOwnerThreadId && digest(task) !== record.expectedWorkbenchTaskSha256) throw new Error('CLI transfer workbench task changed');
+    return { intent: { ...intent, expectedWorkbenchTaskSha256: record?.expectedWorkbenchTaskSha256 ?? digest(task), expectedWorkbenchStatus: expectedStatus }, record, state, original, expectedStatus };
+  });
+  const benchInput = { operationId, projectId: input.projectId, fromOwnerThreadId: input.fromOwnerThreadId, toOwnerThreadId: input.toOwnerThreadId, expectedStateRevision: input.expectedWorkbenchStateRevision, tasks: prepared.map(item => ({ taskId: item.intent.taskId, expectedStatus: item.expectedStatus })) };
+  const prior = snapshot.operations?.[operationId];
+  if (prior && prior.inputDigest !== digest(benchInput)) throw new Error('CLI transfer operation id reused with different input');
+  if (!prior && !prepared.some(item => item.record) && snapshot.revision !== input.expectedWorkbenchStateRevision) throw new Error('CLI transfer workbench revision mismatch');
+  if (prior && prepared.every(item => item.record?.phase === 'completed')) return { operationId, workbenchResult: prior.output, tasks: prepared.map(item => ({ taskId: item.intent.taskId, phase: 'completed' })) };
+  // Validate the entire set before detaching any idle helper or changing ownership.
+  for (const item of prepared) if (item.state?.ownerThreadId === input.fromOwnerThreadId) await detachForTransfer(store, item.original);
+  for (const item of prepared) if (item.state?.ownerThreadId === input.fromOwnerThreadId) store.validateTransferCandidate(item.intent);
+  for (const item of prepared) store.beginTransfer({ ownerThreadId: context.ownerThreadId }, item.intent);
+  for (const item of prepared) store.applyTransfer(item.intent);
+  const result = prior ? prior.output : workbench.transferCliOwners(benchInput);
+  const workbenchStateSha256 = sha256File(workbench.stateFile);
+  const tasks = prepared.map(item => {
+    const record = store.completeTransfer(item.intent, { workbenchStateSha256 });
+    return { taskId: item.intent.taskId, phase: record.phase, sessionId: record.expectedSessionId, preimageDirectory: store.transferDirectory({ ...item.intent, ownerThreadId: input.toOwnerThreadId }, operationId) };
+  });
+  return { operationId, workbenchResult: result, tasks };
+}
+
 async function startManager(store, binding, run, profile, prompt, context) {
   const state = store.read(binding);
   if (state.status !== 'starting' || state.runNumber !== run.runNumber || state.managerPid || fs.existsSync(run.resultPath)) return { ...run, status: state.status };
@@ -103,6 +186,7 @@ export async function launchCliRequest(request, context) {
   if (request.schemaVersion !== 1 || !request.action?.startsWith('cli.')) throw new Error('invalid CLI request schema');
   validIdentifier(request.requestId);
   const input = request.input, store = new CliTaskStore({ controlRoot: context.controlRoot });
+  if (request.action === 'cli.transfer') return transferOwners(request, context, store);
   if (input.ownerThreadId !== context.ownerThreadId) throw new Error('CLI owner identity mismatch');
   if (request.action === 'cli.start') {
     const { prompt, configuration = {}, ...supplied } = input;

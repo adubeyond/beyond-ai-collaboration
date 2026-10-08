@@ -402,6 +402,63 @@ export class WorkbenchTransactionStore {
     });
   }
 
+  transferCliOwners(input) {
+    this.#assertWritable();
+    return this.#withLock(() => {
+      if (!validId(input.operationId) || !validId(input.projectId) || !validId(input.fromOwnerThreadId) || !validId(input.toOwnerThreadId)
+        || input.fromOwnerThreadId === input.toOwnerThreadId || !Number.isSafeInteger(input.expectedStateRevision)) {
+        throw new Error('invalid CLI owner transfer');
+      }
+      const tasks = Array.isArray(input.tasks) ? input.tasks : [];
+      if (!tasks.length || new Set(tasks.map(item => item?.taskId)).size !== tasks.length
+        || tasks.some(item => !validId(item.taskId) || !['进行中', '已暂停'].includes(item.expectedStatus))) {
+        throw new Error('invalid CLI owner transfer task set');
+      }
+      const state = this.#readState();
+      const inputDigest = digest(input);
+      const prior = state.operations[input.operationId];
+      if (prior) {
+        if (prior.inputDigest !== inputDigest) throw new Error('operation id reused with different input');
+        return clone(prior.output);
+      }
+      // The bridge checks the initial revision. Recovery validates each saved task preimage,
+      // so an unrelated task's progress cannot strand an authorized owner transfer.
+      const store = new CliTaskStore({ controlRoot: path.resolve(this.runtimeRoot, '../../..') });
+      const updatedTasks = tasks.map(item => {
+        const task = state.tasks[item.taskId];
+        if (!task || task.execution?.kind !== 'cli' || task.execution.ownerThreadId !== input.fromOwnerThreadId
+          || task.projectId !== input.projectId || task.status !== item.expectedStatus) {
+          throw new Error('CLI owner transfer task changed');
+        }
+        const identity = { projectId: input.projectId, taskId: item.taskId, ownerThreadId: input.toOwnerThreadId };
+        const cliState = store.read(identity);
+        if (cliState.ownerThreadId !== input.toOwnerThreadId || cliState.transferOperationId !== input.operationId) {
+          throw new Error('CLI owner transfer state is incomplete');
+        }
+        const transfer = store.readJson(path.join(store.transferDirectory({ ...identity, ownerThreadId: input.fromOwnerThreadId }, input.operationId), 'transfer.json'));
+        if (transfer.expectedWorkbenchTaskSha256 && digest(task) !== transfer.expectedWorkbenchTaskSha256) throw new Error('CLI owner transfer task changed');
+        if (path.resolve(task.execution.stateLocator) !== store.locator(identity)) throw new Error('CLI owner transfer locator mismatch');
+        if (!['task-transferred', 'completed'].includes(transfer.phase) || transfer.currentOwnerThreadId !== input.toOwnerThreadId) {
+          throw new Error('CLI owner transfer evidence is incomplete');
+        }
+        store.verifyTransferredTransfer({
+          projectId: input.projectId, taskId: item.taskId, fromOwnerThreadId: input.fromOwnerThreadId, toOwnerThreadId: input.toOwnerThreadId,
+          operationId: input.operationId, expectedStateSha256: transfer.expectedStateSha256, expectedSessionId: transfer.expectedSessionId,
+          expectedRunNumber: transfer.expectedRunNumber, expectedResultSha256: transfer.expectedResultSha256,
+          authorizationLocator: transfer.authorizationLocator,
+        });
+        return [item.taskId, { ...task, execution: { ...task.execution, ownerThreadId: input.toOwnerThreadId } }];
+      });
+      state.revision += 1;
+      for (const [taskId, task] of updatedTasks) state.tasks[taskId] = task;
+      const output = { operationId: input.operationId, projectId: input.projectId, fromOwnerThreadId: input.fromOwnerThreadId, toOwnerThreadId: input.toOwnerThreadId, taskCount: tasks.length, stateRevision: state.revision };
+      this.#rememberOperation(state, input.operationId, inputDigest, output);
+      this.#commitState(state);
+      this.#ensureView(state);
+      return clone(output);
+    });
+  }
+
   updateProjectSnapshot(input) {
     this.#assertWritable();
     return this.#withLock(() => {
@@ -453,6 +510,7 @@ export class WorkbenchTransactionStore {
     this.#assertWritable();
     const cli = new CliTaskStore({ controlRoot: path.resolve(this.runtimeRoot, '../../..') });
     const state = cli.read(input), result = cli.readResult(input, input.runNumber);
+    cli.assertTransferSettled(input);
     if (state.runNumber !== input.runNumber || sha256File(state.currentResultPath) !== input.resultSha256) throw new Error('CLI current result fingerprint mismatch');
     const review = cli.readReview(input, input.runNumber);
     if (review?.decision !== 'accept' || review.resultSha256 !== input.resultSha256 || review.ownerThreadId !== input.ownerThreadId) throw new Error('CLI owner acceptance review required');
@@ -637,6 +695,7 @@ export class WorkbenchTransactionStore {
         if (input.closedBy !== task.execution.ownerThreadId) throw new Error('CLI closure owner identity mismatch');
         const store = new CliTaskStore({ controlRoot: path.resolve(this.runtimeRoot, '../../..') });
         if (fs.existsSync(store.locator(input))) {
+          store.assertTransferSettled(input);
           const state = store.read(input);
           if (digest(state) !== input.stateSha256) throw new Error('CLI closure state fingerprint mismatch');
           if (state.managerPid || ['running'].includes(state.status) || (state.status === 'starting' && state.runNumber > 0)) throw new Error('CLI process not confirmed stopped');
