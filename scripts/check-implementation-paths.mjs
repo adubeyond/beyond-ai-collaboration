@@ -565,6 +565,9 @@ requireText("只问一个改变结果的问题", agents, "才问一个关键问�
 requireText("根入口禁止无主文件和文档", agents, "没有明确消费者、长期用途、唯一入口和回收方式时");
 requireText("工作区顶层禁止任务产物扩散", agents, "不在工作区根目录或正式项目父目录随手建立测试项目、临时clone、候选、备份、证据或安装验证目录");
 requireText("短期现场进入系统临时目录", agents, "短期现场使用操作系统临时目录并在任务结束时清理");
+requireText("清理拒绝保留真实残留", agents, "清理被权限或策略拒绝时如实保留残留，不声称已清理");
+requireText("清理失败只在真实验收或安全影响时阻断", agents, "只有残留影响当前验收或安全，或清理本身就是老板要求的交付目标时，才阻断对应步骤");
+requireText("无关清理失败不阻断业务", agents, "否则继续未受影响的业务工作");
 requireText("正式产物回到现有所有者", agents, "需要保留的成果进入当前项目已有正式位置或已登记的统一产物入口");
 requireText("文档入口拒绝过程材料自动建档", documentEntry, "不会因为名称正式就自动成为项目文档");
 forbidText("根入口不复制Worker回源工具", agents, "send_message_to_thread");
@@ -610,6 +613,11 @@ requireText("局部开发不并读测试方法", dev, "清晰局部改动可以�
 requireText("真实测试专业问题才切方法", dev, "需要测试专业判断、复杂覆盖、跨层联调或明确独立性时");
 requireText("局部开发附带现有测试不触发测试方法", test.split("---")[1], "清晰局部开发附带验证留在task-dev");
 requireText("标准调用失败只试一次定点等价路径", agents, "至多做一次不改变结果与风险的定点等价尝试");
+requireText("等价尝试只适用普通入口失败", agents, "标准工具或依赖入口因缺失、调用错误或普通运行失败而不可用时");
+requireText("权限与策略拒绝不冒充普通失败", agents, "明确的权限或策略拒绝不属于普通调用失败");
+requireText("策略拒绝不换入口绕过", agents, "不得换shell、工具或脚本绕过");
+requireText("拒绝归因不超过证据", agents, "保留原始拒绝，归因只到已有证据支持的层级");
+requireText("策略拒绝不虚构具体原因", agents, "不把`blocked by policy`自动解释为用户未授权、Windows权限失败或自动审批拒绝");
 requireText("标准调用失败不遍历替代资源", agents, "不遍历全机、缓存、其他安装器、模型工具或网络搜索");
 requireText("简单单路径不启助手", worker, "简单、连续、单路径任务由Worker直接完成");
 requireText("旧长任务包先收敛业务契约", worker, "旧任务包或上游说明过长时，先收敛为上述六个问题再执行");
@@ -699,11 +707,11 @@ requireText("00入口读取项目身份与路由", documentEntry, "确认当前�
 requireText("00入口读取全部当前主事实", documentEntry, "登记的全部当前主事实正文");
 requireText("初始化不进入普通任务热路径", agents, "不进入普通任务热路径");
 requireText("升级先核对当前直接事实", agents, "初始化优先复用现有`AGENTS.md`、代码、Git和Markdown事实");
-requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.2.11");
+requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.2.12");
 requireText("项目覆盖有专用边界", agents, "BEGIN BEYOND PROJECT OVERRIDES");
 requireText("安装逐文件对账六个Skill", installVerifier, "安装Skill内容不一致");
 requireText("安装核对项目完整运行内核", installVerifier, "项目入口的BEYOND运行内核与控制仓候选不一致");
-requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.2.11"');
+requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.2.12"');
 requireText("个人路径不读取团队共享区", agents, "普通项目接手、正式Worker任务、Action Skill切换和个人任务不读取共享区");
 requireText("团队协同不替代正式Worker", agents, "不替代当前成员自己的正式Worker");
 requireText("PM初始化与协同权限严格限域", pmDispatch, "两者都不扩张到业务源码、测试、仓库配置、成员权限、环境、数据或发布");

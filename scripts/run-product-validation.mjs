@@ -22,7 +22,7 @@ if(sourceGit("rev-parse","HEAD")!==sourceHead || sourceGit("status","--porcelain
 const sourceSnapshotSha256=createHash("sha256").update(JSON.stringify(capturedFiles)).digest("hex");
 execFileSync("git",["init","--quiet"],{cwd:candidate,windowsHide:true});
 const runtime=["check-m3-project-identity","check-project-runtime-routing","check-worker-result-receipts","check-receipt-write-concurrency","check-receipt-list-concurrency","check-accept-receipt-cache-expiry","check-m3-workbench-transaction","check-workbench-upgrade-migration","check-native-worker-return",
-"check-cli-task-store","check-cli-launcher","check-cli-notification","check-cli-workbench","check-cli-routing","check-cli-recovery","check-cli-goal-loop","check-cli-interactive"].map(n=>"scripts/"+n+".mjs");
+"check-cli-task-store","check-cli-launcher","check-cli-notification","check-cli-workbench","check-cli-routing","check-cli-recovery","check-cli-goal-loop","check-cli-interactive","check-cli-zcode","check-cli-claude","check-cli-transfer"].map(n=>"scripts/"+n+".mjs");
 const commands=[
   {name:"runtime-and-cli",args:["--test","--test-concurrency=4",...runtime]},
   {name:"progress-decision-fixtures",args:["scripts/probe-pm-progress-decisions.mjs","--check-fixtures"]},

@@ -199,7 +199,12 @@ function validateText(path, text) {
     errors.push(`尾随空白：${rel}`);
   }
   for (const [label, pattern] of sensitivePatterns) {
-    if (pattern.test(text)) {
+    // A pinned upstream compatibility fingerprint is product data, not a run receipt.
+    // Exempt only this exact declaration; all other hashes in the file remain checked.
+    const checkedText = label === "疑似动态 SHA-256" && rel === "模板交付包/scripts/cli/zcode-profile.mjs"
+      ? text.replace(/^const TUI_SHA256 = '[0-9a-f]{64}';$/m, "const TUI_SHA256 = '<upstream-content-pin>';")
+      : text;
+    if (pattern.test(checkedText)) {
       errors.push(`${label}：${rel}`);
     }
   }

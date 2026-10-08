@@ -1,9 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { validIdentifier } from './cli-task-store.mjs';
 import { redact } from './native-cli-runner.mjs';
+import { currentProcessIdentity, processIsGone } from './process-identity.mjs';
 
 const tailLimit = 16 * 1024 * 1024;
 export function desktopHome(env = process.env) {
@@ -68,11 +71,106 @@ function validMessageTool(tool) {
     && ['threadId', 'prompt'].every(key => schema.required?.includes(key))
     && schema.required.every(key => ['threadId', 'prompt'].includes(key));
 }
-export function createDesktopHost({ env = process.env, pluginRoot, sourceRecordPath, requestTimeoutMs = 20000 } = {}) {
+async function unlinkProof(file) {
+  // Windows can briefly keep a read/delete handle during competing stale-owner
+  // recovery. Retry only this exact proof, never the notification or a new owner.
+  for (let attempt = 0; ; attempt += 1) {
+    try { fs.unlinkSync(file); return; }
+    catch (error) {
+      if (error.code === 'ENOENT') return;
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(error.code) || attempt >= 19) throw error;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+}
+// Managers are separate processes. A promise mutex would not protect the Desktop
+// conversation from simultaneous turn/start requests. Only delivery is serialized.
+async function withOwnerSend(home, owner, action) {
+  const canonical = fs.realpathSync(home);
+  const key = crypto.createHash('sha256').update(JSON.stringify([process.platform === 'win32' ? canonical.toLowerCase() : canonical, owner])).digest('hex');
+  const lock = path.join(os.tmpdir(), `beyond-cli-send-${key}.lock`);
+  const token = crypto.randomUUID(), leaf = `${token}.json`, prepared = `${lock}.${token}`;
+  fs.mkdirSync(prepared, { mode: 0o700 });
+  try { fs.writeFileSync(path.join(prepared, leaf), JSON.stringify(currentProcessIdentity()), { flag: 'wx', mode: 0o600 }); }
+  catch (error) { if (fs.existsSync(path.join(prepared, leaf))) fs.unlinkSync(path.join(prepared, leaf)); fs.rmdirSync(prepared); throw error; }
+  let acquired = false, observed, nextProbe = 0, acquireDenials = 0;
+  try {
+    while (!acquired) {
+      try { fs.renameSync(prepared, lock); acquired = true; }
+      catch (error) {
+        if (!['EEXIST', 'ENOTEMPTY', 'EPERM', 'EACCES', 'EBUSY'].includes(error.code)) throw error;
+        if (!fs.existsSync(lock)) {
+          // The previous owner can remove the directory between rename failing
+          // and this check. Windows may retain its delete handle a little longer.
+          if (['EPERM', 'EACCES', 'EBUSY'].includes(error.code) && acquireDenials++ >= 19) throw error;
+          await new Promise(resolve => setTimeout(resolve, 50));
+          continue;
+        }
+        acquireDenials = 0;
+        let entries;
+        try {
+          if (fs.lstatSync(lock).isSymbolicLink()) throw new Error('Desktop send gate linked path rejected');
+          entries = fs.readdirSync(lock);
+        } catch (e) { if (e.code === 'ENOENT') continue; throw e; }
+        if (entries.length > 1 || (entries[0] && !/^[0-9a-f-]{36}\.json$/.test(entries[0]))) throw new Error('Desktop send gate ownership unverified');
+        if (!entries.length) {
+          try { fs.rmdirSync(lock); } catch (e) { if (!['ENOENT', 'ENOTEMPTY', 'EEXIST', 'EPERM'].includes(e.code)) throw e; await new Promise(resolve => setTimeout(resolve, 100)); }
+          continue;
+        }
+        if (entries[0] && (observed !== entries[0] || Date.now() >= nextProbe)) {
+          observed = entries[0]; nextProbe = Date.now() + 5000;
+          try {
+            if (!fs.lstatSync(path.join(lock, observed)).isFile() || fs.lstatSync(path.join(lock, observed)).isSymbolicLink()) throw new Error('Desktop send gate process proof rejected');
+            const proof = JSON.parse(fs.readFileSync(path.join(lock, observed), 'utf8'));
+            // The owner can exit during the platform's start-time query. Recheck
+            // liveness rather than turn that ordinary release into a send failure.
+            let gone;
+            try { gone = processIsGone(proof); } catch { gone = processIsGone(proof); }
+            if (gone) {
+              // Delete only this owner's unique filename, then only an empty dir.
+              // A competing recovery cannot remove a replacement owner's proof.
+              await unlinkProof(path.join(lock, observed));
+              try { fs.rmdirSync(lock); } catch (e) { if (!['ENOENT', 'ENOTEMPTY', 'EEXIST', 'EPERM'].includes(e.code)) throw e; }
+              continue;
+            }
+          } catch (e) { if (e.code !== 'ENOENT') throw e; }
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+    return await action(`${lock}.handoff.json`);
+  } finally {
+    const owned = acquired ? lock : prepared;
+    await unlinkProof(path.join(owned, leaf));
+    try { fs.rmdirSync(owned); } catch (error) { if (!acquired || !['ENOENT', 'ENOTEMPTY', 'EEXIST', 'EPERM'].includes(error.code)) throw error; }
+  }
+}
+export function createDesktopHost({ env = process.env, pluginRoot, sourceRecordPath, requestTimeoutMs, messageTimeoutMs, handoffTimeoutMs = 60000 } = {}) {
   const environment = { ...env }, owner = validIdentifier(environment.CODEX_THREAD_ID);
   const home = desktopHome(environment);
   const source = sourceRecordPath || findSource(environment);
   const plugins = pluginRoot || path.join(home, 'plugins/cache/openai-bundled');
+  function waitForSourceAdvance(afterTurnId) {
+    return new Promise((resolve, reject) => {
+      let watcher, timer, settled = false;
+      function close(error) {
+        if (settled) return;
+        settled = true; watcher?.close(); clearTimeout(timer);
+        error ? reject(error) : resolve();
+      }
+      function check() {
+        try { if (sourceFacts(source, owner).ownerTurnId !== afterTurnId) close(); }
+        catch (error) { close(error); }
+      }
+      try {
+        // A successful MCP response can precede the new turn's persisted start.
+        // Keep this owner's send slot until that handoff is actually observable.
+        watcher = fs.watch(path.dirname(source), (_event, file) => { if (!file || String(file) === path.basename(source)) check(); });
+        timer = setTimeout(() => close(new Error('Desktop notification handoff unverified; delivery unknown')), handoffTimeoutMs);
+        check();
+      } catch (error) { close(error); }
+    });
+  }
   async function withMcp(callback) {
     if (!environment.CODEX_APP_TOOLS_PIPE_PATH) throw new Error('Desktop inherited message transport unavailable');
     const entry = discoverPlugin(plugins);
@@ -90,7 +188,9 @@ export function createDesktopHost({ env = process.env, pluginRoot, sourceRecordP
     });
     child.stderr.resume(); child.stdin.on('error', rejectAll);
     const request = (method, params) => new Promise((resolve, reject) => {
-      const id = next++, timer = setTimeout(() => { pending.delete(id); reject(new Error('Desktop message timeout; delivery unknown')); }, requestTimeoutMs);
+      // Native steering can take 30s to reject. Do not abandon its observer at 20s.
+      const timeout = method === 'tools/call' ? (messageTimeoutMs ?? requestTimeoutMs ?? 60000) : (requestTimeoutMs ?? 20000);
+      const id = next++, timer = setTimeout(() => { pending.delete(id); reject(new Error('Desktop message timeout; delivery unknown')); }, timeout);
       pending.set(id, { resolve: v => { clearTimeout(timer); resolve(v); }, reject: e => { clearTimeout(timer); reject(e); } });
       child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
     });
@@ -100,8 +200,8 @@ export function createDesktopHost({ env = process.env, pluginRoot, sourceRecordP
       return await callback(request);
     } finally { rejectAll(new Error('Desktop MCP closed')); child.stdin.end(); child.kill(); }
   }
-  return {
-    descriptor: { pluginRoot: plugins, sourceRecordPath: source },
+  const host = {
+    descriptor: { pluginRoot: plugins, sourceRecordPath: source, ...(requestTimeoutMs === undefined ? {} : { requestTimeoutMs }), ...(messageTimeoutMs === undefined ? {} : { messageTimeoutMs }), handoffTimeoutMs },
     currentSource() {
       const facts = sourceFacts(source, owner);
       return { ownerThreadId: owner, ownerTurnId: facts.ownerTurnId, sourceRecordPath: facts.sourceRecordPath };
@@ -110,7 +210,7 @@ export function createDesktopHost({ env = process.env, pluginRoot, sourceRecordP
       try { sourceFacts(source, owner); const available = await withMcp(async request => validMessageTool((await request('tools/list', {})).tools?.find(tool => tool.name === 'send_message_to_thread'))); return { available, reason: available ? null : 'Desktop message tool schema unsupported' }; }
       catch (error) { return { available: false, reason: redact(error.message) }; }
     },
-    waitForSourceTurnEnd({ ownerThreadId, ownerTurnId, signal }) {
+    waitForSourceTurnEnd({ ownerThreadId, ownerTurnId, signal, allowAborted = false }) {
       if (ownerThreadId !== owner) return Promise.reject(new Error('source owner identity mismatch'));
       return new Promise((resolve, reject) => {
         let watcher, offset = 0, buffer = '', busy = false, again = false, settled = false; const decoder = new StringDecoder('utf8');
@@ -121,7 +221,7 @@ export function createDesktopHost({ env = process.env, pluginRoot, sourceRecordP
           const value = JSON.parse(line);
           if (value.type === 'event_msg' && value.payload?.turn_id === ownerTurnId) {
             if (value.payload.type === 'task_complete') close();
-            if (value.payload.type === 'turn_aborted') close(new Error('source turn aborted; notification preserved'));
+            if (value.payload.type === 'turn_aborted') close(allowAborted ? undefined : new Error('source turn aborted; notification preserved'));
           }
         }
         function check() {
@@ -152,15 +252,50 @@ export function createDesktopHost({ env = process.env, pluginRoot, sourceRecordP
         } catch (error) { close(error); }
       });
     },
-    async send({ ownerThreadId, prompt }) {
+    async send({ ownerThreadId, prompt, beforeSend = () => true }) {
       if (ownerThreadId !== owner) throw new Error('Desktop notification owner identity mismatch');
+      let attempted = false;
       try {
-        const answer = await withMcp(async request => {
-          if (!validMessageTool((await request('tools/list', {})).tools?.find(tool => tool.name === 'send_message_to_thread'))) throw new Error('Desktop message schema changed');
-          return request('tools/call', { name: 'send_message_to_thread', arguments: { threadId: owner, prompt }, _meta: { 'x-codex-turn-metadata': { thread_id: owner } } });
+        return await withOwnerSend(home, owner, async handoffPath => {
+          if (fs.existsSync(handoffPath)) {
+            const stat = fs.lstatSync(handoffPath);
+            if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Desktop handoff proof path rejected');
+            const proof = JSON.parse(fs.readFileSync(handoffPath, 'utf8'));
+            if (proof.ownerThreadId !== owner || proof.sourceRecordPath !== source || !proof.afterTurnId) throw new Error('Desktop handoff proof identity mismatch');
+            // A timed-out or dead sender may already have submitted a turn. Its
+            // successor must not issue another turn/start against the old view.
+            await waitForSourceAdvance(validIdentifier(proof.afterTurnId));
+            await unlinkProof(handoffPath);
+          }
+          async function waitForCurrentEnd() {
+            for (;;) {
+              const facts = sourceFacts(source, owner);
+              if (facts.records.some(e => e.type === 'event_msg' && e.payload?.turn_id === facts.ownerTurnId && ['task_complete', 'turn_aborted'].includes(e.payload.type))) return;
+              await host.waitForSourceTurnEnd({ ownerThreadId: owner, ownerTurnId: facts.ownerTurnId, allowAborted: true });
+            }
+          }
+          await waitForCurrentEnd();
+          const answer = await withMcp(async request => {
+            if (!validMessageTool((await request('tools/list', {})).tools?.find(tool => tool.name === 'send_message_to_thread'))) throw new Error('Desktop message schema changed');
+            // The original dispatch turn may have ended while a newer foreground
+            // turn started. Recheck after schema lookup and after waiting in queue.
+            await waitForCurrentEnd();
+            if (!beforeSend()) return null;
+            const afterTurnId = sourceFacts(source, owner).ownerTurnId;
+            fs.writeFileSync(handoffPath, JSON.stringify({ ownerThreadId: owner, sourceRecordPath: source, afterTurnId }), { flag: 'wx', mode: 0o600 });
+            attempted = true;
+            const reply = await request('tools/call', { name: 'send_message_to_thread', arguments: { threadId: owner, prompt }, _meta: { 'x-codex-turn-metadata': { thread_id: owner } } });
+            if (!reply.isError) {
+              await waitForSourceAdvance(afterTurnId);
+              await unlinkProof(handoffPath);
+            }
+            return reply;
+          });
+          if (!answer) return { status: 'unavailable', error: 'Result already reviewed or superseded; no late action sent' };
+          return answer.isError ? { status: 'delivery-unknown', error: 'Desktop rejected notification' } : { status: 'delivered' };
         });
-        return answer.isError ? { status: 'delivery-unknown', error: 'Desktop rejected notification' } : { status: 'delivered' };
-      } catch (error) { return { status: 'delivery-unknown', error: redact(error.message) }; }
+      } catch (error) { return { status: attempted ? 'delivery-unknown' : 'unavailable', error: redact(error.message) }; }
     },
   };
+  return host;
 }

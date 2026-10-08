@@ -6,6 +6,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.12] - 2026-10-08
+
+### Added
+
+- Opt-in, version-pinned ZCode and Claude Code native visible assistants alongside Codex, using the existing goal, review, result, and saved-session lifecycle.
+- Task-private model and effort selection for start/resume, with explicit idle-session reopening for configuration changes and no shared-default mutation.
+- ZCode/Claude isolation suites in public validation, plus separately authorized live probes for visible sessions and concurrent Desktop wakeup.
+- Generic owner transfer for stable formal CLI tasks, with saved-session continuity, immutable historical results, successor-specific reviews, and interruption recovery.
+
+### Fixed
+
+- Serialize result notifications per owner and recheck the latest foreground turn, retaining unknown delivery evidence instead of blindly retrying.
+- Apply authorized no-approval/full-access settings to the compatible Codex exec path; retain explicit provider-specific permission choices.
+- Handle a confirmed process-exit race without weakening identity checks; preserve redacted upstream model failures when the ZCode interface later fails.
+- Retain the existing entry clarification that explicit policy denials must not be bypassed, while unrelated temporary cleanup failures do not block safe remaining work.
+- Keep project-specific acceptance requirements in existing business documents/tests instead of project-hardcoded runtime gates, preserving legacy task metadata and evidence.
+
+### Boundaries
+
+- Desktop Worker callbacks, receipts, task states, six Skills, and the model matrix are unchanged. Native private interfaces remain experimental and pinned to tested versions.
+- See the release validation report for the real 10-result callback audit, including four failed/unknown runs; this is not a long-term reliability guarantee.
+
 ## [3.2.11] - 2026-10-07
 
 ### Fixed

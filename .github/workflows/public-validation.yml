@@ -54,7 +54,7 @@ jobs:
       - name: Validate workbench upgrade migration
         run: node --test scripts/check-workbench-upgrade-migration.mjs
       - name: Validate CLI store, execution, notification, routing, recovery, and goal loops
-        run: node --test scripts/check-cli-task-store.mjs scripts/check-cli-launcher.mjs scripts/check-cli-notification.mjs scripts/check-cli-workbench.mjs scripts/check-cli-routing.mjs scripts/check-cli-recovery.mjs scripts/check-cli-goal-loop.mjs scripts/check-cli-interactive.mjs
+        run: node --test --test-concurrency=4 scripts/check-cli-task-store.mjs scripts/check-cli-launcher.mjs scripts/check-cli-notification.mjs scripts/check-cli-workbench.mjs scripts/check-cli-routing.mjs scripts/check-cli-recovery.mjs scripts/check-cli-goal-loop.mjs scripts/check-cli-interactive.mjs scripts/check-cli-zcode.mjs scripts/check-cli-claude.mjs scripts/check-cli-transfer.mjs
       - name: Validate implementation paths
         run: node scripts/check-implementation-paths.mjs
       - name: Validate progress-decision fixtures and evaluator
