@@ -153,7 +153,7 @@ test('unsupported provider builds and profiles fail before a window launches', t
   const p = { schemaVersion: 1, provider: 'zcode', mode: 'interactive', ui: 'window', runner: { command: process.execPath, args: [] }, packageRoot: root, model: 'test' };
   assert.throws(() => readZcodeProfile({ ...p, api_key: 'secret' }), /credentials/);
   assert.throws(() => readZcodeProfile({ ...p, mode: 'exec' }), /interactive/);
-  assert.throws(() => readZcodeProfile({ ...p, runner: { ...p.runner, args: ['--resume', 'unowned'] } }), /invalid/);
+  assert.throws(() => readZcodeProfile({ ...p, runner: { ...p.runner, args: ['--resume', 'unowned'] } }), process.platform === 'win32' ? /invalid/ : /requires Windows/);
 });
 
 test('native arguments use yolo and exact session resume, never unsupported --model or --last', () => {

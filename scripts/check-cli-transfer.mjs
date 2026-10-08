@@ -50,6 +50,25 @@ function fixture(t, projectId = 'local-neutral') {
   }
   return { root, cli, bench, identity, ready, request, send, review, intent };
 }
+test('equivalent physical root spelling is not mistaken for a cross-project transfer', async t => {
+  const f = fixture(t), id = f.ready('goal');
+  const alias = path.join(f.root, 'same-root');
+  fs.symlinkSync(f.root, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  const file = f.cli.locator(id), state = f.cli.read(id);
+  atomicJson(file, { ...state, executionRoot: alias });
+  await f.send(f.request(['goal']));
+  assert.equal(f.bench.snapshot().tasks.goal.execution.ownerThreadId, 'owner-b');
+});
+
+test('a genuinely different execution root still requires a verified project route', async t => {
+  const f = fixture(t), id = f.ready('goal'), file = f.cli.locator(id);
+  const other = path.join(f.root, 'different-project'); fs.mkdirSync(other);
+  atomicJson(file, { ...f.cli.read(id), executionRoot: other });
+  const before = [file, f.bench.stateFile].map(sha256File);
+  await assert.rejects(() => f.send(f.request(['goal'])), /cross-root.*projectRoute/);
+  assert.deepEqual([file, f.bench.stateFile].map(sha256File), before);
+});
+
 test('generic owner transfer preserves old result, review, notification and the same session', async t => {
   const f = fixture(t); const old = f.ready('goal', { decision: 'continue', legacy: true });
   f.cli.claimNotification(old, 1); f.cli.finishNotification(old, 1, { status: 'delivered' });

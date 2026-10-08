@@ -11,9 +11,12 @@ import { CliTaskStore, sha256File } from '../模板交付包/scripts/cli/cli-tas
 const modules = async () => ({ ...await import('../模板交付包/scripts/cli/desktop-host.mjs'), ...await import('../模板交付包/scripts/cli/cli-notify.mjs') });
 function fixture(t, schema = 'valid', reply = 'ok', replyDelay = 0, { handoffDelay = 0, autoHandoff = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-cli-notify-'));
+  const actors = [];
   // The fake MCP child has just been killed; Windows can retain its cwd handle briefly.
   // Retry only this fixture's cleanup, without weakening any notification assertion.
   t.after(async () => {
+    for (const actor of actors) if (actor.child.exitCode === null) actor.child.kill();
+    await Promise.allSettled(actors.map(actor => actor.result));
     for (const owner of ['owner-one', 'owner-two']) {
       const canonical = process.platform === 'win32' ? fs.realpathSync(root).toLowerCase() : fs.realpathSync(root);
       const key = crypto.createHash('sha256').update(JSON.stringify([canonical, owner])).digest('hex');
@@ -36,7 +39,7 @@ function fixture(t, schema = 'valid', reply = 'ok', replyDelay = 0, { handoffDel
   const run = store.beginRun(binding, { requestId: 'start', prompt: 'do it', expectedRunNumber: 0, expectedSessionId: null });
   const finish = () => store.finishRun(run, { status: 'failed', exitCode: 1, finalText: '', error: 'before session' });
   const end = () => fs.appendFileSync(sourceRecordPath, JSON.stringify({ type: 'event_msg', payload: { type: 'task_complete', turn_id: ownerTurnId } })+'\n');
-  return { root, ownerThreadId, ownerTurnId, sourceRecordPath, pluginRoot, env, binding, store, run, finish, end, calls, trace };
+  return { root, ownerThreadId, ownerTurnId, sourceRecordPath, pluginRoot, env, binding, store, run, finish, end, calls, trace, actors };
 }
 const delay = ms => new Promise(r => setTimeout(r, ms));
 const event = (f, type, turn_id) => fs.appendFileSync(f.sourceRecordPath, JSON.stringify({ type: 'event_msg', payload: { type, turn_id } })+'\n');
@@ -47,15 +50,26 @@ async function until(check) {
 function actor(t, f, options = {}) {
   const script = path.join(f.root, 'sender.mjs');
   const module = pathToFileURL(path.resolve('模板交付包/scripts/cli/desktop-host.mjs')).href;
-  fs.writeFileSync(script, `import { createDesktopHost } from ${JSON.stringify(module)}; const f={...JSON.parse(process.argv[2]),env:process.env}; const result=await createDesktopHost(f).send({ownerThreadId:f.env.CODEX_THREAD_ID,prompt:'test-only'}); process.send(result);`);
+  const proofModule = pathToFileURL(path.resolve('模板交付包/scripts/cli/process-identity.mjs')).href;
+  // Windows process-proof lookup starts PowerShell. Await that actual startup
+  // event separately; notification-order assertions must not time its startup.
+  fs.writeFileSync(script, `import { createDesktopHost } from ${JSON.stringify(module)}; import {currentProcessIdentity} from ${JSON.stringify(proofModule)}; currentProcessIdentity(); process.send({fixtureReady:true}); const f={...JSON.parse(process.argv[2]),env:process.env}; const result=await createDesktopHost(f).send({ownerThreadId:f.env.CODEX_THREAD_ID,prompt:'test-only'}); process.send(result);`);
   const child = fork(script, [JSON.stringify({ pluginRoot: f.pluginRoot, sourceRecordPath: f.sourceRecordPath, ...options })], { env: f.env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
-  t.after(() => { if (child.exitCode === null) child.kill(); });
+  let readyResolve, readyReject;
+  const ready = new Promise((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
+  const readyTimer = setTimeout(() => readyReject(new Error('fixture sender process-proof startup timeout')), 60000);
+  ready.then(() => clearTimeout(readyTimer), () => clearTimeout(readyTimer));
   const result = new Promise((resolve, reject) => {
     let outcome, stderr = ''; child.stderr.on('data', data => stderr += data);
-    child.on('message', value => { outcome = value; }); child.on('error', reject);
-    child.on('exit', code => code === 0 && outcome ? resolve(outcome) : reject(new Error(`fixture sender exited ${code}: ${stderr}`)));
+    child.on('message', value => { if (value.fixtureReady) readyResolve(); else outcome = value; });
+    child.on('error', error => { readyReject(error); reject(error); });
+    child.on('exit', code => {
+      const error = new Error(`fixture sender exited ${code}: ${stderr}`);
+      readyReject(error); code === 0 && outcome ? resolve(outcome) : reject(error);
+    });
   });
-  return { child, result };
+  result.catch(() => {}); // Teardown after an earlier assertion must not leak a rejection.
+  const instance = { child, result, ready }; f.actors.push(instance); return instance;
 }
 
 test('separate managers serialize same-owner delivery; no overlapping MCP calls', async t => {
@@ -100,11 +114,15 @@ test('queued send waits for the handling turn started by the preceding notificat
 });
 
 test('successful response before persisted turn start does not release owner send slot', async t => {
-  const f = fixture(t, 'valid', 'ok', 0, { handoffDelay: 450 }); f.end();
+  const f = fixture(t, 'valid', 'ok', 0, { autoHandoff: false }); f.end();
   const first = actor(t, f), second = actor(t, f);
+  await Promise.all([first.ready, second.ready]);
   await until(() => fs.existsSync(f.trace) && fs.readFileSync(f.trace, 'utf8').includes('"end"'));
   await delay(100);
   assert.equal(fs.readFileSync(f.calls, 'utf8').trim().split('\n').length, 1);
+  event(f, 'task_started', 'persisted-first-handoff'); event(f, 'task_complete', 'persisted-first-handoff');
+  await until(() => fs.readFileSync(f.calls, 'utf8').trim().split('\n').length === 2);
+  event(f, 'task_started', 'persisted-second-handoff'); event(f, 'task_complete', 'persisted-second-handoff');
   assert.equal((await first.result).status, 'delivered'); assert.equal((await second.result).status, 'delivered');
 });
 
@@ -117,6 +135,7 @@ test('unobserved successful handoff preserves a gate across independent manager 
   assert.equal(fs.readFileSync(f.calls, 'utf8').trim().split('\n').length, 1);
   event(f, 'task_started', 'late-notification-turn'); event(f, 'task_complete', 'late-notification-turn');
   const third = actor(t, f, { handoffTimeoutMs: 1500 });
+  await third.ready;
   await until(() => fs.readFileSync(f.calls, 'utf8').trim().split('\n').length === 2);
   event(f, 'task_started', 'next-turn'); event(f, 'task_complete', 'next-turn');
   assert.equal((await third.result).status, 'delivered');
@@ -162,14 +181,23 @@ test('rejected delivery releases the lock but cannot reuse the unadvanced source
 test('manager exit releases a stale owner gate without deleting another owner proof', async t => {
   const f = fixture(t, 'valid', 'ok', 500); f.end();
   const first = actor(t, f); first.result.catch(() => {});
-  await until(() => fs.existsSync(f.calls)); first.child.kill(); await first.result.catch(() => {});
+  await first.ready;
+  await until(() => fs.existsSync(f.trace));
+  const firstMcpPid = JSON.parse(fs.readFileSync(f.trace, 'utf8').trim().split('\n')[0]).pid;
+  first.child.kill(); await first.result.catch(() => {});
   // A killed sender's native call may still be accepted. Only an observed source
   // advance, not process death alone, makes another notification safe to start.
+  await until(() => {
+    if (fs.readFileSync(f.trace, 'utf8').includes('"end"')) return true;
+    try { process.kill(firstMcpPid, 0); return false; } catch (error) { if (error.code === 'ESRCH') return true; throw error; }
+  });
   event(f, 'task_started', 'recovered-manager-turn'); event(f, 'task_complete', 'recovered-manager-turn');
   const senders = Array.from({ length: 3 }, () => actor(t, f));
   for (const outcome of await Promise.all(senders.map(s => s.result))) assert.equal(outcome.status, 'delivered', JSON.stringify(outcome));
-  const phases = fs.readFileSync(f.trace, 'utf8').trim().split('\n').map(line => JSON.parse(line).phase);
-  assert.deepEqual(phases.slice(-6), ['start', 'end', 'start', 'end', 'start', 'end']);
+  // Windows may terminate the fake MCP with its killed parent; Linux may let
+  // that call finish. Assert all three surviving calls, not a global suffix.
+  const phases = fs.readFileSync(f.trace, 'utf8').trim().split('\n').map(JSON.parse).filter(item => item.pid !== firstMcpPid).map(item => item.phase);
+  assert.deepEqual(phases, ['start', 'end', 'start', 'end', 'start', 'end']);
 });
 test('result first waits for source end; failure without session notifies only once', async t => {
   const { createDesktopHost, notifyWhenReady } = await modules(); const f = fixture(t);

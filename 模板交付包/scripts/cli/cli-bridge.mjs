@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { CliTaskStore, atomicJson, digest, sha256File, validIdentifier } from './cli-task-store.mjs';
 import { runNativeCli, processStart } from './native-cli-runner.mjs';
 import { currentProcessIdentity, processIsGone } from './process-identity.mjs';
-import { ProjectIdentityProvider } from '../runtime/project-identity-provider.mjs';
+import { ProjectIdentityProvider, projectIdentityInternals } from '../runtime/project-identity-provider.mjs';
 import { createDesktopHost, desktopHome } from './desktop-host.mjs';
 import { notifyWhenReady } from './cli-notify.mjs';
 import { checkInteractiveCapability, runInteractiveCli } from './interactive-cli-runner.mjs';
@@ -121,7 +121,7 @@ async function transferOwners(request, context, store) {
     if (![input.fromOwnerThreadId, input.toOwnerThreadId].includes(state.ownerThreadId)) throw new Error('CLI transfer source owner mismatch');
     if (!task || task.projectId !== input.projectId || task.status !== expectedStatus || task.execution?.kind !== 'cli'
       || ![input.fromOwnerThreadId, input.toOwnerThreadId].includes(task.execution.ownerThreadId) || path.resolve(task.execution.stateLocator) !== store.locator(original)) throw new Error('CLI transfer workbench task changed');
-    if (path.resolve(state.executionRoot) !== path.resolve(canonical.canonicalProjectRoot)) {
+    if (!projectIdentityInternals.samePath(state.executionRoot, canonical.canonicalProjectRoot)) {
       if (!state.projectRoute) throw new Error('CLI cross-root transfer requires projectRoute');
       provider.validateWorkerRoute(input.projectId, state.projectRoute, { executionRoot: state.executionRoot });
     }
