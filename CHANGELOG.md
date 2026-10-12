@@ -6,6 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.13] - 2026-10-12
+
+### Added
+
+- Reconnect the 2.0 software-engineering documentation structure: business flows, product interactions, architecture, data/API contracts, implementation guidance, stage decisions, tests, and operations.
+- Connect existing PM and Worker reading paths to current source documents, with incremental initialization, task-time gap filling, and corrections maintained by the original document owner instead of duplicate records.
+
+### Fixed
+
+- Recognize reference-style Markdown navigation while excluding code, quoted, and HTML examples; validate real file and section targets without overwriting existing fact indexes.
+- Preserve declared execution clones during project registration and entry installation, and capture scoped file preimages before mutation. Reject use of partial preimages as whole-local restore packages.
+- Resolve ordinary project subdirectories to the correct execution repository while preserving valid worktrees and declared clones; prevent a non-Git project's route from widening to its enclosing Git repository.
+- Replace retired policy guidance in the overview template with the current policy entry without changing the model matrix.
+
+### Boundaries
+
+- Retain existing CLI compatibility, saved-session, process identity, execution-copy and lock fixes. Identity and professional-method guidance changes only for relevant document reading and maintenance; Desktop Worker callbacks, receipts, lifecycle and the model matrix are unchanged.
+- This release uses local isolated documentation and logic regressions, not a new live model, Desktop callback, or production business acceptance claim. See [validation and limits](docs/releases/v3.2.13-validation.md).
+
 ## [3.2.12] - 2026-10-08
 
 ### Added

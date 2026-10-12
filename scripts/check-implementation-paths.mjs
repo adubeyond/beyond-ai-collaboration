@@ -142,7 +142,7 @@ requireText("S1运维不截获本地提交", ops, "普通代码任务自己的�
 
 // S2：需要设计的新功能。
 requireText("S2设计回原Worker", design, "结果回到同一个 Worker");
-requireText("S2复用任务入口", complexDesign, "正式任务直接使用任务已经点名的项目/子项目文档入口和事实索引");
+requireText("S2复用任务入口", complexDesign, "已有有效的项目/子项目文档入口和事实索引时直接复用");
 requireText("S2单一活动设计", design, "复杂设计必须使用一个明确的活动设计文档");
 requireText("S2调查证据不冒充实施路径", design, "只是证据");
 requireText("S2设计目录不承载下游证据", complexDesign, "不作为后续开发、测试、发布或运行证据的通用工作区");
@@ -542,7 +542,7 @@ requireText("事实未闭合不展开猜测性技术方案", agents, "或用架�
 requireText("事实未闭合不列可能原因", agents, "不得列举未经证实的可能原因、给猜测排序");
 requireText("因果前提先做一次定点核验", agents, "先在用户点名对象内做一次最有区分度的只读核验");
 requireText("缺证据不扩大搜索", agents, "不转而遍历用户目录、全局配置、已安装规则、记忆、无关项目或其他系统");
-requireText("缺证据不加载文档或联网", agents, "也不加载产品文档、联网求证或提前设计替代机制");
+requireText("缺证据不扩到无关文档或联网", agents, "也不加载与当前对象及判断无关的产品文档、联网求证或提前设计替代机制");
 requireText("未验证原因不触发实现路径", agents, "在证据闭合前仍是只读判断，不触发开发、运维或平台排障路径");
 requireText("自行判断不授权创造工程目标", agents, "这不授权自行创造性能、发布、重构、标准化或新增功能目标");
 requireText("模糊优化仅修可证实问题", agents, "只有发现可复现缺陷、与现有明确契约直接冲突，或无需改变公开行为的显然缺口时");
@@ -668,7 +668,7 @@ requireText("开发不制造微优化证据", dev, "不得为了证明它值得�
 requireText("开发无现实缺口保持不改", dev, "当前入口可用且没有现实失败、用户可见缺陷或现有契约缺口时，保持不改并说明判断");
 requireText("开发证据缺失即停扩张", dev, "证据缺失即停扩张");
 requireText("开发缺证据不遍历外部", dev, "不遍历用户目录、全局配置、已安装规则、记忆、无关项目或其他系统");
-requireText("开发缺证据不加载文档联网", dev, "不加载产品文档或联网求证");
+requireText("开发缺证据不扩到无关文档联网", dev, "不加载与当前对象及判断无关的产品文档或联网求证");
 requireText("开发未验证原因保持只读", dev, "证据闭合前该请求仍是只读判断");
 requireText("清晰局部修复不强制切测试Skill", dev, "清晰局部改动可以由开发方法直接运行现有测试并交付");
 requireText("热修基线必须匹配正式目标", dev, "或从目标到当前包含未授权的其他变化时，不把当前整包冒充可发布候选");
@@ -707,11 +707,11 @@ requireText("00入口读取项目身份与路由", documentEntry, "确认当前�
 requireText("00入口读取全部当前主事实", documentEntry, "登记的全部当前主事实正文");
 requireText("初始化不进入普通任务热路径", agents, "不进入普通任务热路径");
 requireText("升级先核对当前直接事实", agents, "初始化优先复用现有`AGENTS.md`、代码、Git和Markdown事实");
-requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.2.12");
+requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.2.13");
 requireText("项目覆盖有专用边界", agents, "BEGIN BEYOND PROJECT OVERRIDES");
 requireText("安装逐文件对账六个Skill", installVerifier, "安装Skill内容不一致");
 requireText("安装核对项目完整运行内核", installVerifier, "项目入口的BEYOND运行内核与控制仓候选不一致");
-requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.2.12"');
+requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.2.13"');
 requireText("个人路径不读取团队共享区", agents, "普通项目接手、正式Worker任务、Action Skill切换和个人任务不读取共享区");
 requireText("团队协同不替代正式Worker", agents, "不替代当前成员自己的正式Worker");
 requireText("PM初始化与协同权限严格限域", pmDispatch, "两者都不扩张到业务源码、测试、仓库配置、成员权限、环境、数据或发布");
@@ -733,7 +733,7 @@ requireText("团队路径先读规则再调脚本", pm, "完整读取当前项�
 requireText("兼容核对包含嵌套AGENTS", documentEntry, "根与嵌套 `AGENTS.md`只保留对应目录的稳定边界、特殊风险和事实入口");
 requireText("兼容核对收敛环境入口冲突", documentEntry, "同一环境指向不同主机、SSH别名或凭据来源");
 requireText("旧工作台激活门禁退出项目入口", documentEntry, "不得要求“工作台先激活”“PM先派单”");
-requireText("普通任务不重做文档迁移", documentEntry, "普通任务直接使用任务点名的项目入口，不重复审查整套文档体系");
+requireText("普通任务不重做文档迁移", documentEntry, "普通任务使用本结果相关的项目入口，不重复审查整套文档体系");
 requireText("项目总览不复制Skill规则", projectOverview, "本文件不得复制这些机制规则");
 requireText("项目事实不是第二套规则", projectFacts, "本索引只组织项目特有事实，不成为第二套运行规则");
 requireText("项目总览是新PM接手材料", projectOverview, "新PM首次接手必须读取当前项目的正式总览");

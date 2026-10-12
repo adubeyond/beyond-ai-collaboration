@@ -122,7 +122,7 @@ Codex交互模式通过官方app-server连接原生TUI，连接仅绑定127.0.0.
 
 ## 可选 Claude Code 原生助手（试验适配）
 
-Claude Code 使用同一 CLI 入口、结果核验和原会话续跑流程，不增加第二套任务状态或改变默认 Worker 回传。当前适配 Windows 原生 `claude.exe 2.1.294`；已有认证继续由 Claude 自己读取，不复制密钥、不修改其全局设置。配置示例：
+Claude Code 使用同一 CLI 入口、结果核验和原会话续跑流程，不增加第二套任务状态或改变默认 Worker 回传。当前适配 Windows 原生 `claude.exe 2.1.296`；已有认证继续由 Claude 自己读取，不复制密钥、不修改其全局设置。配置示例：
 
 ```json
 {"schemaVersion":1,"provider":"claude","runner":{"command":"<claude.exe绝对路径>","args":[]},"model":"<Claude端当前可用的模型>","permissionMode":"bypassPermissions","mode":"interactive","ui":"window"}

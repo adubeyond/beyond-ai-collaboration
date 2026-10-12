@@ -47,16 +47,18 @@ function snapshot(f, overrides = {}) {
 function writeRegistrations(f, options = {}) {
   const projectId = options.projectId ?? 'project-1';
   const localRemote = options.localRemote ?? 'git@example.test:team/app.git';
-  const initialized = spawnSync('git', ['init'], { cwd: f.projectRoot, encoding: 'utf8', windowsHide: true });
-  assert.equal(initialized.status, 0, initialized.stderr);
-  const currentRemote = spawnSync('git', ['remote', 'get-url', 'origin'], {
-    cwd: f.projectRoot, encoding: 'utf8', windowsHide: true,
-  });
-  if (currentRemote.status !== 0) {
-    const added = spawnSync('git', ['remote', 'add', 'origin', localRemote], {
+  if (options.git !== false) {
+    const initialized = spawnSync('git', ['init'], { cwd: f.projectRoot, encoding: 'utf8', windowsHide: true });
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const currentRemote = spawnSync('git', ['remote', 'get-url', 'origin'], {
       cwd: f.projectRoot, encoding: 'utf8', windowsHide: true,
     });
-    assert.equal(added.status, 0, added.stderr);
+    if (currentRemote.status !== 0) {
+      const added = spawnSync('git', ['remote', 'add', 'origin', localRemote], {
+        cwd: f.projectRoot, encoding: 'utf8', windowsHide: true,
+      });
+      assert.equal(added.status, 0, added.stderr);
+    }
   }
   const repositories = options.repositoryRoots?.map((repositoryPath, index) => ({
     path: repositoryPath, remote: null, role: index === 0 ? 'project-root' : 'component',
@@ -79,6 +81,10 @@ function writeRegistrations(f, options = {}) {
     `<!-- BEYOND-CONTROL-ROOT: ${path.relative(f.projectRoot, f.controlRoot).replaceAll('\\', '/')} -->`,
     `<!-- BEYOND-PROJECT-ID: ${projectId} -->`, '',
   ].join('\n'), 'utf8');
+}
+
+function assertIdentityStatus(result, status) {
+  assert.equal(result.status, status, JSON.stringify({ reasons: result.reasons, evidence: result.evidence }, null, 2));
 }
 
 test('all project identity sources agreeing returns verified', () => {
@@ -284,7 +290,7 @@ test('provider reads existing Markdown registrations and writes only a derived c
     platform: snapshot(f).platform,
     hostRoutes: snapshot(f).hostRoutes,
   });
-  assert.equal(result.status, 'verified');
+  assertIdentityStatus(result, 'verified');
   assert.equal(result.sourceCounts.localMappings, 1);
   assert.equal(result.sourceCounts.sharedRegistrations, 1);
   assert.deepEqual(result.projectRoute, {
@@ -292,6 +298,8 @@ test('provider reads existing Markdown registrations and writes only a derived c
     canonicalProjectRoot: projectIdentityInternals.canonicalPath(f.projectRoot),
     controlRoot: projectIdentityInternals.canonicalPath(f.controlRoot),
     repositoryRoot: projectIdentityInternals.canonicalPath(f.projectRoot),
+    executionRoot: projectIdentityInternals.canonicalPath(f.projectRoot),
+    relation: 'canonical',
     hostId: 'host-a',
     codexProjectId: 'codex-1',
   });
@@ -317,10 +325,142 @@ test('provider returns a selected registered repository in the verified project 
     repository: { remote: 'git@example.test:team/app.git' },
     platform: snapshot(f).platform, hostRoutes: snapshot(f).hostRoutes,
   });
-  assert.equal(result.status, 'verified');
+  assertIdentityStatus(result, 'verified');
   assert.equal(projectIdentityInternals.samePath(result.projectRoute.repositoryRoot, component), true);
+  assert.equal(projectIdentityInternals.samePath(result.projectRoute.executionRoot, component), true);
+  assert.equal(result.projectRoute.relation, 'canonical');
   assert.equal(result.registeredRepositoryRoots.length, 2);
 });
+
+test('provider resolves a non-Git project from an ordinary source subdirectory', () => {
+  const f = fixture('non-git-subdirectory');
+  writeRegistrations(f, { git: false, localRemote: '', sharedRemote: '' });
+  assert.equal(spawnSync('git', ['rev-parse', '--show-toplevel'], {
+    cwd: f.cwd, encoding: 'utf8', windowsHide: true,
+  }).status !== 0, true, 'fixture must have no containing Git repository');
+  const provider = new ProjectIdentityProvider({ controlRoot: f.controlRoot, runtimeRoot: f.runtimeRoot });
+  const result = provider.resolve(snapshot(f, { repository: { remote: null } }));
+  assertIdentityStatus(result, 'verified');
+  assert.equal(projectIdentityInternals.samePath(result.projectRoute.executionRoot, f.projectRoot), true);
+  assert.equal(result.projectRoute.relation, 'canonical');
+});
+
+test('provider keeps a non-Git project inside an outer repository at its own canonical root', () => {
+  const f = fixture('non-git-project-inside-outer-repository');
+  const initialized = spawnSync('git', ['init'], { cwd: f.root, encoding: 'utf8', windowsHide: true });
+  assert.equal(initialized.status, 0, initialized.stderr);
+  const committed = spawnSync('git', [
+    '-c', 'user.name=BEYOND Test', '-c', 'user.email=test@example.invalid',
+    'commit', '--allow-empty', '-m', 'outer repository fixture',
+  ], { cwd: f.root, encoding: 'utf8', windowsHide: true });
+  assert.equal(committed.status, 0, committed.stderr);
+  writeRegistrations(f, { git: false, localRemote: '', sharedRemote: '' });
+  assert.equal(fs.existsSync(path.join(f.projectRoot, '.git')), false);
+  const containingRepository = spawnSync('git', ['rev-parse', '--show-toplevel'], {
+    cwd: f.cwd, encoding: 'utf8', windowsHide: true,
+  });
+  assert.equal(containingRepository.status, 0, containingRepository.stderr);
+  assert.equal(projectIdentityInternals.samePath(containingRepository.stdout.trim(), f.root), true);
+  const provider = new ProjectIdentityProvider({ controlRoot: f.controlRoot, runtimeRoot: f.runtimeRoot });
+  const result = provider.resolve(snapshot(f, { repository: { remote: null } }));
+  assertIdentityStatus(result, 'verified');
+  assert.equal(projectIdentityInternals.samePath(result.projectRoute.repositoryRoot, f.projectRoot), true);
+  assert.equal(projectIdentityInternals.samePath(result.projectRoute.executionRoot, f.projectRoot), true);
+  assert.equal(projectIdentityInternals.samePath(result.projectRoute.executionRoot, f.root), false);
+  assert.equal(result.projectRoute.relation, 'canonical');
+});
+
+test('provider selects a registered component from a non-Git project subdirectory', () => {
+  const f = fixture('non-git-component-selection');
+  const component = path.join(f.projectRoot, 'component');
+  fs.mkdirSync(component);
+  const initialized = spawnSync('git', ['init'], { cwd: component, encoding: 'utf8', windowsHide: true });
+  assert.equal(initialized.status, 0, initialized.stderr);
+  writeRegistrations(f, { git: false, localRemote: '', sharedRemote: '', repositoryRoots: [f.projectRoot, component] });
+  const provider = new ProjectIdentityProvider({ controlRoot: f.controlRoot, runtimeRoot: f.runtimeRoot });
+  const result = provider.resolve(snapshot(f, { repository: { remote: null }, repositoryRoot: component }));
+  assertIdentityStatus(result, 'verified');
+  assert.equal(projectIdentityInternals.samePath(result.projectRoute.repositoryRoot, component), true);
+  assert.equal(projectIdentityInternals.samePath(result.projectRoute.executionRoot, component), true);
+  assert.equal(result.projectRoute.relation, 'canonical');
+});
+
+test('provider resolves a registered component from its ordinary source subdirectory', () => {
+  const f = fixture('component-subdirectory');
+  const component = path.join(f.projectRoot, 'component');
+  const componentSource = path.join(component, 'src');
+  fs.mkdirSync(componentSource, { recursive: true });
+  const initialized = spawnSync('git', ['init'], { cwd: component, encoding: 'utf8', windowsHide: true });
+  assert.equal(initialized.status, 0, initialized.stderr);
+  writeRegistrations(f, { repositoryRoots: [f.projectRoot, component] });
+  const provider = new ProjectIdentityProvider({ controlRoot: f.controlRoot, runtimeRoot: f.runtimeRoot });
+  const result = provider.resolve(snapshot(f, { cwd: componentSource, repositoryRoot: component }));
+  assertIdentityStatus(result, 'verified');
+  assert.equal(projectIdentityInternals.samePath(result.projectRoute.executionRoot, component), true);
+  assert.equal(result.projectRoute.relation, 'canonical');
+});
+
+test('provider still rejects an explicitly selected source subdirectory as executionRoot', () => {
+  const f = fixture('explicit-source-execution');
+  writeRegistrations(f);
+  const provider = new ProjectIdentityProvider({ controlRoot: f.controlRoot, runtimeRoot: f.runtimeRoot });
+  const result = provider.resolve(snapshot(f, { executionRoot: f.cwd }));
+  assertIdentityStatus(result, 'conflict');
+  assert.equal(result.projectRoute, null);
+  assert.equal(result.allowed.createWorker, false);
+  assert.ok(result.evidence.issues.some(issue => issue.reason === 'registered_repository_invalid'
+    && issue.detail.includes('not an exact Git repository root')));
+});
+
+test('provider does not treat a broken nested Git marker as an ordinary non-Git directory', () => {
+  const f = fixture('broken-nested-git');
+  writeRegistrations(f, { git: false, localRemote: '', sharedRemote: '' });
+  fs.writeFileSync(path.join(f.cwd, '.git'), 'gitdir: ../missing-git-directory\n', 'utf8');
+  const child = path.join(f.cwd, 'child');
+  fs.mkdirSync(child);
+  const provider = new ProjectIdentityProvider({ controlRoot: f.controlRoot, runtimeRoot: f.runtimeRoot });
+  for (const cwd of [f.cwd, child]) {
+    const result = provider.resolve(snapshot(f, { cwd, repository: { remote: null } }));
+    assertIdentityStatus(result, 'conflict');
+    assert.equal(result.projectRoute, null);
+    assert.equal(result.allowed.createWorker, false);
+    assert.ok(result.reasons.includes('registered_repository_invalid'));
+  }
+});
+
+for (const kind of ['unregistered repository', 'undeclared clone']) {
+  test(`provider does not turn a nested ${kind} into a canonical route`, () => {
+    const f = fixture(kind.replaceAll(' ', '-'));
+    writeRegistrations(f);
+    const checkout = path.join(f.projectRoot, '.codex-local', 'unregistered-checkout');
+    fs.mkdirSync(path.dirname(checkout), { recursive: true });
+    if (kind === 'undeclared clone') {
+      const committed = spawnSync('git', [
+        '-c', 'user.name=BEYOND Test', '-c', 'user.email=test@example.invalid',
+        'commit', '--allow-empty', '-m', 'fixture baseline',
+      ], { cwd: f.projectRoot, encoding: 'utf8', windowsHide: true });
+      assert.equal(committed.status, 0, committed.stderr);
+      const cloned = spawnSync('git', ['clone', '--no-hardlinks', f.projectRoot, checkout], {
+        cwd: f.root, encoding: 'utf8', windowsHide: true,
+      });
+      assert.equal(cloned.status, 0, cloned.stderr);
+    } else {
+      fs.mkdirSync(checkout);
+      const initialized = spawnSync('git', ['init'], { cwd: checkout, encoding: 'utf8', windowsHide: true });
+      assert.equal(initialized.status, 0, initialized.stderr);
+    }
+    const checkoutSource = path.join(checkout, 'src');
+    fs.mkdirSync(checkoutSource);
+    const provider = new ProjectIdentityProvider({ controlRoot: f.controlRoot, runtimeRoot: f.runtimeRoot });
+    for (const cwd of [checkout, checkoutSource]) {
+      const result = provider.resolve(snapshot(f, { cwd }));
+      assertIdentityStatus(result, 'conflict');
+      assert.equal(result.projectRoute, null);
+      assert.equal(result.allowed.createWorker, false);
+      assert.ok(result.reasons.includes('registered_repository_invalid'));
+    }
+  });
+}
 
 test('provider can read the user host route index exactly once', () => {
   const f = fixture('host-index');
@@ -336,7 +476,7 @@ test('provider can read the user host route index exactly once', () => {
     repository: { remote: 'git@example.test:team/app.git' }, platform: snapshot(f).platform,
     hostRouteIndexFile: hostIndex,
   });
-  assert.equal(result.status, 'verified');
+  assertIdentityStatus(result, 'verified');
   assert.equal(result.sourceCounts.hostRouteFilesRead, 1);
 });
 
@@ -368,7 +508,7 @@ test('verified identity without local host routing fields does not mint a Worker
     repository: { remote: 'git@example.test:team/app.git' },
     platform: snapshot(f).platform, hostRoutes: snapshot(f).hostRoutes,
   });
-  assert.equal(result.status, 'verified');
+  assertIdentityStatus(result, 'verified');
   assert.equal(result.projectRoute, null);
 });
 
@@ -454,6 +594,6 @@ test('provider consumes registrations produced by the existing beyond-control co
       path: f.projectRoot, hostId: 'host-a',
     }],
   });
-  assert.equal(result.status, 'verified');
+  assertIdentityStatus(result, 'verified');
   assert.equal(result.identities.beyondProjectId, registration.projectId);
 });

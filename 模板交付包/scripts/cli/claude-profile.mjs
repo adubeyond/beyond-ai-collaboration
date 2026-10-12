@@ -3,7 +3,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 // Completion hooks are documented; interactive message injection is version-specific.
-export const CLAUDE_VERSION = '2.1.294';
+export const CLAUDE_VERSION = '2.1.296';
 export function readClaudeProfile(profile) {
   const keys = ['schemaVersion', 'provider', 'runner', 'model', 'effort', 'mode', 'ui', 'permissionMode'];
   if (Object.keys(profile).some(k => !keys.includes(k)) || Object.keys(profile.runner ?? {}).some(k => !['command', 'args'].includes(k))) throw new Error('Claude profile cannot contain credentials or undocumented overrides');

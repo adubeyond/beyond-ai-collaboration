@@ -9,16 +9,38 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-assert.ok(process.argv[2], 'Pass the extracted release root');
-const release = path.resolve(process.argv[2]);
-const baselineRef = process.argv[3] || 'v3.2.11';
-const releaseVersion = JSON.parse(fs.readFileSync(path.join(release, 'release-manifest.json'), 'utf8')).releaseVersion;
+const args = process.argv.slice(2);
+assert.ok(args[0] && !args[0].startsWith('--'), 'Pass the extracted release root');
+const release = path.resolve(args[0]);
+let baselineRef = null;
+let baselineRoot = null;
+for (let index = 1; index < args.length; index++) {
+  const option = args[index];
+  assert.ok(['--baseline-ref', '--baseline-root'].includes(option), 'Unknown option: ' + option);
+  const value = args[++index];
+  assert.ok(value && !value.startsWith('--'), option + ' requires a value');
+  assert.ok(!baselineRef && !baselineRoot, 'Select exactly one of --baseline-ref or --baseline-root');
+  if (option === '--baseline-ref') baselineRef = value;
+  else baselineRoot = path.resolve(value);
+}
+assert.ok(baselineRef || baselineRoot, 'Select exactly one of --baseline-ref or --baseline-root');
+const releaseManifest = JSON.parse(fs.readFileSync(path.join(release, 'release-manifest.json'), 'utf8'));
+const releaseVersion = releaseManifest.releaseVersion;
 assert.match(releaseVersion, /^\d+\.\d+\.\d+$/);
+const productVersion = JSON.parse(fs.readFileSync(path.join(release, 'beyond-control/beyond-release.json'), 'utf8')).releaseVersion;
+assert.equal(productVersion, releaseVersion, 'Release manifest and product version must agree');
+assert.equal(releaseManifest.productRoot, 'beyond-control');
+assert.equal(releaseManifest.contentManifest, 'content-manifest.sha256.json');
+const manifestBytes = fs.readFileSync(path.join(release, releaseManifest.contentManifest));
+assert.equal(createHash('sha256').update(manifestBytes).digest('hex'), releaseManifest.contentManifestSha256);
+const manifest = JSON.parse(manifestBytes);
+assert.equal(manifest.fileCount, manifest.files.length);
+assert.equal(releaseManifest.productFileCount, manifest.files.length);
+assert.equal(new Set(manifest.files.map(record => record.path)).size, manifest.files.length, 'Duplicate product manifest paths');
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-package-upgrade-'));
 const project = path.join(scratch, 'project');
 const control = path.join(project, 'beyond-control');
 const skills = path.join(project, 'user-skills');
-const Zip = createRequire(import.meta.url)(process.env.BEYOND_JSZIP_PATH || 'jszip');
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const contained = (base, name) => {
   const target = path.resolve(base, name), rel = path.relative(base, target);
@@ -42,12 +64,21 @@ function command(args, script = 'scripts/beyond-control.mjs') {
   return r.stdout;
 }
 
-const baseline = await Zip.loadAsync(execFileSync('git', ['archive', '--format=zip', baselineRef, '模板交付包'], { cwd: root, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }));
-for (const [name, entry] of Object.entries(baseline.files)) {
-  if (entry.dir) continue;
-  assert.ok(name.startsWith('模板交付包/'));
-  write(contained(control, name.slice('模板交付包/'.length)), await entry.async('nodebuffer'));
+if (baselineRoot) {
+  assert.ok(fs.existsSync(path.join(baselineRoot, 'beyond-release.json')), '--baseline-root must point to the complete product directory');
+  const baselineSnapshot = snapshot(baselineRoot);
+  fs.cpSync(baselineRoot, control, { recursive: true });
+  assert.deepEqual(snapshot(control), baselineSnapshot, 'Baseline copy must preserve its complete product bytes');
+} else {
+  const Zip = createRequire(import.meta.url)(process.env.BEYOND_JSZIP_PATH || 'jszip');
+  const baseline = await Zip.loadAsync(execFileSync('git', ['archive', '--format=zip', baselineRef, '模板交付包'], { cwd: root, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }));
+  for (const [name, entry] of Object.entries(baseline.files)) {
+    if (entry.dir) continue;
+    assert.ok(name.startsWith('模板交付包/'));
+    write(contained(control, name.slice('模板交付包/'.length)), await entry.async('nodebuffer'));
+  }
 }
+const baselineVersion = JSON.parse(fs.readFileSync(path.join(control, 'beyond-release.json'), 'utf8')).releaseVersion;
 write(path.join(project, 'AGENTS.md'), '# Existing project\n\nKeep the native business rules.\n');
 command(['install-project-entry', '--project-root', project, '--confirm-fusion', 'yes']);
 const projectId = JSON.parse(command(['register-project', '--project-root', project])).project.projectId;
@@ -60,6 +91,15 @@ write(overview, oldOverview.replace(/(<!-- BEGIN BEYOND WORKER POLICY -->)[\s\S]
 fs.cpSync(path.join(control, 'skills'), skills, { recursive: true });
 execFileSync('git', ['init', '--quiet', control], { windowsHide: true });
 write(path.join(control, 'shared', 'user-facts.md'), '# Preserved user facts\n');
+// Byte-preservation sentinels only: do not launch or impersonate a live CLI session.
+const preservedSentinels = {
+  'beyond-control/local/runtime/cli-tasks/upgrade-session-sentinel.json': JSON.stringify({
+    kind: 'upgrade-byte-preservation-fixture', sessionId: 'fixture-cli-session', ownerThreadId: 'fixture-owner',
+  }) + '\n',
+  [`beyond-control/projects/${projectId}/existing-engineering-guide.md`]: '# Existing engineering facts\n\nKeep the agreed module boundaries.\n',
+  'docs/existing-business-guide.md': '# Existing business facts\n\nKeep the original business definitions.\n',
+};
+for (const [name, bytes] of Object.entries(preservedSentinels)) write(contained(project, name), bytes);
 const { WorkbenchTransactionStore } = await import(pathToFileURL(path.join(control, 'scripts/runtime/workbench-transaction.mjs')));
 const store = new WorkbenchTransactionStore({ runtimeRoot: path.join(control, 'local/runtime/workbench'), viewPath: path.join(control, 'local/当前工作台.md'), historyRoot: path.join(control, 'local/history/workbench') });
 for (const name of ['active', 'paused']) store.registerTask({ taskId: name, task: name, worker: 'fixture-' + name, status: '进行中', progress: 'Preserve task', pause: '无', result: '无', updatedAt: '2026-10-01T00:00:00.000Z' });
@@ -70,7 +110,6 @@ command(['runtime', '--request', request]);
 const before = snapshot(project);
 const backup = path.join(scratch, 'backup'); fs.cpSync(project, backup, { recursive: true });
 assert.deepEqual(snapshot(backup), before);
-const manifest = JSON.parse(fs.readFileSync(path.join(release, 'content-manifest.sha256.json')));
 for (const record of manifest.files) {
   assert.ok(!/^(local|projects|shared|\.git)(\/|$)/.test(record.path));
   const bytes = fs.readFileSync(contained(path.join(release, 'beyond-control'), record.path));
@@ -88,11 +127,15 @@ assert.match(fs.readFileSync(path.join(project, 'AGENTS.md'), 'utf8'), /Keep the
 const policy = JSON.parse(command(['worker-policy', '--action', 'resolve-stage', '--project-id', projectId, '--task-kind', 'ordinary-engineering']));
 assert.equal(policy.requiresSelection, true); assert.deepEqual(policy.continuationParameters, {});
 const upgraded = snapshot(project);
-for (const [name, hash] of Object.entries(protectedBefore).filter(([name]) => /\/(runtime\/workbench|runtime\/worker-results|shared\/|\.git\/)/.test(name))) assert.equal(upgraded[name], hash, name);
+for (const [name, hash] of Object.entries(protectedBefore).filter(([name]) => /\/(runtime\/workbench|runtime\/worker-results|runtime\/cli-tasks|shared\/|\.git\/)/.test(name))) assert.equal(upgraded[name], hash, name);
+for (const name of Object.keys(preservedSentinels)) assert.equal(upgraded[name], before[name], name);
 assert.equal(store.snapshot().tasks.active.status, '进行中');
 assert.equal(store.snapshot().tasks.paused.status, '已暂停');
 // Restore precisely the scratch project's before-image; never delete live paths.
 for (const name of Object.keys(upgraded).filter(name => !Object.hasOwn(before, name))) fs.unlinkSync(contained(project, name));
 for (const name of Object.keys(before)) write(contained(project, name), fs.readFileSync(contained(backup, name)));
 assert.deepEqual(snapshot(project), before);
-console.log(JSON.stringify({ passed: true, baseline: baselineRef, release: releaseVersion, productFiles: manifest.files.length, protectedFiles: Object.keys(protectedBefore).length, nativeRulesPreserved: true, tasksUnchanged: true, historicalApprovalNotReinterpreted: true, rollbackBytesEqual: true, scratch, liveProjectWrites: false }, null, 2));
+console.log(JSON.stringify({ passed: true, baseline: baselineRef ?? baselineRoot, baselineKind: baselineRef ? 'git-ref' : 'product-directory', baselineVersion,
+  release: releaseVersion, productFiles: manifest.files.length, protectedFiles: Object.keys(protectedBefore).length,
+  nativeRulesPreserved: true, tasksUnchanged: true, cliSessionBytesPreserved: true, businessDocumentsPreserved: true,
+  liveCliExecutionTested: false, historicalApprovalNotReinterpreted: true, rollbackBytesEqual: true, scratch, liveProjectWrites: false }, null, 2));

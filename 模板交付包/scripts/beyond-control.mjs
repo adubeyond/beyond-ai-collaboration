@@ -544,7 +544,7 @@ function ensureControl() {
   }
 }
 
-function ensureProjectControlIsolation(project) {
+function ensureProjectControlIsolation(project, preimage = null) {
   if (!isInside(project.projectRoot, controlRoot)) {
     fail("项目内初始化要求beyond-control位于 --project-root 目录之下；外置控制仓请不要传 --project-root", 2);
   }
@@ -561,7 +561,8 @@ function ensureProjectControlIsolation(project) {
     return { changed: false, rules, backup: null };
   }
   let backup = null;
-  if (existing) {
+  if (existing && preimage) backup = preimage;
+  else if (existing) {
     const backupDirectory = join(controlRoot, "local", "backups", "project-init", project.projectId);
     mkdirSync(backupDirectory, { recursive: true });
     backup = join(backupDirectory, `${timestamp()}-gitignore`);
@@ -933,6 +934,49 @@ function backupControlFile(path, reason) {
   return target;
 }
 
+function backupProjectMutation(project, install = false) {
+  // 升级只备份将被登记/融合/迁移/清理的对象，不复制无关任务缓存或整个 local。
+  const controlPaths = [
+    ".gitignore", "local/当前工作台.md",
+    `local/projects/${project.projectId}.md`, `shared/projects/${project.projectId}.md`,
+    `projects/${project.projectId}/项目总览.md`, `projects/${project.projectId}/项目事实/README.md`,
+  ];
+  if (install) controlPaths.push(
+    codexHooksRelative, legacyRuntimeGuardRelative,
+    "local/runtime/workbench/workbench-state.json",
+    "local/runtime/workbench/backups/pre-3.2-markdown-workbench.md",
+    "local/runtime/workbench/backups/pre-3.2-markdown-workbench-migration.json",
+    "local/runtime/identity-sessions", "local/runtime/hook-probes", "local/runtime/hook-observed.json",
+    ...(arg("--adopt-legacy-workbench") === "yes" ? [`local/history/legacy/${project.projectId}-workbench.md`] : []),
+  );
+  const objects = controlPaths.map((file) => ({ path: join(controlRoot, file), saved: `control/${file}` }));
+  if (install) for (const file of ["AGENTS.md", ".gitignore", codexHooksRelative, legacyRuntimeGuardRelative]) {
+    objects.push({ path: join(project.projectRoot, file), saved: `project/${file}` });
+  }
+  const stem = `${timestamp()}-project-preimage-${install ? "entry" : "register"}`;
+  let target = join(backupRoot(), stem);
+  for (let suffix = 1; existsSync(target); suffix += 1) target = join(backupRoot(), `${stem}-${suffix}`);
+  try {
+    mkdirSync(target, { recursive: true });
+    for (const object of objects) {
+      object.existed = existsSync(object.path);
+      if (!object.existed) continue;
+      const saved = join(target, object.saved);
+      mkdirSync(dirname(saved), { recursive: true });
+      cpSync(object.path, saved, { recursive: true, errorOnExist: true, force: false });
+    }
+    writeUtf8(join(target, "project-preimage.json"), `${JSON.stringify({
+      schemaVersion: 1, kind: "project-preimage", projectId: project.projectId,
+      controlRoot, projectRoot: project.projectRoot, objects,
+    }, null, 2)}\n`);
+  } catch (error) {
+    fail(`项目写入前备份失败，尚未开始登记或融合；不完整备份：${display(target)}\n${error.message}`);
+  }
+  // 即使后续子操作失败，操作者也能定位精确前像；这不是安装成功回执。
+  console.error(`项目写入前像：${display(target)}（仅恢复清单内对象，不是整个local快照）`);
+  return target;
+}
+
 function extractBetween(text, begin, end) {
   const start = text.indexOf(begin);
   const finish = text.indexOf(end);
@@ -1050,7 +1094,7 @@ function initializationPublicState(state) {
   return { ...state, pendingGroups, nextRequiredDecision };
 }
 
-function ensureInitializationSection(overviewPath) {
+function ensureInitializationSection(overviewPath, preimage = null) {
   const overview = readUtf8(overviewPath, "项目总览");
   const current = parseInitialization(overview);
   if (current.configured) return { changed: false, backup: null, state: current.state };
@@ -1061,7 +1105,7 @@ function ensureInitializationSection(overviewPath) {
   const updated = insertion >= 0
     ? `${overview.slice(0, insertion)}${rendered}\n${overview.slice(insertion)}`
     : `${overview.trimEnd()}\n\n${rendered}`;
-  const backup = backupControlFile(overviewPath, "project-initialization-migration");
+  const backup = preimage ?? backupControlFile(overviewPath, "project-initialization-migration");
   writeUtf8(overviewPath, updated);
   return { changed: true, backup, state: defaultInitialization() };
 }
@@ -1129,26 +1173,141 @@ function resolveInitializationEntry(entry, context) {
   return resolvedEntry;
 }
 
-function factsIndexContainsEntry(entry, resolvedEntry, context) {
-  const facts = readUtf8(context.factsPath, "项目事实索引");
-  const references = new Set([
-    entry,
-    display(resolvedEntry),
-    display(relative(context.projectRoot, resolvedEntry)),
-    display(relative(controlRoot, resolvedEntry)),
-    display(relative(dirname(context.factsPath), resolvedEntry)),
-  ].filter((value) => value && value !== "."));
-  return [...references].some((reference) => {
-    const escaped = reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(^|[^\\p{L}\\p{N}._/\\\\-])${escaped}(?=$|[^\\p{L}\\p{N}._/\\\\-])`, "mu").test(facts);
+function markdownProse(text, hideInlineCode = false) {
+  // 保留字符位置，方便从原文中仅替换链接目标；示例和注释不是事实入口。
+  const blank = (value) => value.replace(/[^\n]/g, " ");
+  let fence = null;
+  let fenceDepth = 0;
+  let quoteDepth = 0;
+  const listIndents = [];
+  let prose = text.replace(/<!--[\s\S]*?(?:-->|$)/g, blank)
+    .replace(/<(pre|code)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, blank)
+    .split("\n").map((original) => {
+    let line = original;
+    let depth = 0;
+    for (let prefix; (prefix = line.match(/^ {0,3}>[ \t]?/)); depth += 1) line = line.slice(prefix[0].length);
+    // 围栏属于引用容器；离开容器后不能吞掉后面的真实正文。
+    if (fence && depth < fenceDepth) fence = null;
+    if (!fence && depth !== quoteDepth) {
+      listIndents.length = 0;
+      quoteDepth = depth;
+    }
+    const indent = line.match(/^ */)[0].length;
+    if (!fence && line.trim()) {
+      while (listIndents.length && indent < listIndents.at(-1)) listIndents.pop();
+    }
+    const contentIndent = listIndents.at(-1) ?? 0;
+    const marker = indent >= contentIndent ? line.slice(contentIndent).match(/^ {0,3}(`{3,}|~{3,})(.*)$/) : null;
+    if (fence) {
+      if (depth === fenceDepth && marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) fence = null;
+      return blank(original);
+    }
+    if (marker) {
+      fence = marker[1];
+      fenceDepth = depth;
+      return blank(original);
+    }
+    if (!line.trim()) return original;
+    if (line.startsWith("\t") || indent >= contentIndent + 4) return blank(original);
+    const list = line.match(/^ *(?:[-+*]|\d+[.)])[ \t]+/);
+    if (list) listIndents.push(list[0].length);
+    return original;
+  }).join("\n");
+  if (hideInlineCode) prose = prose.replace(/(`+)[^\n]*?\1(?!`)/g, blank);
+  return prose;
+}
+
+function markdownInlineLinks(text) {
+  // 返回实际目标在原文中的位置；引用式链接重定位其定义，且只处理正文确实使用的定义。
+  const pattern = /(?<![!\\])(\[(?:\\.|[^\]\\\n])+\]\([ \t]*)(<[^<>\n]*>|(?:\\.|[^\\\s()]|\((?:\\.|[^\\()\n])*\))+)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*\)/g;
+  const blank = (value) => value.replace(/[^\n]/g, " ");
+  const labelKey = (label) => label.replace(/\\([\[\]\\])/g, "$1").trim().replace(/\s+/g, " ").toLowerCase();
+  const definitions = new Map();
+  let prose = markdownProse(text, true).replace(/(^[ \t]*(?:>[ \t]*)*\[((?:\\.|[^\]\\\n])+)\]:[ \t]*(?:\n[ \t]*)?)(<[^<>\n]*>|(?:\\.|[^\\\s()]|\((?:\\.|[^\\()\n])*\))+)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*(?=\r?$)/gm, (match, prefix, label, destination, offset) => {
+    const key = labelKey(label);
+    if (!definitions.has(key)) definitions.set(key, {
+      destination, start: offset + prefix.length, end: offset + prefix.length + destination.length,
+    });
+    return blank(match);
   });
+  // 图片的尾部 [ref] 也不是独立快捷引用，必须随图片标签一并屏蔽。
+  prose = prose.replace(/(?<!\\)!\[(?:\\.|[^\]\\\n])*\](?:[ \t]*\[(?:\\.|[^\]\\\n])*\])?/g, blank);
+  const links = [...prose.matchAll(pattern)].map((match) => ({
+    destination: match[2],
+    start: match.index + match[1].length,
+    end: match.index + match[1].length + match[2].length,
+  }));
+  prose = prose.replace(pattern, blank);
+  const used = new Set();
+  for (const match of prose.matchAll(/(?<![!\\])\[((?:\\.|[^\]\\\n])+)\](?:[ \t]*\[((?:\\.|[^\]\\\n])*)\])?/g)) {
+    const key = labelKey(match[2] || match[1]);
+    if (!used.has(key) && definitions.has(key)) {
+      links.push(definitions.get(key));
+      used.add(key);
+    }
+  }
+  return links.sort((left, right) => left.start - right.start);
+}
+
+function localMarkdownTarget(destination) {
+  const target = (destination.startsWith("<") ? destination.slice(1, -1) : destination)
+    .replace(/\\([()\[\]<># ])/g, "$1");
+  if (/^[a-z][a-z\d+.-]*:/i.test(target) && !/^[a-z]:[\\/]/i.test(target)) return null;
+  if (target.startsWith("//")) return null;
+  const hash = target.indexOf("#");
+  try {
+    return {
+      path: decodeURIComponent(hash < 0 ? target : target.slice(0, hash)),
+      fragment: hash < 0 ? null : decodeURIComponent(target.slice(hash + 1)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function markdownHasAnchor(text, fragment) {
+  const prose = markdownProse(text);
+  const anchors = new Set();
+  for (const match of markdownProse(text, true).matchAll(/<a\s+[^>]*\b(?:id|name)=["']([^"']+)["'][^>]*>/gi)) anchors.add(match[1]);
+  const headings = new Set();
+  const lines = prose.split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const previous = lines[index - 1]?.trim();
+    const setext = previous && /^ {0,3}(?:=+|-+)[ \t]*$/.test(lines[index])
+      && (index === 1 || !lines[index - 2].trim())
+      && !/^(?:#{1,6}(?:\s|$)|>|[-+*]\s|\d+[.)]\s|<)/.test(previous);
+    const heading = lines[index].match(/^ {0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/)?.[1]
+      ?? (setext ? previous : null);
+    if (!heading) continue;
+    const base = heading.toLowerCase().replace(/<[^>]*>/g, "")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/[^\p{L}\p{N}\p{M}_\-\s]/gu, "").replace(/\s/g, "-");
+    let slug = base;
+    for (let suffix = 1; headings.has(slug); suffix += 1) slug = `${base}-${suffix}`;
+    headings.add(slug);
+    anchors.add(slug);
+  }
+  return anchors.has(fragment);
+}
+
+function factsIndexContainsEntry(resolvedEntry, context) {
+  const facts = readUtf8(context.factsPath, "项目事实索引");
+  const matches = markdownInlineLinks(facts).map(({ destination }) => localMarkdownTarget(destination))
+    .filter((target) => {
+      if (!target) return false;
+      const path = target.path ? resolve(dirname(context.factsPath), target.path.replace(/[\\/]/g, sep)) : context.factsPath;
+      return existsSync(path) && lstatSync(path).isFile() && samePath(path, resolvedEntry);
+    });
+  // 同一正文的章节链接也须有效，不能用另一条无锚点链接掩盖坏章节。
+  return matches.length > 0 && matches.every(({ fragment }) => fragment === null
+    || (/\.(?:md|markdown)$/i.test(resolvedEntry) && markdownHasAnchor(readUtf8(resolvedEntry), fragment)));
 }
 
 function validateInitializationEntry(group, record, context) {
   if (record.decision === "defer") return;
   const resolvedEntry = resolveInitializationEntry(record.entry, context);
-  if (group !== "overview" && !factsIndexContainsEntry(record.entry, resolvedEntry, context)) {
-    fail(`项目事实索引尚未登记${initializationGroupLabels[group]}正式入口：${record.entry}`, 2);
+  if (group !== "overview" && !factsIndexContainsEntry(resolvedEntry, context)) {
+    fail(`项目事实索引尚未登记${initializationGroupLabels[group]}正式入口（缺少匹配文件的可达Markdown链接或章节锚点无效）：${record.entry}`, 2);
   }
 }
 
@@ -1249,12 +1408,12 @@ function workerPolicySection(policy) {
   return `## Worker运行策略\n\n本节记录当前项目的Worker运行策略及批准范围。当前只提供平台默认或GPT-6.1矩阵；启用矩阵后PM可按任务选择模型与强度并在同一Worker正常续接时调整。具体候选和起点以worker-policy show为准；旧记录只用于升级识别，明确选择前不覆盖新建参数，续接保持原线程设置。工作台、任务包和根入口不复制本节。\n\n${renderWorkerPolicy(policy)}\n`;
 }
 
-function ensureWorkerPolicySection(overviewPath) {
+function ensureWorkerPolicySection(overviewPath, preimage = null) {
   const overview = readUtf8(overviewPath, "项目总览");
   const current = parseWorkerPolicy(overview);
   if (current.configured) return { changed: false, backup: null };
   const maintenance = overview.indexOf("## 维护边界");
-  const backup = backupControlFile(overviewPath, "worker-policy-migration");
+  const backup = preimage ?? backupControlFile(overviewPath, "worker-policy-migration");
   const updated = maintenance >= 0
     ? `${overview.slice(0, maintenance)}${workerPolicySection(defaultWorkerPolicy())}\n${overview.slice(maintenance)}`
     : `${overview.trimEnd()}\n\n${workerPolicySection(defaultWorkerPolicy())}`;
@@ -1262,7 +1421,7 @@ function ensureWorkerPolicySection(overviewPath) {
   return { changed: true, backup };
 }
 
-function saveWorkerPolicy(projectId, mode, approvedByValue, approvedAtValue = null) {
+function saveWorkerPolicy(projectId, mode, approvedByValue, approvedAtValue = null, preimage = null) {
   const { approvedBy, approvedAt } = validateWorkerPolicyApproval(mode, approvedByValue, approvedAtValue);
   const overviewPath = join(controlRoot, "projects", projectId, "项目总览.md");
   const overview = readUtf8(overviewPath, "项目总览");
@@ -1280,7 +1439,7 @@ function saveWorkerPolicy(projectId, mode, approvedByValue, approvedAtValue = nu
       ? `${overview.slice(0, maintenance)}${rendered}\n${overview.slice(maintenance)}`
       : `${overview.trimEnd()}\n\n${rendered}`;
   }
-  const backup = backupControlFile(overviewPath, "worker-policy");
+  const backup = preimage ?? backupControlFile(overviewPath, "worker-policy");
   // Refresh only this exact generated legacy sentence, never user-authored prose.
   updated = updated.replace(
     "本节记录当前项目的新建正式Worker运行策略状态。用户未确认时保持平台默认；任务分类由PM判断，具体模型映射由控制仓固定脚本唯一维护；工作台、任务包和根入口不复制本节。",
@@ -1474,18 +1633,43 @@ function removeLegacyRuntimeState() {
   return removed;
 }
 
-function registerProject(project, nameValue = null) {
+function renderProjectFactsIndex(project, name, factsPath) {
+  const templatePath = join(controlRoot, "docs", "AI编程协同机制", "项目事实", "README.md");
+  let template = readUtf8(templatePath, "项目事实索引模板");
+  for (const link of markdownInlineLinks(template).reverse()) {
+    const target = localMarkdownTarget(link.destination);
+    if (!target?.path || isAbsolute(target.path) || /^[a-z]:[\\/]/i.test(target.path)) continue;
+    const resource = resolve(dirname(templatePath), target.path.replace(/[\\/]/g, sep));
+    const relocated = display(relative(dirname(factsPath), resource));
+    const encoded = relocated.split("/").map(encodeURIComponent).join("/");
+    const destination = `${encoded}${target.fragment === null ? "" : `#${encodeURIComponent(target.fragment)}`}`;
+    template = `${template.slice(0, link.start)}${destination}${template.slice(link.end)}`;
+  }
+  const formats = display(relative(dirname(factsPath), resolve(dirname(templatePath), "../模板")));
+  template = template.replace(/^# .+$/m, `# ${name} 项目事实索引`)
+    .replace(/^> 初始化后[^\n]*$/m, `> 项目编号：\`${project.projectId}\`。本索引登记当前项目已经采用的长期事实入口；未知入口保持待确认，不是任务启动许可证或固定文件清单。`)
+    .replaceAll("<project-id>", project.projectId)
+    .replaceAll("`../模板/`", `\`${formats}/\``);
+  return `${template.trimEnd()}\n\n- [返回项目总览](../项目总览.md)\n`;
+}
+
+function registerProject(project, nameValue = null, preimage = null) {
   if (samePath(project.projectRoot, controlRoot)) {
     fail("控制仓不能把自身登记或融合为业务项目；请传入承载该控制仓的项目根，或另一个真实业务项目目录", 2);
   }
-  ensureControl();
-  const localBackup = backupLocal("before-project-register");
   const sharedPath = join(controlRoot, "shared", "projects", `${project.projectId}.md`);
   const localPath = join(controlRoot, "local", "projects", `${project.projectId}.md`);
   const overviewPath = join(controlRoot, "projects", project.projectId, "项目总览.md");
   const factsPath = join(controlRoot, "projects", project.projectId, "项目事实", "README.md");
   const name = String(nameValue || project.name).trim().replace(/[\r\n]+/g, " ");
   if (!name) fail("项目名称不能为空");
+  const existingRegistration = existsSync(localPath) ? readUtf8(localPath) : "";
+  // 清单归执行副本登记所有者维护；重新登记项目不得删除或重建其声明。
+  const cloneManifestFields = (existingRegistration.match(/^---\n([\s\S]*?)\n---(?:\n|$)/)?.[1] ?? "")
+    .split("\n").filter((line) => /^\s*execution_clone_manifests_json\s*:/.test(line));
+  const cloneManifestText = cloneManifestFields.length ? `${cloneManifestFields.join("\n")}\n` : "";
+  const localBackup = preimage ?? backupProjectMutation(project);
+  ensureControl();
   if (!existsSync(sharedPath)) {
     writeUtf8(sharedPath, `---\nid: ${project.projectId}\nname: ${name}\nremote: ${project.remote ?? ""}\nupdated_at: ${new Date().toISOString()}\n---\n\n# ${name}\n\n## 共同资料入口\n\n- 待初始化。\n`);
   } else if (project.remote) {
@@ -1528,25 +1712,10 @@ ${workerPolicySection(defaultWorkerPolicy())}
 - 能从代码、配置、Git、测试或环境确认的内容先调查；无法确认的内容保持待确认。
 `);
   }
-  ensureInitializationSection(overviewPath);
-  ensureWorkerPolicySection(overviewPath);
+  ensureInitializationSection(overviewPath, localBackup);
+  ensureWorkerPolicySection(overviewPath, localBackup);
   if (!existsSync(factsPath)) {
-    writeUtf8(factsPath, `# ${name} 项目事实索引
-
-> 项目编号：\`${project.projectId}\`。本索引只登记当前项目已经采用的长期事实入口，不是任务启动许可证或固定文件清单。
-
-| 事实领域 | 当前正式入口 |
-| --- | --- |
-| 产品、设计与契约 | 待登记已有正式文档 |
-| 技术架构与核心逻辑 | 待登记已有正式文档 |
-| 工程开发与测试 | 待登记已有正式文档 |
-| 运行环境、部署与回滚 | 待登记已有正式文档 |
-| 安全与凭据来源 | 待登记合法来源；不得写入秘密值 |
-
-- 当前任务需要某类事实时才定点调查和补充；其他空项不阻断执行。
-- 已有可信文档继续作为唯一正文，本索引只登记入口，不复制内容。
-- [返回项目总览](../项目总览.md)
-`);
+    writeUtf8(factsPath, renderProjectFactsIndex(project, name, factsPath));
   }
   const registeredRepositories = Array.isArray(project.registeredRepositories)
     ? project.registeredRepositories
@@ -1565,7 +1734,7 @@ ${workerPolicySection(defaultWorkerPolicy())}
   const canonicalRepositories = project.canonicalRepositories?.length
     ? project.canonicalRepositories.map((item) => `- ${item.remote} → ${item.path}`).join("\n")
     : "- 无重复remote需要选择。";
-  writeUtf8(localPath, `---\nid: ${project.projectId}\nname: ${name}\npath: ${project.projectRoot}\nremote: ${project.remote ?? ""}\nhost_id: ${project.hostId ?? ""}\ncodex_project_id: ${project.codexProjectId ?? ""}\nrepositories_json: ${repositoriesJson}\nupdated_at: ${new Date().toISOString()}\n---\n\n# ${name} 本机登记\n\n- 本机项目路径：${project.projectRoot}\n- 根入口：${project.agentsPath ?? "尚未建立"}\n- Codex主机：${project.hostId ?? "待登记"}\n- Codex项目：${project.codexProjectId ?? "待登记"}\n\n## 正式执行仓路径\n\n${repositoryList}\n\n## 重复remote的本机正式路径\n\n${canonicalRepositories}\n`);
+  writeUtf8(localPath, `---\nid: ${project.projectId}\nname: ${name}\npath: ${project.projectRoot}\nremote: ${project.remote ?? ""}\nhost_id: ${project.hostId ?? ""}\ncodex_project_id: ${project.codexProjectId ?? ""}\nrepositories_json: ${repositoriesJson}\n${cloneManifestText}updated_at: ${new Date().toISOString()}\n---\n\n# ${name} 本机登记\n\n- 本机项目路径：${project.projectRoot}\n- 根入口：${project.agentsPath ?? "尚未建立"}\n- Codex主机：${project.hostId ?? "待登记"}\n- Codex项目：${project.codexProjectId ?? "待登记"}\n\n## 正式执行仓路径\n\n${repositoryList}\n\n## 重复remote的本机正式路径\n\n${canonicalRepositories}\n`);
   return { sharedPath, overviewPath, factsPath, localPath, localBackup };
 }
 
@@ -1682,7 +1851,7 @@ function selectRegisteredRepositories(project) {
   return repositories;
 }
 
-function adoptLegacyWorkbench(project) {
+function adoptLegacyWorkbench(project, preimage = null) {
   const legacy = project.legacyWorkbench;
   if (!legacy?.parseable || legacy.historical || legacy.active.length === 0) return null;
   const workbenchPath = join(controlRoot, "local", "当前工作台.md");
@@ -1712,7 +1881,7 @@ function adoptLegacyWorkbench(project) {
   for (const placeholder of placeholders.sort((left, right) => right.lineIndex - left.lineIndex)) {
     lines.splice(placeholder.lineIndex + imported.length, 1);
   }
-  const backup = backupLocal("before-legacy-workbench-adoption");
+  const backup = preimage ?? backupLocal("before-legacy-workbench-adoption");
   writeUtf8(workbenchPath, lines.join("\n").replace(/\n*$/, "\n"));
   const historyPath = join(controlRoot, "local", "history", "legacy", `${project.projectId}-workbench.md`);
   const completedRows = legacy.completed.length
@@ -1761,16 +1930,7 @@ function installProjectEntry(project) {
   }
   const projectRuntimeCleanup = prepareLegacyRuntimeCleanup(project.projectRoot, "项目");
   const controlRuntimeCleanup = prepareLegacyRuntimeCleanup(controlRoot, "控制仓");
-  registerProject(project, arg("--name"));
-  const projectIsolation = isInside(project.projectRoot, controlRoot)
-    ? ensureProjectControlIsolation(project)
-    : { changed: false, rules: [], backup: null };
-  const adoption = arg("--adopt-legacy-workbench") === "yes" ? adoptLegacyWorkbench(project) : null;
-  const workbenchMigration = executeRuntimeRequest({
-    schemaVersion: 1,
-    requestId: `install-workbench-migration-${timestamp()}`,
-    action: "workbench.migrate",
-  }, { controlRoot }).result;
+  const preimage = backupProjectMutation(project, true);
   const target = join(project.projectRoot, "AGENTS.md");
   const existing = existsSync(target) ? readUtf8(target) : "";
   const backupDirectory = join(controlRoot, "local", "backups", "project-entry", project.projectId);
@@ -1797,18 +1957,28 @@ function installProjectEntry(project) {
   }
   const migratedEntry = workerPolicyMode ? removeLegacyWorkerPolicyOverrides(existing) : { text: existing, removed: [] };
   const rendered = renderProjectEntry(project, migratedEntry.text);
+  registerProject(project, arg("--name"), preimage);
+  const projectIsolation = isInside(project.projectRoot, controlRoot)
+    ? ensureProjectControlIsolation(project, preimage)
+    : { changed: false, rules: [], backup: null };
+  const adoption = arg("--adopt-legacy-workbench") === "yes" ? adoptLegacyWorkbench(project, preimage) : null;
+  const workbenchMigration = executeRuntimeRequest({
+    schemaVersion: 1,
+    requestId: `install-workbench-migration-${timestamp()}`,
+    action: "workbench.migrate",
+  }, { controlRoot }).result;
   writeUtf8(target, rendered.text);
   const workerPolicy = workerPolicyMode
-    ? saveWorkerPolicy(project.projectId, workerPolicyMode, workerPolicyApprovedBy, arg("--worker-policy-approved-at"))
+    ? saveWorkerPolicy(project.projectId, workerPolicyMode, workerPolicyApprovedBy, arg("--worker-policy-approved-at"), preimage)
     : null;
   const legacyRuntimeCleanup = [
     applyLegacyRuntimeCleanup(projectRuntimeCleanup),
     applyLegacyRuntimeCleanup(controlRuntimeCleanup),
   ];
   const removedRuntimeState = removeLegacyRuntimeState();
-  backupLocal("project-entry");
   return {
     target,
+    preimage,
     backupDirectory: existing || projectRuntimeCleanup.hadHooks || projectRuntimeCleanup.hadGuard
       || controlRuntimeCleanup.hadHooks || controlRuntimeCleanup.hadGuard ? backupDirectory : null,
     controlRelative: rendered.controlRelative,
@@ -1977,6 +2147,11 @@ function restoreLocal() {
   if (snapshotRelative.startsWith("..") || isAbsolute(snapshotRelative) || !existsSync(snapshot)) {
     fail(`备份不属于当前控制仓：${display(snapshot)}`);
   }
+  for (let directory = snapshot; !samePath(directory, root); directory = dirname(directory)) {
+    if (existsSync(join(directory, "project-preimage.json")) || /-project-preimage-(?:register|entry)(?:-\d+)?$/.test(basename(directory))) {
+      fail("这是项目写入前像（或其未完成备份），不能作为整个local快照恢复；请按project-preimage.json逐项恢复", 2);
+    }
+  }
   const currentBackup = backupLocal("before-restore");
   const target = join(controlRoot, "local");
   const temporary = join(controlRoot, `.local-restore-${Date.now()}`);
@@ -2054,6 +2229,7 @@ else if (command === "init-control") {
   console.log(JSON.stringify({
     projectId: project.projectId,
     target: display(result.target),
+    preimage: display(result.preimage),
     backupDirectory: result.backupDirectory ? display(result.backupDirectory) : null,
     controlRelative: result.controlRelative,
     legacyRuntimeCleanup: result.legacyRuntimeCleanup,

@@ -78,7 +78,10 @@ try {
   const promotedResult = JSON.parse(controlCommand(["register-project", "--project-root", localFirstProject]).stdout);
   const promoted = promotedResult.project;
   check("本地项目绑定remote后沿用原编号", localFirst.projectId === promoted.projectId && localFirst.projectId.startsWith("local-"), `${localFirst.projectId} -> ${promoted.projectId}`);
-  check("项目登记覆盖前自动备份local", readFileSync(join(promotedResult.localBackup, "projects", `${promoted.projectId}.md`), "utf8").includes("before-promotion"), promotedResult.localBackup);
+  const registrationPreimage = JSON.parse(readFileSync(join(promotedResult.localBackup, "project-preimage.json"), "utf8"));
+  const savedRegistration = registrationPreimage.objects.find((item) => resolve(item.path) === resolve(localFirstRecord));
+  check("项目登记覆盖前精确备份原登记", savedRegistration?.existed
+    && readFileSync(join(promotedResult.localBackup, savedRegistration.saved), "utf8").includes("before-promotion"), promotedResult.localBackup);
   const promotedShared = readFileSync(join(control, "shared", "projects", `${promoted.projectId}.md`), "utf8");
   check("原项目记录补入remote而不新建项目", promotedShared.includes("https://example.com/team/local-first.git"));
   cpSync(join(repositoryRoot, "examples", "minimal-project"), secondClone, { recursive: true });
@@ -108,7 +111,8 @@ try {
 
   const nestedInstall = JSON.parse(controlCommand(["install-project-entry", "--project-root", project, "--confirm-fusion", "yes"]).stdout);
   const firstEntry = readFileSync(join(project, "AGENTS.md"), "utf8");
-  check("项目入口包含完整3.2内核", firstEntry.includes("BEYOND-RUNTIME-VERSION: 3.2.5"));
+  const releaseVersion = JSON.parse(readFileSync(join(packageRoot, "beyond-release.json"), "utf8")).releaseVersion;
+  check("项目入口包含当前发行内核标记", firstEntry.includes(`BEYOND-RUNTIME-VERSION: ${releaseVersion}`));
   check("项目入口登记项目内控制仓", firstEntry.includes("BEYOND-CONTROL-ROOT: ./beyond-control"));
   check("项目内控制仓文档链接可达", firstEntry.includes("](./beyond-control/docs/AI编程协同机制/00-模板入口.md)"));
   check("项目入口把控制脚本映射到项目内控制仓", firstEntry.includes("`./beyond-control/scripts/beyond-control.mjs"));
@@ -124,7 +128,9 @@ try {
   const projectOverview = join(control, "projects", projectId, "项目总览.md");
   const projectFacts = join(control, "projects", projectId, "项目事实", "README.md");
   check("最低接入建立可达的项目总览", existsSync(projectOverview) && readFileSync(projectOverview, "utf8").includes(projectId));
-  check("最低接入建立可达的事实索引", existsSync(projectFacts) && readFileSync(projectFacts, "utf8").includes("当前任务需要某类事实时才定点调查"));
+  check("最低接入建立可达的事实索引", existsSync(projectFacts)
+    && readFileSync(projectFacts, "utf8").includes("当前动作需要某类事实时")
+    && readFileSync(projectOverview, "utf8").includes("[项目事实索引](项目事实/README.md)"));
   check("最低接入明确返回唯一初始化选择", nestedInstall.initialization?.status === "awaiting-choice"
     && nestedInstall.initialization.nextRequiredDecision.includes("现在完整初始化")
     && nestedInstall.initialization.nextRequiredDecision.includes("后续按需补齐"), JSON.stringify(nestedInstall.initialization));
@@ -188,7 +194,10 @@ try {
   check("项目总览以外的入口必须先被事实索引承接", rejectedUnindexedEntry.output.includes("项目事实索引尚未登记"), rejectedUnindexedEntry.output);
   const documentedGroups = ["architecture", "development", "testing", "operations", "security"];
   for (const group of documentedGroups) writeFileSync(join(project, "docs", `${group}.md`), `# ${group}\n`, "utf8");
-  writeFileSync(projectFacts, `${readFileSync(projectFacts, "utf8")}\n${documentedGroups.map((group) => `- docs/${group}.md`).join("\n")}\n`, "utf8");
+  writeFileSync(projectFacts, `${readFileSync(projectFacts, "utf8")}\n${documentedGroups.map((group) => {
+    const target = relative(dirname(projectFacts), join(project, "docs", `${group}.md`)).replaceAll("\\", "/");
+    return `- [${group}](${target})`;
+  }).join("\n")}\n`, "utf8");
   controlCommand(["initialization", "--action", "record", "--project-id", projectId,
     "--group", "overview", "--decision", "register", "--entry", "README.md"]);
   for (const group of documentedGroups) {

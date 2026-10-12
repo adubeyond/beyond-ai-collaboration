@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { currentProcessIdentity, processIsGone } from './process-identity.mjs';
+import { currentProcessIdentity, processIsGone, initialRecoveryWindowIsGone } from './process-identity.mjs';
 
 export const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const sha256File = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -71,7 +71,10 @@ export class CliTaskStore {
   }
   withLock(identity, action) {
     const dir = this.checkedPath(this.taskDir(identity), { createDirectory: true });
-    const lock = this.checkedPath(path.join(dir, '.lock'));
+    // The validated parent is stable; the lock leaf may disappear during normal release.
+    // Do not realpath that transient leaf. Reject links; rename below arbitrates ownership.
+    const lock = path.join(dir, '.lock');
+    if (fs.lstatSync(lock, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error('CLI linked path escape');
     const prepared = `${lock}.${process.pid}.${crypto.randomUUID()}`;
     fs.mkdirSync(prepared);
     try {
@@ -115,14 +118,62 @@ export class CliTaskStore {
     if (state.currentResultPath && state.currentResultPath !== path.join(this.runDir(identity, state.runNumber), 'result.json')) throw new Error('CLI result path mismatch');
     return state;
   }
-  beginRun(identity, { requestId, prompt, expectedRunNumber, expectedSessionId, ownerTurnId, profile, configuration, faultAt = null }) {
+  #verifyInitialSessionRecovery(identity, state, recovery, prompt, profile) {
+    if (!recovery || typeof recovery !== 'object' || Array.isArray(recovery)
+      || Object.keys(recovery).some(key => !['stateSha256', 'resultSha256', 'reason'].includes(key))
+      || !/^[a-f0-9]{64}$/.test(recovery.stateSha256 ?? '') || !/^[a-f0-9]{64}$/.test(recovery.resultSha256 ?? '')
+      || typeof recovery.reason !== 'string' || !recovery.reason.trim()) throw new Error('CLI initial session recovery requires exact fingerprints and reason');
+    if (digest(state) !== recovery.stateSha256) throw new Error('CLI state fingerprint mismatch');
+    if (state.runNumber !== 1 || state.sessionId !== null || state.status !== 'unknown') {
+      throw new Error('CLI initial session recovery only permits an unbound first failed run');
+    }
+    const directory = this.runDir(identity, 1), saved = leaf => this.readJson(path.join(directory, leaf));
+    const previous = saved('run.json'), input = saved('input.json'), result = this.readResult(identity, 1);
+    sameIdentity(previous, identity); sameIdentity(result, identity);
+    const originalRequest = this.readJson(path.join(this.taskDir(identity), 'requests', `${validIdentifier(previous.requestId)}.json`));
+    const originalFingerprint = digest({ requestId: previous.requestId, prompt: input.prompt, expectedRunNumber: 0, expectedSessionId: null,
+      ...(previous.profile ? { profile: previous.profile } : {}), ...(state.configuration ? { configuration: state.configuration } : {}) });
+    if (digest(originalRequest.run) !== digest(previous) || input.fingerprint !== originalRequest.fingerprint
+      || originalFingerprint !== originalRequest.fingerprint) throw new Error('CLI initial session recovery original request evidence changed');
+    if (previous.runNumber !== 1 || previous.sessionId !== null || result.sessionId !== null
+      || result.status !== state.status || result.finalText !== ''
+      || state.currentResultPath !== path.join(directory, 'result.json')) throw new Error('CLI initial session recovery has bound or unstable result evidence');
+    if (sha256File(state.currentResultPath) !== recovery.resultSha256) throw new Error('CLI result fingerprint mismatch');
+    const review = this.readReview(identity, 1);
+    if (review?.decision !== 'continue' || review.runNumber !== 1 || review.resultSha256 !== recovery.resultSha256) {
+      throw new Error('CLI initial session recovery requires an exact continue review');
+    }
+    if (previous.profile?.provider !== 'claude' || previous.profile.mode !== 'interactive'
+      || digest(profile) !== digest(previous.profile)) throw new Error('CLI initial session recovery profile changed or unsupported');
+    if (prompt !== input.prompt) throw new Error('CLI initial session recovery prompt changed');
+    // SessionStart is saved before registration; only registration can dispatch a business prompt.
+    if (fs.existsSync(this.checkedPath(path.join(directory, 'claude-session-start.json')))
+      || (fs.existsSync(this.checkedPath(path.join(directory, 'events.jsonl')))
+        && fs.statSync(path.join(directory, 'events.jsonl')).size > 0)) throw new Error('CLI initial session recovery has session or dispatch evidence');
+    const endpoint = this.readJson(path.join(this.taskDir(identity), 'interactive.json'));
+    sameIdentity(endpoint, identity);
+    const exit = saved('claude-view-exit.json'), manager = saved('manager-process.json'), cli = saved('cli-process.json');
+    if (endpoint.provider !== 'claude' || endpoint.status !== 'closed' || endpoint.sessionId !== null
+      || path.resolve(endpoint.executionRoot) !== path.resolve(state.executionRoot)
+      || endpoint.profileSha256 !== digest(previous.profile) || !endpoint.launchId || endpoint.launchId !== exit.launchId
+      || !Number.isInteger(exit.exitCode) || !exit.error || !endpoint.manager || !endpoint.server
+      || digest(endpoint.manager) !== digest(manager) || digest(endpoint.server) !== digest(manager)
+      || cli.runNumber !== 1 || cli.requestId !== previous.requestId) throw new Error('CLI initial session recovery launch proof mismatch');
+    if (!processIsGone(manager)) throw new Error('CLI manager still exists; initial session recovery cannot restart it');
+    if (!processIsGone(cli)) throw new Error('CLI process still exists; initial session recovery cannot restart it');
+    if (!initialRecoveryWindowIsGone(endpoint.view, result.completedAt, { legacyExitEvidence: { resultError: result.error, viewExitError: exit.error } })) {
+      throw new Error('CLI window still exists; initial session recovery cannot restart it');
+    }
+    return { ...clone(recovery), previousRunNumber: 1, reviewSha256: digest(review), launchId: endpoint.launchId };
+  }
+  beginRun(identity, { requestId, prompt, expectedRunNumber, expectedSessionId, ownerTurnId, profile, configuration, initialSessionRecovery, faultAt = null }) {
     validIdentifier(requestId);
     if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('CLI prompt required');
     if (ownerTurnId !== undefined) validIdentifier(ownerTurnId);
     return this.withLock(identity, () => {
       this.assertTransferSettled(identity);
       const state = this.read(identity), requestFile = this.checkedPath(path.join(this.taskDir(identity), 'requests', `${requestId}.json`));
-      const fingerprint = digest({ requestId, prompt, expectedRunNumber, expectedSessionId, ...(profile ? { profile } : {}), ...(configuration ? { configuration } : {}) });
+      const fingerprint = digest({ requestId, prompt, expectedRunNumber, expectedSessionId, ...(profile ? { profile } : {}), ...(configuration ? { configuration } : {}), ...(initialSessionRecovery !== undefined ? { initialSessionRecovery } : {}) });
       let run;
       if (fs.existsSync(requestFile)) {
         const previous = this.readJson(requestFile);
@@ -133,13 +184,16 @@ export class CliTaskStore {
       if (expectedSessionId !== state.sessionId) throw new Error('CLI session mismatch');
       if (expectedRunNumber !== state.runNumber) throw new Error('CLI stale run conflict');
       if (state.runNumber && !terminal.has(state.status)) throw new Error('CLI active run conflict');
-      if (state.runNumber) {
+      const recovery = initialSessionRecovery !== undefined
+        ? this.#verifyInitialSessionRecovery(identity, state, initialSessionRecovery, prompt, profile) : null;
+      if (state.runNumber && !recovery) {
         if (!state.sessionId) throw new Error('CLI session missing; explicit recovery required');
         if (this.readReview(identity, state.runNumber)?.decision !== 'continue') throw new Error('CLI continuation review required');
       }
       const number = state.runNumber + 1, dir = this.checkedPath(this.runDir(identity, number), { createDirectory: true });
-      run ??= { ...Object.fromEntries(['projectId', 'taskId', 'ownerThreadId'].map(k => [k, identity[k]])), runNumber: number, requestId, sessionId: state.sessionId, ownerTurnId: ownerTurnId ?? state.ownerTurnId, status: 'starting', resultPath: path.join(dir, 'result.json'), ...(profile ? { profile: clone(profile) } : {}) };
+      run ??= { ...Object.fromEntries(['projectId', 'taskId', 'ownerThreadId'].map(k => [k, identity[k]])), runNumber: number, requestId, sessionId: state.sessionId, ownerTurnId: ownerTurnId ?? state.ownerTurnId, status: 'starting', resultPath: path.join(dir, 'result.json'), ...(profile ? { profile: clone(profile) } : {}), ...(recovery ? { initialSessionRecovery: recovery } : {}) };
       if (run.runNumber !== number || run.sessionId !== state.sessionId) throw new Error('CLI replay intent mismatch');
+      if (recovery && digest(run.initialSessionRecovery) !== digest(recovery)) throw new Error('CLI initial session recovery evidence changed');
       const immutable = (file, value) => { if (fs.existsSync(file)) { if (digest(this.readJson(file)) !== digest(value)) throw new Error('CLI run intent conflict'); } else atomicJson(file, value); };
       this.checkedPath(path.dirname(requestFile), { createDirectory: true });
       immutable(requestFile, { fingerprint, run });

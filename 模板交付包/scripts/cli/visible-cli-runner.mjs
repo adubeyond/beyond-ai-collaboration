@@ -17,14 +17,18 @@ export async function runVisibleCli({ binding, run: firstRun, profile, prompt, s
   fs.writeFileSync(tokenPath, token, { flag: 'wx', mode: 0o600 });
   const safe = value => redact(String(value).split(token).join('[REDACTED]'));
   let run = firstRun, sessionId = run.sessionId, native = null, active = true, detached = false, closing = false, closed = false, stopSent = false, channel = null, endpoint, watcher, startup;
-  let pendingCommand = null, queue = Promise.resolve(), endLifetime;
+  let pendingCommand = null, commandIdleTimer = null, queue = Promise.resolve(), endLifetime;
   const lifetime = new Promise(resolve => { endLifetime = resolve; }), notifications = new Set();
   const persist = status => atomicJson(endpointPath, { ...endpoint, sessionId, status, server: native ?? managerIdentity });
   const log = item => fs.appendFileSync(store.checkedPath(path.join(store.runDir(run, run.runNumber), 'events.jsonl')), safe(JSON.stringify(item)) + '\n', { mode: 0o600 });
   const answer = (response, status, value) => { if (!response.destroyed && !response.writableEnded) { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(value)); } };
+  function releaseChannel(response) {
+    if (channel !== response) return;
+    clearTimeout(commandIdleTimer); commandIdleTimer = null; channel = null;
+  }
   function command(value) {
     if (pendingCommand) throw new Error('Native CLI command already pending');
-    if (channel && !channel.destroyed) { const response = channel; channel = null; answer(response, 200, value); }
+    if (channel && !channel.destroyed) { const response = channel; releaseChannel(response); answer(response, 200, value); }
     else pendingCommand = value;
   }
   function notify(resultRun) {
@@ -50,7 +54,7 @@ export async function runVisibleCli({ binding, run: firstRun, profile, prompt, s
       return; // View's exit record ends the lifetime; no guessed process death.
     }
     closed = true; watcher?.close();
-    if (channel) { answer(channel, 410, { error: 'Native CLI owner closed' }); channel = null; }
+    if (channel) { const response = channel; releaseChannel(response); answer(response, 410, { error: 'Native CLI owner closed' }); }
     server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
     persist('closed');
     for (const file of [tokenPath, connectionPath]) if (fs.existsSync(file)) fs.unlinkSync(file);
@@ -77,7 +81,16 @@ export async function runVisibleCli({ binding, run: firstRun, profile, prompt, s
     if (request.method === 'GET' && request.url === '/command') {
       if (channel) return answer(response, 409, { error: 'Command channel already connected' });
       if (pendingCommand) { const value = pendingCommand; pendingCommand = null; answer(response, 200, value); queue = queue.then(checkStop).catch(error => log({ error: safe(error.message) })); return; }
-      channel = response; response.on('close', () => { if (channel === response) channel = null; }); return;
+      channel = response; response.on('close', () => releaseChannel(response));
+      if (profile.provider === 'claude') {
+        commandIdleTimer = setTimeout(() => {
+          if (channel !== response) return;
+          releaseChannel(response);
+          if (!response.destroyed && !response.writableEnded) { response.writeHead(204); response.end(); }
+        }, 25000);
+        commandIdleTimer.unref?.();
+      }
+      return;
     }
     const handle = async () => {
       if (request.method !== 'POST') throw new Error('Unsupported Native CLI request');
