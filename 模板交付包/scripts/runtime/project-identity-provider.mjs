@@ -266,6 +266,7 @@ function runGit(repositoryRoot, args) {
   const result = spawnSync('git', ['-C', repositoryRoot, ...args], {
     encoding: 'utf8',
     windowsHide: true,
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_NO_REPLACE_OBJECTS: '1' },
   });
   return {
     status: result.status ?? 1,
@@ -288,12 +289,47 @@ function gitRepositoryFacts(repositoryRoot) {
   };
 }
 
+// Resolving a PM's target from an ordinary subdirectory is not a Worker write.
+// Keep distinct checkouts visible so the existing relation checks still apply.
+function defaultResolutionExecutionRoot(cwd, projectRoot, repositoryRoot) {
+  if (samePath(cwd, projectRoot)) return repositoryRoot;
+  if (!insideOrEqual(projectRoot, cwd)) return cwd;
+  const repository = gitRepositoryFacts(cwd);
+  // An outer Git repository does not enlarge a registered non-Git project's scope.
+  if (repository) return insideOrEqual(repository.topLevel, projectRoot) ? repositoryRoot : repository.topLevel;
+  // A broken Git marker must not be mistaken for an ordinary non-Git folder.
+  for (let directory = cwd; insideOrEqual(projectRoot, directory); directory = path.dirname(directory)) {
+    try {
+      fs.lstatSync(path.join(directory, '.git'));
+      return cwd;
+    } catch (error) {
+      if (error.code !== 'ENOENT') return cwd;
+    }
+    if (samePath(directory, projectRoot)) break;
+  }
+  return repositoryRoot;
+}
+
 function registeredWorktrees(repositoryRoot) {
   const result = runGit(repositoryRoot, ['worktree', 'list', '--porcelain']);
   if (result.status !== 0) return [];
   return result.stdout.split(/\r?\n/)
     .filter((line) => line.startsWith('worktree '))
     .map((line) => canonicalPath(line.slice('worktree '.length).trim()));
+}
+
+function parseCloneManifestRegistrations(value) {
+  if (value === undefined) return [];
+  const entries = JSON.parse(value);
+  if (!Array.isArray(entries) || entries.some((entry) => !entry || typeof entry !== 'object'
+    || !path.isAbsolute(entry.manifestPath ?? '') || !/^[a-f0-9]{64}$/.test(entry.sha256 ?? '')
+    || typeof entry.taskId !== 'string' || !entry.taskId.trim())) {
+    throw new Error('execution_clone_manifests_json requires absolute manifestPath, sha256 and taskId');
+  }
+  if (new Set(entries.map((entry) => pathKey(entry.manifestPath))).size !== entries.length) {
+    throw new Error('execution_clone_manifests_json contains duplicate manifests');
+  }
+  return entries;
 }
 
 function markerValues(text, name) {
@@ -313,9 +349,14 @@ function readRegistrationDirectory(directory, kind) {
     const facts = parseFrontmatter(fs.readFileSync(file, 'utf8'));
     if (kind === 'local') {
       let repositories = [];
+      let executionCloneManifests = [];
       try { repositories = parseRepositories(facts.repositories_json ?? facts.repository_roots_json, facts.path, facts.remote); }
       catch (error) {
         issues.push({ kind, file, path: facts.path || null, reason: `invalid_repositories:${error.message}` });
+      }
+      try { executionCloneManifests = parseCloneManifestRegistrations(facts.execution_clone_manifests_json); }
+      catch (error) {
+        issues.push({ kind, file, path: facts.path || null, reason: `invalid_execution_clones:${error.message}` });
       }
       const record = {
         beyondProjectId: facts.id || null,
@@ -325,6 +366,7 @@ function readRegistrationDirectory(directory, kind) {
         remote: normalizeRemote(facts.remote),
         repositories,
         repositoryRoots: repositories.map((item) => item.path),
+        executionCloneManifests,
         sourceFile: file,
       };
       if (!record.beyondProjectId || !record.path) {
@@ -463,6 +505,91 @@ export class ProjectIdentityProvider {
     return { registeredRepository, repositoryFacts };
   }
 
+  validateDeclaredClone(record, repositoryRoot, executionRoot, executionRepository) {
+    const matches = [];
+    for (const declaration of record.executionCloneManifests) {
+      const file = canonicalPath(declaration.manifestPath);
+      if (!insideOrEqual(path.join(record.path, '.codex-local'), file)) {
+        throw new Error('declared clone manifest is outside the canonical local area');
+      }
+      const bytes = fs.readFileSync(file);
+      if (crypto.createHash('sha256').update(bytes).digest('hex') !== declaration.sha256) {
+        throw new Error('declared clone manifest hash mismatch');
+      }
+      const manifest = JSON.parse(bytes);
+      if (manifest.schemaVersion !== 1 || manifest.projectId !== record.beyondProjectId
+        || !samePath(manifest.canonicalProjectRoot, record.path) || manifest.task !== declaration.taskId
+        || !samePath(manifest.root, path.dirname(file)) || !Array.isArray(manifest.copies)
+        || !Array.isArray(manifest.repositories) || !Array.isArray(manifest.formalRepositories)
+        || new Set(manifest.copies.map((copy) => pathKey(copy.path))).size !== manifest.copies.length) {
+        throw new Error('declared clone manifest project or scope mismatch');
+      }
+      for (const copy of manifest.copies.filter((entry) => samePath(entry.path, executionRoot))) {
+        if (!insideOrEqual(manifest.root, executionRoot) || samePath(manifest.root, executionRoot)
+          || !samePath(copy.formalRepository, repositoryRoot) || !samePath(copy.origin, repositoryRoot)
+          || !manifest.formalRepositories.some((root) => samePath(root, repositoryRoot))) {
+          throw new Error('declared clone repository mapping mismatch');
+        }
+        const repositories = manifest.repositories.filter((entry) => entry.repository === copy.repository);
+        if (repositories.length !== 1) throw new Error('declared clone source registration is not unique');
+        const source = repositories[0];
+        if (!/^[a-f0-9]{40}$/.test(source.sourceHead ?? '') || !/^[a-f0-9]{40}$/.test(source.snapshotCommit ?? '')
+          || copy.head !== source.snapshotCommit || copy.preservedBaselineBranch !== source.baselineBranch) {
+          throw new Error('declared clone source snapshot mismatch');
+        }
+        const pairPath = canonicalPath(path.join(executionRoot, '..', 'pair-manifest.json'));
+        if (!insideOrEqual(manifest.root, pairPath)) throw new Error('declared clone pair is outside its registered root');
+        const pair = JSON.parse(fs.readFileSync(pairPath, 'utf8'));
+        const pairEntries = Array.isArray(pair) ? pair.filter((entry) => samePath(entry.path, executionRoot)) : [];
+        const paired = pairEntries[0];
+        if (pairEntries.length !== 1 || !samePath(paired.formalRepository, repositoryRoot)
+          || !samePath(paired.origin, repositoryRoot) || paired.repository !== copy.repository
+          || paired.module !== copy.module || paired.result !== copy.result || paired.branch !== copy.branch
+          || paired.head !== copy.head || paired.preservedBaselineBranch !== copy.preservedBaselineBranch) {
+          throw new Error('declared clone pair registration mismatch');
+        }
+        matches.push({ copy, source });
+      }
+    }
+    if (matches.length !== 1) throw new Error('projectRoute executionRoot is not a declared clone');
+    const { copy, source } = matches[0];
+    if (!executionRepository || !samePath(executionRepository.topLevel, executionRoot)) {
+      throw new Error('declared clone executionRoot is not an exact Git repository root');
+    }
+    const origins = runGit(executionRoot, ['remote', 'get-url', '--all', 'origin']);
+    if (origins.status !== 0 || origins.stdout.split(/\r?\n/).length !== 1
+      || !path.isAbsolute(origins.stdout) || !samePath(origins.stdout, repositoryRoot)) {
+      throw new Error('declared clone origin does not match its formal repository');
+    }
+    if (runGit(executionRoot, ['branch', '--show-current']).stdout !== copy.branch) {
+      throw new Error('declared clone branch mismatch');
+    }
+    if (runGit(executionRoot, ['rev-parse', `refs/heads/${source.baselineBranch}`]).stdout !== source.snapshotCommit
+      || runGit(executionRoot, ['merge-base', '--is-ancestor', source.sourceHead, source.snapshotCommit]).status !== 0
+      || runGit(executionRoot, ['merge-base', '--is-ancestor', source.snapshotCommit, 'HEAD']).status !== 0
+      || runGit(repositoryRoot, ['merge-base', '--is-ancestor', source.sourceHead, 'HEAD']).status !== 0) {
+      throw new Error('declared clone source or preservation ancestry mismatch');
+    }
+    return 'declared-clone';
+  }
+
+  validateExecutionRepository(record, repositoryRoot, executionRoot, repositoryValidation) {
+    if (samePath(executionRoot, repositoryRoot)) return 'canonical';
+    const canonicalRepository = repositoryValidation.repositoryFacts;
+    if (canonicalRepository && !samePath(canonicalRepository.topLevel, repositoryRoot)) throw new Error('projectRoute repositoryRoot is not an exact Git repository root');
+    const executionRepository = gitRepositoryFacts(executionRoot);
+    if (!canonicalRepository || !executionRepository || !samePath(executionRepository.topLevel, executionRoot)) {
+      throw new Error('projectRoute executionRoot is not an exact Git repository root');
+    }
+    if (samePath(canonicalRepository.commonDirectory, executionRepository.commonDirectory)) {
+      if (!registeredWorktrees(repositoryRoot).some((candidate) => samePath(candidate, executionRoot))) {
+        throw new Error('projectRoute executionRoot is not a registered worktree of repositoryRoot');
+      }
+      return 'worktree';
+    }
+    return this.validateDeclaredClone(record, repositoryRoot, executionRoot, executionRepository);
+  }
+
   validateSameRootProject(projectId, context = {}) {
     const record = this.localProjectRecord(projectId);
     const binding = this.validateCanonicalBinding(record, record.beyondProjectId);
@@ -522,19 +649,7 @@ export class ProjectIdentityProvider {
       throw new Error('projectRoute executionRoot does not match runtime working directory');
     }
 
-    let relation = 'canonical';
-    if (!samePath(executionRoot, repositoryRoot)) {
-      const canonicalRepository = repositoryValidation.repositoryFacts;
-      const executionRepository = gitRepositoryFacts(executionRoot);
-      if (!canonicalRepository || !executionRepository
-        || !samePath(canonicalRepository.topLevel, repositoryRoot)
-        || !samePath(executionRepository.topLevel, executionRoot)
-        || !samePath(canonicalRepository.commonDirectory, executionRepository.commonDirectory)
-        || !registeredWorktrees(repositoryRoot).some((candidate) => samePath(candidate, executionRoot))) {
-        throw new Error('projectRoute executionRoot is not a registered worktree of repositoryRoot');
-      }
-      relation = 'worktree';
-    }
+    const relation = this.validateExecutionRepository(record, repositoryRoot, executionRoot, repositoryValidation);
     return {
       projectId: registration.projectId,
       canonicalProjectRoot,
@@ -563,16 +678,24 @@ export class ProjectIdentityProvider {
       && samePath(item.path, decision.normalized.projectRoot)
       && (!item.hostId || item.hostId === decision.normalized.hostId));
     const requestedRepositoryRoot = canonicalPath(input.repositoryRoot ?? decision.normalized.projectRoot);
+    const requestedExecutionRoot = canonicalPath(input.executionRoot
+      ?? defaultResolutionExecutionRoot(decision.normalized.cwd, decision.normalized.projectRoot, requestedRepositoryRoot));
     const allowedRepositoryRoots = matchingLocal.length === 1
       ? unique(matchingLocal[0].repositoryRoots.map(canonicalPath))
       : [];
     const routingIssues = [];
+    let executionRelation = null;
     if (decision.status === 'verified' && matchingLocal.length === 1) {
       try { this.validateCanonicalBinding(matchingLocal[0], decision.identities.beyondProjectId); }
       catch (error) { routingIssues.push({ reason: 'canonical_project_binding_invalid', detail: error.message }); }
       if (allowedRepositoryRoots.some((candidate) => samePath(candidate, requestedRepositoryRoot))) {
-        try { this.validateRegisteredRepository(matchingLocal[0], requestedRepositoryRoot); }
+        try {
+          const repositoryValidation = this.validateRegisteredRepository(matchingLocal[0], requestedRepositoryRoot);
+          executionRelation = this.validateExecutionRepository(matchingLocal[0], requestedRepositoryRoot, requestedExecutionRoot, repositoryValidation);
+        }
         catch (error) { routingIssues.push({ reason: 'registered_repository_invalid', detail: error.message }); }
+      } else {
+        routingIssues.push({ reason: 'repository_root_unregistered', detail: 'Requested repositoryRoot is not registered for this project' });
       }
     }
     const effectiveDecision = routingIssues.length > 0
@@ -583,6 +706,9 @@ export class ProjectIdentityProvider {
       projectRoot: decision.normalized.projectRoot,
       hostId: decision.normalized.hostId,
       repository: { remote: decision.normalized.remote },
+      requestedRepositoryRoot,
+      requestedExecutionRoot,
+      executionRelation,
       projectEntryTrusted: input.projectEntryTrusted === true,
       platform: {
         available: Array.isArray(input.platform?.projects) && input.platform.available !== false,
@@ -592,6 +718,9 @@ export class ProjectIdentityProvider {
       localMappings: local.records.map((item) => ({
         beyondProjectId: item.beyondProjectId, codexProjectId: item.codexProjectId,
         path: canonicalPath(item.path), hostId: item.hostId, remote: item.remote,
+        executionCloneManifests: item.executionCloneManifests.map((entry) => ({
+          manifestPath: canonicalPath(entry.manifestPath), sha256: entry.sha256, taskId: entry.taskId,
+        })),
       })),
       sharedRegistrations: shared.records.map((item) => ({
         beyondProjectId: item.beyondProjectId, remote: item.remote,
@@ -640,6 +769,8 @@ export class ProjectIdentityProvider {
           canonicalProjectRoot: canonicalPath(matchingLocal[0].path),
           controlRoot: canonicalPath(this.controlRoot),
           repositoryRoot: requestedRepositoryRoot,
+          executionRoot: requestedExecutionRoot,
+          relation: executionRelation,
           hostId: routeHostId,
           codexProjectId: routeCodexProjectId,
         }

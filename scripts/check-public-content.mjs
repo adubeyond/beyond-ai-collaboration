@@ -193,6 +193,17 @@ const sensitivePatterns = [
   ["私钥正文", new RegExp("BEGIN" + " (?:RSA |EC |OPENSSH )?PRIVATE KEY")],
 ];
 
+// Exact synthetic values in retained CLI regression fixtures, not file-wide exemptions.
+// Every other value in these files still passes through the normal sensitive checks.
+const fixtureTokens = new Map([
+  ["模板交付包/scripts/cli/claude-command-channel.test.mjs", ["fixture-manager", "fixture-child", "sensitive-test-token-123"]],
+  ["模板交付包/scripts/cli/claude-version-compatibility.test.mjs", ["fixture-token"]],
+  ["模板交付包/scripts/cli/cli-unbound-start-recovery.test.mjs", ["test-manager-proof", "test-child-proof", "other-server"]],
+]);
+const fixtureWindowsPaths = [
+  ["Program Files", "runtime", "${executable}"], ["runtime", "unknown"], ["other", "node.exe"],
+].map(parts => "C:" + "\\\\" + parts.join("\\\\"));
+
 function validateText(path, text) {
   const rel = normalizeRelative(relative(repositoryRoot, path));
   if (/[ \t]+$/m.test(text)) {
@@ -201,9 +212,19 @@ function validateText(path, text) {
   for (const [label, pattern] of sensitivePatterns) {
     // A pinned upstream compatibility fingerprint is product data, not a run receipt.
     // Exempt only this exact declaration; all other hashes in the file remain checked.
-    const checkedText = label === "疑似动态 SHA-256" && rel === "模板交付包/scripts/cli/zcode-profile.mjs"
+    let checkedText = label === "疑似动态 SHA-256" && rel === "模板交付包/scripts/cli/zcode-profile.mjs"
       ? text.replace(/^const TUI_SHA256 = '[0-9a-f]{64}';$/m, "const TUI_SHA256 = '<upstream-content-pin>';")
       : text;
+    if (label === "疑似秘密赋值" && fixtureTokens.has(rel)) {
+      checkedText = checkedText.replace(/\btoken\s*[:=]\s*'([^'\n]+)'/g,
+        (assignment, value) => fixtureTokens.get(rel).includes(value) ? "token: '<test>'" : assignment);
+    }
+    if (label === "Windows 绝对路径" && rel === "模板交付包/scripts/cli/process-identity.window-recovery.test.mjs") {
+      for (const fixture of fixtureWindowsPaths) {
+        checkedText = checkedText.replaceAll("path: '" + fixture + "'", "path: '<test>'")
+          .replaceAll("path: `" + fixture + "`", "path: '<test>'");
+      }
+    }
     if (pattern.test(checkedText)) {
       errors.push(`${label}：${rel}`);
     }
@@ -631,7 +652,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/docs/AI编程协同机制/项目事实/README.md",
     label: "multi-project facts are selected by scope",
-    value: "多子项目或同类事实由多个边界清楚的文档分别负责时，登记总索引及各自适用范围",
+    value: "先从“项目实际入口”或其总索引定位当前子项目、模块和专题的正式所有者",
   },
   {
     path: "模板交付包/skills/task-design/references/capability-and-facts.md",
@@ -706,7 +727,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/task-design/references/complex-design-document-and-implementation.md",
     label: "formal design reuses its injected document entrances",
-    value: "正式任务直接使用任务已经点名的项目/子项目文档入口和事实索引",
+    value: "已有有效的项目/子项目文档入口和事实索引时直接复用",
   },
   {
     path: "模板交付包/skills/task-ops/references/production-release-and-convergence.md",

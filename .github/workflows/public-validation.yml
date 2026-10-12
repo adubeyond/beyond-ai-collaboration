@@ -51,6 +51,16 @@ jobs:
         run: node scripts/check-install-integrity.mjs
       - name: Validate project-entry migration
         run: node scripts/check-project-entry-migration.mjs
+      - name: Validate engineering documents and initialization preservation
+        run: |
+          node scripts/check-engineering-documentation.mjs
+          node scripts/check-project-initialization-runtime.mjs
+          node scripts/check-initialization-markdown-regressions.mjs --product-root 模板交付包
+          node scripts/check-project-registration-regressions.mjs --product-root 模板交付包
+          node scripts/check-project-preimage-regressions.mjs --product-root 模板交付包
+          node scripts/check-team-control-results.mjs
+      - name: Validate retained CLI hotfix regressions
+        run: node --test 模板交付包/scripts/cli/*.test.mjs
       - name: Validate workbench upgrade migration
         run: node --test scripts/check-workbench-upgrade-migration.mjs
       - name: Validate CLI store, execution, notification, routing, recovery, and goal loops

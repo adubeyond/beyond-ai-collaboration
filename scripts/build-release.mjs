@@ -45,13 +45,25 @@ for (const [target, source] of [
   if (target === 'RELEASE-NOTES.md') {
     const sourceLink = '(v' + version + '-validation.md)';
     assert.ok(bytes.toString('utf8').includes(sourceLink), 'Release validation link missing');
-    bytes = Buffer.from(bytes.toString('utf8').replaceAll(sourceLink, '(TEST-RESULTS.md)'));
-    bytes = Buffer.from(bytes.toString('utf8').replaceAll('(v' + version + '-install.md)', '(INSTALL.md)'));
-    bytes = Buffer.from(bytes.toString('utf8').replaceAll('(../../模板交付包/', '(beyond-control/'));
+  }
+  if (target.endsWith('.md')) {
+    bytes = Buffer.from(bytes.toString('utf8')
+      .replaceAll('(v' + version + '-validation.md)', '(TEST-RESULTS.md)')
+      .replaceAll('(v' + version + '-install.md)', '(INSTALL.md)')
+      .replaceAll('(v' + version + '.md)', '(RELEASE-NOTES.md)')
+      .replaceAll('(../../模板交付包/', '(beyond-control/'));
   }
   payload.set(target, bytes);
 }
 const products = [...payload].filter(([name]) => name.startsWith('beyond-control/'));
+// Wrapper documents move to the ZIP root. Check their actual packaged targets.
+for (const name of ['INSTALL.md', 'RELEASE-NOTES.md', 'TEST-RESULTS.md']) {
+  for (const match of payload.get(name).toString('utf8').matchAll(/\]\(([^)]+)\)/g)) {
+    const href = match[1].split('#')[0];
+    if (!href || /^[a-z]+:/i.test(href)) continue;
+    assert.ok(payload.has(decodeURIComponent(href)), 'Broken packaged document link: ' + name + ' -> ' + href);
+  }
+}
 const entry = ([name, bytes]) => ({ path: name, bytes: bytes.length, sha256: sha(bytes) });
 const manifest = json({
   schemaVersion: 1, root: 'beyond-control', fileCount: products.length,

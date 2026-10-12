@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { executeRuntimeRequest } from '../模板交付包/scripts/runtime/control-runtime.mjs';
+import { ProjectIdentityProvider } from '../模板交付包/scripts/runtime/project-identity-provider.mjs';
 
 const scratchRoots = [];
 
@@ -72,6 +74,20 @@ function projectRoute(f, repositoryRoot, executionRoot, overrides = {}) {
   };
 }
 
+function resolveFrom(f, cwd) {
+  return new ProjectIdentityProvider({ controlRoot: f.controlRoot }).resolve({
+    cwd, projectRoot: f.projectRoot, hostId: 'local', projectEntryTrusted: true,
+    platform: {
+      available: true, selectedProjectId: 'codex-route-project',
+      projects: [{ projectId: 'codex-route-project', path: f.projectRoot, hostId: 'local' }],
+    },
+    hostRoutes: [{
+      beyondProjectId: f.projectId, codexProjectId: 'codex-route-project',
+      path: f.projectRoot, hostId: 'local',
+    }],
+  });
+}
+
 function enqueue(f, route, taskId = 'route-task', context = {}) {
   const runtimeContext = { controlRoot: f.controlRoot };
   if (context.omitExecutionRoot !== true) runtimeContext.executionRoot = context.executionRoot ?? route.executionRoot;
@@ -119,6 +135,18 @@ test('canonical project route accepts a single-repository or non-Git project roo
   assert.equal(pendingCount(f.controlRoot), 2);
   assert.throws(() => enqueueWithoutRoute(f, f.root, 'missing-route-task'), /requires projectRoute/);
   assert.equal(pendingCount(f.controlRoot), 2);
+});
+
+test('a non-Git project must not use its enclosing repository as an explicit worktree route', () => {
+  const f = fixture('enclosing-repository');
+  initializeRepository(f.root);
+  assert.throws(
+    () => enqueue(f, projectRoute(f, f.projectRoot, f.root), 'wrong-parent-route'),
+    { message: 'projectRoute repositoryRoot is not an exact Git repository root' },
+  );
+  assert.equal(pendingCount(f.controlRoot), 0);
+  assert.equal(enqueue(f, projectRoute(f, f.projectRoot, f.projectRoot), 'correct-project-route').result.mode, 'created');
+  assert.equal(pendingCount(f.controlRoot), 1);
 });
 
 test('workbench.close requires explicit pending selection and archives only an authorized stopped task', () => {
@@ -311,7 +339,7 @@ test('a root-local result must not reuse a valid component route from another ta
 
   assert.throws(
     () => enqueue(f, projectRoute(f, component, projectRoot), 'wrong-component-route'),
-    /not a registered worktree/,
+    { message: 'projectRoute executionRoot is not an exact Git repository root' },
   );
   assert.equal(pendingCount(f.controlRoot), 0);
   assert.equal(enqueueWithoutRoute(f, projectRoot, 'correct-root-route').result.mode, 'created');
@@ -363,8 +391,97 @@ test('an independent clone with matching content is not accepted as a worktree',
     '---', `id: ${f.projectId}`, `path: ${repositoryRoot}`, 'host_id: local', 'codex_project_id: codex-route-project',
     `repositories_json: ${JSON.stringify([{ path: repositoryRoot, remote: null, role: 'project-root' }])}`, '---', '',
   ].join('\n'), 'utf8');
-  assert.throws(() => enqueue(f, projectRoute(f, repositoryRoot, cloneRoot), 'clone-task'), /not a registered worktree/);
+  assert.throws(
+    () => enqueue(f, projectRoute(f, repositoryRoot, cloneRoot), 'clone-task'),
+    { message: 'projectRoute executionRoot is not a declared clone' },
+  );
   assert.equal(pendingCount(f.controlRoot), 0);
+});
+
+test('resolving from a project-internal worktree subdirectory retains the worktree execution root', () => {
+  const f = fixture('internal-worktree');
+  initializeRepository(f.projectRoot);
+  const executionRoot = path.join(f.projectRoot, '.codex-local', 'worker-checkout');
+  runGit(f.projectRoot, ['worktree', 'add', '--detach', executionRoot]);
+  const cwd = path.join(executionRoot, 'src');
+  fs.mkdirSync(cwd);
+  const resolved = resolveFrom(f, cwd);
+  assert.equal(resolved.status, 'verified', JSON.stringify(resolved.evidence));
+  assert.equal(resolved.allowed.createWorker, true);
+  assert.equal(resolved.projectRoute.executionRoot, fs.realpathSync.native(executionRoot));
+  assert.equal(resolved.projectRoute.repositoryRoot, fs.realpathSync.native(f.projectRoot));
+  assert.equal(resolved.projectRoute.relation, 'worktree');
+  assert.equal(enqueue(f, resolved.projectRoute, 'internal-worktree-result').result.mode, 'created');
+});
+
+test('a declared independent clone is accepted only while its manifest and pair remain valid', () => {
+  const f = fixture('declared-clone');
+  initializeRepository(f.projectRoot);
+  const sourceHead = runGit(f.projectRoot, ['rev-parse', 'HEAD']);
+  const manifestRoot = path.join(f.projectRoot, '.codex-local', 'route-proof');
+  const cloneRoot = path.join(manifestRoot, 'worker', 'clone');
+  fs.mkdirSync(path.dirname(cloneRoot), { recursive: true });
+  const cloned = spawnSync('git', ['clone', f.projectRoot, cloneRoot], { encoding: 'utf8', windowsHide: true });
+  assert.equal(cloned.status, 0, cloned.stderr || cloned.stdout);
+  const baselineBranch = 'beyond-route-baseline';
+  const branch = 'codex/route-proof';
+  runGit(cloneRoot, ['branch', baselineBranch, sourceHead]);
+  runGit(cloneRoot, ['checkout', '-b', branch]);
+  const route = projectRoute(f, f.projectRoot, cloneRoot);
+  assert.throws(() => enqueue(f, route, 'undeclared-copy'), {
+    message: 'projectRoute executionRoot is not a declared clone',
+  });
+  assert.equal(pendingCount(f.controlRoot), 0);
+
+  const copy = {
+    path: cloneRoot, formalRepository: f.projectRoot, origin: f.projectRoot,
+    repository: 'app', module: 'route-proof', result: 'implementation', branch,
+    head: sourceHead, preservedBaselineBranch: baselineBranch,
+  };
+  const manifest = {
+    schemaVersion: 1, projectId: f.projectId, canonicalProjectRoot: f.projectRoot,
+    task: 'route-proof', root: manifestRoot, copies: [copy],
+    repositories: [{ repository: 'app', sourceHead, snapshotCommit: sourceHead, baselineBranch }],
+    formalRepositories: [f.projectRoot],
+  };
+  const manifestPath = path.join(manifestRoot, 'clone-manifest.json');
+  const manifestBytes = Buffer.from(`${JSON.stringify(manifest)}\n`);
+  fs.writeFileSync(manifestPath, manifestBytes);
+  const pairPath = path.join(path.dirname(cloneRoot), 'pair-manifest.json');
+  const pairBytes = `${JSON.stringify([copy])}\n`;
+  fs.writeFileSync(pairPath, pairBytes);
+  const registration = path.join(f.controlRoot, 'local', 'projects', `${f.projectId}.md`);
+  const declaration = [{ manifestPath, taskId: manifest.task, sha256: createHash('sha256').update(manifestBytes).digest('hex') }];
+  const registrationText = fs.readFileSync(registration, 'utf8');
+  fs.writeFileSync(registration, registrationText.replace(/\n---\n/, `\nexecution_clone_manifests_json: ${JSON.stringify(declaration)}\n---\n`));
+  const cwd = path.join(cloneRoot, 'src');
+  fs.mkdirSync(cwd);
+  const resolved = resolveFrom(f, cwd);
+  assert.equal(resolved.status, 'verified', JSON.stringify(resolved.evidence));
+  assert.equal(resolved.allowed.createWorker, true);
+  assert.equal(resolved.projectRoute.executionRoot, fs.realpathSync.native(cloneRoot));
+  assert.equal(resolved.projectRoute.repositoryRoot, fs.realpathSync.native(f.projectRoot));
+  assert.equal(resolved.projectRoute.relation, 'declared-clone');
+  assert.equal(enqueue(f, route, 'declared-copy').result.mode, 'created');
+  assert.equal(pendingCount(f.controlRoot), 1);
+
+  fs.writeFileSync(pairPath, JSON.stringify([{ ...copy, branch: 'codex/other-task' }]));
+  assert.throws(() => enqueue(f, route, 'altered-pair'), { message: 'declared clone pair registration mismatch' });
+  const invalidPair = resolveFrom(f, cwd);
+  assert.equal(invalidPair.status, 'conflict');
+  assert.equal(invalidPair.projectRoute, null);
+  assert.equal(invalidPair.allowed.createWorker, false);
+  assert.ok(invalidPair.evidence.issues.some((issue) => issue.detail === 'declared clone pair registration mismatch'));
+  assert.equal(pendingCount(f.controlRoot), 1);
+  fs.writeFileSync(pairPath, pairBytes);
+  fs.writeFileSync(manifestPath, `${manifestBytes.toString()} `);
+  assert.throws(() => enqueue(f, route, 'altered-manifest'), { message: 'declared clone manifest hash mismatch' });
+  const invalidManifest = resolveFrom(f, cwd);
+  assert.equal(invalidManifest.status, 'conflict');
+  assert.equal(invalidManifest.projectRoute, null);
+  assert.equal(invalidManifest.allowed.createWorker, false);
+  assert.ok(invalidManifest.evidence.issues.some((issue) => issue.detail === 'declared clone manifest hash mismatch'));
+  assert.equal(pendingCount(f.controlRoot), 1);
 });
 
 test('registered component routes reject non-Git roots and live remote drift', () => {

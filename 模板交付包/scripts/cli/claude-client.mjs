@@ -11,6 +11,43 @@ import { cliEnvironment, redact } from './native-cli-runner.mjs';
 import { readClaudeProfile, claudeArguments } from './claude-profile.mjs';
 import { claudeHookEvents } from './claude-hook.mjs';
 
+export function createClaudeControlTransport({ url, token, signal, diagnosticPath, fetchImpl = fetch }) {
+  const fixedRoutes = new Set(['/command', '/register', '/manual', '/event', '/ended']);
+  const safe = value => redact(String(value).split(token).join('[REDACTED]')).replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, '[URL]');
+  async function traced(method, route, action) {
+    const started = performance.now();
+    try { return await action(); }
+    catch (error) {
+      if (!(method === 'GET' && signal.aborted)) {
+        const name = safe(error?.name ?? 'Error'), cause = safe(error?.cause?.code ?? '');
+        const record = { at: new Date().toISOString(), method, route: fixedRoutes.has(route) ? route : '[unknown-route]', elapsedMs: Math.round(performance.now() - started),
+          errorName: /^[A-Za-z][A-Za-z0-9]*(?:Error|Exception)$|^Error$/.test(name) ? name : 'Error',
+          causeCode: /^[A-Z0-9_]{1,80}$/.test(cause) ? cause : null,
+          stackFrames: String(error?.stack ?? '').split(/\r?\n/).filter(line => /^\s+at\s/.test(line)).slice(0, 12).map(line => safe(line).slice(0, 512)) };
+        try { fs.appendFileSync(diagnosticPath, JSON.stringify(record) + '\n', { mode: 0o600 }); }
+        catch { process.stderr.write('Claude control fetch diagnostic unavailable\n'); }
+      }
+      throw error;
+    }
+  }
+  return {
+    post(route, data) {
+      return traced('POST', route, async () => {
+        const response = await fetchImpl(new URL(route, url), { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(data), signal: AbortSignal.timeout(6000) });
+        const value = await response.json(); if (!response.ok) throw new Error(value.error ?? 'Claude owner rejected event'); return value;
+      });
+    },
+    nextCommand() {
+      return traced('GET', '/command', async () => {
+        const response = await fetchImpl(new URL('/command', url), { headers: { authorization: `Bearer ${token}` }, signal });
+        if (response.status === 204) return { idle: true };
+        if (!response.ok) throw new Error('Claude command channel ended');
+        return { idle: false, command: await response.json() };
+      });
+    },
+  };
+}
+
 export function sendClaudePrompt(transport, prompt) {
   if (!transport?.pipe?.startsWith('\\\\.\\pipe\\') || !transport.token) throw new Error('Claude local messaging pipe unavailable');
   return new Promise((resolve, reject) => {
@@ -96,7 +133,10 @@ export function openClaudeWindow(store, binding) {
   const launch = `$p = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-EncodedCommand','${encoded}') -WindowStyle Normal -PassThru; $p.Id`;
   const answer = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(launch, 'utf16le').toString('base64')], { encoding: 'utf8', windowsHide: true, timeout: 10000 });
   if (answer.status !== 0 || !/^\d+$/.test(answer.stdout.trim())) throw new Error('Claude native window launch failed');
-  return { windowPid: Number(answer.stdout.trim()), transport: 'external-native-terminal' };
+  const windowPid = Number(answer.stdout.trim());
+  let windowStartedAt;
+  try { windowStartedAt = processStart(windowPid); } catch { /* Preserve missing proof when the window already exited or identity is unavailable. */ }
+  return { windowPid, ...(windowStartedAt ? { windowStartedAt } : {}), transport: 'external-native-terminal' };
 }
 
 export async function launchClaudeView(taskFile) {
@@ -118,16 +158,14 @@ export async function launchClaudeView(taskFile) {
     const connection = store.readJson(endpoint.connectionPath), sessionId = binding.sessionId ?? crypto.randomUUID();
     const url = new URL(connection.url);
     if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.pathname !== '/' || !connection.token) throw new Error('Invalid Claude owner endpoint');
-    const post = async (route, data) => {
-      const response = await fetch(new URL(route, url), { method: 'POST', headers: { authorization: `Bearer ${connection.token}`, 'content-type': 'application/json' }, body: JSON.stringify(data), signal: AbortSignal.timeout(6000) });
-      const value = await response.json(); if (!response.ok) throw new Error(value.error ?? 'Claude owner rejected event'); return value;
-    };
+    const transport = createClaudeControlTransport({ url, token: connection.token, signal: abort.signal,
+      diagnosticPath: store.checkedPath(path.join(directory, 'claude-control-fetch-errors.jsonl')) });
+    const post = transport.post;
     async function commands() {
       try {
         while (!abort.signal.aborted) {
-          const response = await fetch(new URL('/command', url), { headers: { authorization: `Bearer ${connection.token}` }, signal: abort.signal });
-          if (!response.ok) throw new Error('Claude command channel ended');
-          await session.command(await response.json());
+          const response = await transport.nextCommand();
+          if (!response.idle) await session.command(response.command);
         }
       } catch (error) { if (!abort.signal.aborted) fail(error); }
     }
