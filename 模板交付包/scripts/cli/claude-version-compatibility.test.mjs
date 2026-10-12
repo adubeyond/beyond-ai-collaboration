@@ -29,7 +29,7 @@ test('native version guard accepts only the validated 2.1.296 response', t => {
   assert.throws(() => checkClaudeCapability(profile), /revalidation required/);
 });
 
-test('registered max survives a base profile without effort and does not rewrite it', t => {
+test('registered max preserves the base profile and respects native platform support', t => {
   versionProbe(t, { status: 0, stdout: '2.1.296 (Claude Code)' });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-claude-version-test-'));
   t.after(() => {
@@ -42,7 +42,15 @@ test('registered max survives a base profile without effort and does not rewrite
   const base = JSON.stringify({ schemaVersion: 1, provider: 'claude', runner: { command: process.execPath, args: [] },
     model: 'glm-5.3-codex', permissionMode: 'bypassPermissions', mode: 'interactive', ui: 'window' });
   fs.writeFileSync(file, base);
-  const profile = readProfile(file, { model: 'glm-5.3-codex', effort: 'max' });
+  let profile;
+  if (process.platform === 'win32') {
+    profile = readProfile(file, { model: 'glm-5.3-codex', effort: 'max' });
+  } else {
+    assert.throws(() => readProfile(file, { model: 'glm-5.3-codex', effort: 'max' }),
+      /Claude native adapter requires Windows interactive window mode/);
+    // Argument generation is platform-independent; native profile acceptance is not.
+    profile = { ...JSON.parse(base), effort: 'max' };
+  }
   assert.equal(profile.effort, 'max');
   assert.equal(fs.readFileSync(file, 'utf8'), base);
   const args = claudeArguments(profile, { taskId: 'original-task', sessionId: 'original-session' }, 'owned-settings.json', 'original-session');

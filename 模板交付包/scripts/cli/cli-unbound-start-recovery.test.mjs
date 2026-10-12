@@ -179,8 +179,13 @@ test('explicit first unbound registration recovery preserves task and rejects un
   await t.test('a distinct recorded server object cannot be omitted from process ownership checks', () => {
     const f = fixture(); f.editEndpoint(value => { value.server = { ...currentProcessIdentity(), token: 'other-server' }; }); reject(f, /launch proof mismatch/);
   });
-  await t.test('an open old window or missing window proof blocks retry', () => {
-    const f = fixture(); f.editEndpoint(value => { value.view.windowPid = process.pid; }); reject(f, /window still exists/);
+  await t.test('a live legacy window or missing window proof blocks retry on each platform', () => {
+    const f = fixture(); f.editEndpoint(value => { value.view.windowPid = process.pid; });
+    // PID-only legacy proof can be inspected on Windows; other hosts must reject it as unavailable.
+    const legacyFailure = { message: process.platform === 'win32'
+      ? 'CLI window still exists; initial session recovery cannot restart it'
+      : 'CLI legacy window identity is unavailable' };
+    reject(f, legacyFailure);
     const missing = fixture(); missing.editEndpoint(value => { delete value.view.windowPid; }); reject(missing, /window proof unavailable/);
   });
   await t.test('a saved window start identity rejects its live original process', () => {
