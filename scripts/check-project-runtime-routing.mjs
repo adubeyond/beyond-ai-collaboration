@@ -408,7 +408,7 @@ test('resolving from a project-internal worktree subdirectory retains the worktr
   const resolved = resolveFrom(f, cwd);
   assert.equal(resolved.status, 'verified', JSON.stringify(resolved.evidence));
   assert.equal(resolved.allowed.createWorker, true);
-  assert.equal(resolved.projectRoute.executionRoot, fs.realpathSync(executionRoot));
+  assert.equal(resolved.projectRoute.executionRoot, fs.realpathSync.native(executionRoot));
   assert.equal(resolved.projectRoute.repositoryRoot, fs.realpathSync(f.projectRoot));
   assert.equal(resolved.projectRoute.relation, 'worktree');
   assert.equal(enqueue(f, resolved.projectRoute, 'internal-worktree-result').result.mode, 'created');
@@ -459,7 +459,7 @@ test('a declared independent clone is accepted only while its manifest and pair 
   const resolved = resolveFrom(f, cwd);
   assert.equal(resolved.status, 'verified', JSON.stringify(resolved.evidence));
   assert.equal(resolved.allowed.createWorker, true);
-  assert.equal(resolved.projectRoute.executionRoot, fs.realpathSync(cloneRoot));
+  assert.equal(resolved.projectRoute.executionRoot, fs.realpathSync.native(cloneRoot));
   assert.equal(resolved.projectRoute.repositoryRoot, fs.realpathSync(f.projectRoot));
   assert.equal(resolved.projectRoute.relation, 'declared-clone');
   assert.equal(enqueue(f, route, 'declared-copy').result.mode, 'created');

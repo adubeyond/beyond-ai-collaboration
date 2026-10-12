@@ -249,11 +249,10 @@ try {
   run("git", ["add", "."], control);
   run("git", ["commit", "-m", "control baseline"], control);
   run("git", ["branch", "-M", "main"], control);
-  run("git", ["init", "--bare", remote], scratch);
+  run("git", ["init", "--bare", "--initial-branch=main", remote], scratch);
   run("git", ["remote", "add", "origin", remote], control);
-  // The bare repository HEAD follows the machine's init.defaultBranch. Push the
-  // fixture baseline to that canonical branch so later HEAD assertions are
-  // independent of the source repository's local default branch.
+  // Pin both fixture heads to main; a bare HEAD must not depend on the host's
+  // init.defaultBranch when later assertions read the remote HEAD.
   run("git", ["push", "-u", "origin", "HEAD:main"], control);
 
   const projectRegistrationPath = `shared/projects/${secureInspect.projectId}.md`;
