@@ -1,17 +1,17 @@
-// Maintainer-only upgrade/rollback check against the exact extracted release.
+// Maintainer-only upgrade/rollback check against an exact release ZIP or extracted root.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createTemporaryWorkspace } from './lib/temporary-workspace.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
-assert.ok(args[0] && !args[0].startsWith('--'), 'Pass the extracted release root');
-const release = path.resolve(args[0]);
+assert.ok(args[0] && !args[0].startsWith('--'), 'Pass a release ZIP or extracted release root');
+const releaseInput = path.resolve(args[0]);
 let baselineRef = null;
 let baselineRoot = null;
 for (let index = 1; index < args.length; index++) {
@@ -24,6 +24,27 @@ for (let index = 1; index < args.length; index++) {
   else baselineRoot = path.resolve(value);
 }
 assert.ok(baselineRef || baselineRoot, 'Select exactly one of --baseline-ref or --baseline-root');
+const workspace = createTemporaryWorkspace('beyond-package-upgrade-');
+const scratch = workspace.root;
+let result;
+try {
+let release = releaseInput;
+if (fs.lstatSync(releaseInput).isFile()) {
+  const Zip = createRequire(import.meta.url)(process.env.BEYOND_JSZIP_PATH || 'jszip');
+  const archive = await Zip.loadAsync(fs.readFileSync(releaseInput), { checkCRC32: true });
+  release = path.join(scratch, 'release');
+  for (const [name, entry] of Object.entries(archive.files)) {
+    const original = entry.unsafeOriginalName ?? name;
+    assert.ok(!original.replaceAll('\\', '/').split('/').includes('..'), 'Unsafe ZIP member: ' + original);
+    assert.ok(!path.win32.isAbsolute(original) && !path.posix.isAbsolute(original), 'Absolute ZIP member: ' + original);
+    assert.notEqual((Number(entry.unixPermissions) & 0o170000), 0o120000, 'ZIP links are not product files');
+    if (entry.dir) continue;
+    const target = path.resolve(release, name), relative = path.relative(release, target);
+    assert.ok(relative && !relative.startsWith('..') && !path.isAbsolute(relative), 'Unsafe ZIP member: ' + name);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, await entry.async('nodebuffer'));
+  }
+}
 const releaseManifest = JSON.parse(fs.readFileSync(path.join(release, 'release-manifest.json'), 'utf8'));
 const releaseVersion = releaseManifest.releaseVersion;
 assert.match(releaseVersion, /^\d+\.\d+\.\d+$/);
@@ -37,7 +58,6 @@ const manifest = JSON.parse(manifestBytes);
 assert.equal(manifest.fileCount, manifest.files.length);
 assert.equal(releaseManifest.productFileCount, manifest.files.length);
 assert.equal(new Set(manifest.files.map(record => record.path)).size, manifest.files.length, 'Duplicate product manifest paths');
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-package-upgrade-'));
 const project = path.join(scratch, 'project');
 const control = path.join(project, 'beyond-control');
 const skills = path.join(project, 'user-skills');
@@ -135,7 +155,12 @@ assert.equal(store.snapshot().tasks.paused.status, '已暂停');
 for (const name of Object.keys(upgraded).filter(name => !Object.hasOwn(before, name))) fs.unlinkSync(contained(project, name));
 for (const name of Object.keys(before)) write(contained(project, name), fs.readFileSync(contained(backup, name)));
 assert.deepEqual(snapshot(project), before);
-console.log(JSON.stringify({ passed: true, baseline: baselineRef ?? baselineRoot, baselineKind: baselineRef ? 'git-ref' : 'product-directory', baselineVersion,
+result = { passed: true, baseline: baselineRef ?? baselineRoot, baselineKind: baselineRef ? 'git-ref' : 'product-directory', baselineVersion,
   release: releaseVersion, productFiles: manifest.files.length, protectedFiles: Object.keys(protectedBefore).length,
   nativeRulesPreserved: true, tasksUnchanged: true, cliSessionBytesPreserved: true, businessDocumentsPreserved: true,
-  liveCliExecutionTested: false, historicalApprovalNotReinterpreted: true, rollbackBytesEqual: true, scratch, liveProjectWrites: false }, null, 2));
+  liveCliExecutionTested: false, historicalApprovalNotReinterpreted: true, rollbackBytesEqual: true,
+  releaseInput, scratch: null, temporaryWorkspaceRemoved: true, liveProjectWrites: false };
+} finally {
+  workspace.cleanup();
+}
+console.log(JSON.stringify(result, null, 2));

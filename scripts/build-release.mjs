@@ -3,11 +3,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { createTemporaryWorkspace } from './lib/temporary-workspace.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
@@ -85,7 +85,10 @@ for (const [name, bytes] of payload) zip.file(name, bytes, { createFolders: fals
 const packed = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 9 } });
 const reopened = await Zip.loadAsync(packed, { checkCRC32: true });
 assert.deepEqual(Object.keys(reopened.files).sort(), [...payload.keys()].sort());
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-release-verification-'));
+const workspace = createTemporaryWorkspace('beyond-release-verification-');
+const scratch = workspace.root;
+let extractedIntegrityExit;
+try {
 for (const [name, bytes] of payload) {
   const actual = await reopened.file(name).async('nodebuffer');
   assert.deepEqual(actual, bytes, name);
@@ -105,12 +108,16 @@ const check = spawnSync(process.execPath, [path.join(control, 'scripts/verify-in
 assert.equal(check.status, 0, check.stdout + check.stderr);
 assert.equal(git('status', '--porcelain'), '', 'Source changed during packaging');
 assert.equal(git('rev-parse', 'HEAD'), commit, 'Source commit changed during packaging');
+extractedIntegrityExit = check.status;
+} finally {
+  workspace.cleanup();
+}
 fs.mkdirSync(outputRoot, { recursive: true });
 fs.writeFileSync(output, packed, { flag: 'wx' });
 fs.writeFileSync(output + '.sha256', sha(packed) + '  ' + filename + '\n', { flag: 'wx' });
 const result = { sourceCommit: commit, sourceProductTree: productTree, releaseVersion: version,
   zip: output, sha256: sha(packed), bytes: packed.length, productFiles: products.length,
-  totalFiles: payload.size, manifestVerified: true, extractedIntegrityExit: check.status,
-  extractedRoot: scratch, installedIntoLiveProject: false };
+  totalFiles: payload.size, manifestVerified: true, extractedIntegrityExit,
+  extractedRoot: null, temporaryExtractionRemoved: true, installedIntoLiveProject: false };
 fs.writeFileSync(output + '.verification.json', json(result), { flag: 'wx' });
 console.log(JSON.stringify(result, null, 2));
