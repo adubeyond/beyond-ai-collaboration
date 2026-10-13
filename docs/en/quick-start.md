@@ -1,4 +1,4 @@
-# BEYOND 3.2.10 Quick Start
+# BEYOND 3.2.14 Quick Start
 
 This page is for the minimal fixture. For real-project installation, upgrades, new/existing-project initialization, and copy-ready prompts, use the [Installation, Upgrade, and Project Initialization Guide](../../模板交付包/docs/en/installation-upgrade-and-project-initialization.md) instead of assembling an adoption sequence from this example.
 
@@ -109,11 +109,12 @@ Business result: add subtract(left, right) to src/calc.js and add a test proving
 Explicit non-goals: do not add multiplication, division, a command-line interface, dependencies, or unrelated files; do not use Git; do not deploy.
 Allowed actions: read the current project; modify src/calc.js, test/calc.test.js, and the project documents defined by the template; run npm test and npm run check.
 Acceptance: both commands exit with code 0, the existing add test still passes, and the new subtract test passes.
+This is a fixed execution-path probe. I confirm the requirements above and direct subtraction in the existing function module, and waive additional discussion and different-model review for this probe only. This is not authorization for other business tasks.
 
 Follow the minimum read path in the root AGENTS.md. Record one task in the workbench and create one Worker with the compact task packet plus its `projectId + taskId` control line. The Worker must remain responsible for the result and combine design, development, and testing as needed. Return the formal result and current-run evidence to the PM. Write reusable engineering facts only when the task actually confirms them; do not create a capability-initialization task.
 ```
 
-The message deliberately supplies the business result, non-goals, file boundary, command permissions, and acceptance criteria. It tests the complete automatic path rather than the PM's ability to ask many questions.
+The message deliberately supplies the result, non-goals, file boundary, command permissions, acceptance and a precise exception for this probe. Real new business work still requires discussion and confirmation of requirements and technical design, normally with independent model review. Approved implementation continues without repeated approval; the example's waiver does not apply to other tasks.
 
 ## Expected flow
 
@@ -139,9 +140,9 @@ Normal behavior:
 - Ordinary implementation or test failures are repaired and retested in the same task.
 - Git, dependencies, servers, production, and data remain untouched because they were not authorized.
 
-### Execution decisions in 3.2.10
+### Execution decisions in 3.2.14
 
-- When the current instruction already defines the result, boundary, and acceptance criteria, the PM and Worker take the shortest viable path instead of adding questions or stages for BEYOND defaults.
+- When the confirmed design and implementation scope remain applicable, continue along the shortest viable path without repeated approval. New business work or material scope changes first require confirmation of the affected requirements and design.
 - When wording such as “optimize this” can lead to materially different outcomes, ask one result-changing question. Investigate technical details that the project itself can answer instead of sending them back to the user.
 - Current explicit authorization may override ordinary CLI-versus-browser preferences, but it does not expand into credentials, production, shared data, or destructive operations that were not authorized.
 - Prefer a CLI when it provides the same capability. Use a browser when the user explicitly requests it or the task depends on an existing signed-in session, extension, or visible UI state.

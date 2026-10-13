@@ -13,7 +13,7 @@ BEYOND 是面向 **Codex Desktop 本地项目**的开源 AI 项目协作系统�
 
 它适合已经在用 Codex 做真实开发，但正在被这些问题困扰的人：新对话反复失忆、任务完成后无人收口、阶段过多需要人工续推、测试通过却无法判断能否发布，以及多个任务并行时责任和写入边界混乱。
 
-[下载 BEYOND v3.2.13](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.13) · [Gitee 镜像](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90 秒真实案例](docs/真实案例与90秒演示.md) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [3.2.13 升级说明](docs/releases/v3.2.13.md) · [系统架构](docs/系统架构与运行机制.md)
+[下载 BEYOND v3.2.14](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.14) · [Gitee 镜像](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90 秒真实案例](docs/真实案例与90秒演示.md) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [3.2.14 升级说明](docs/releases/v3.2.14.md) · [系统架构](docs/系统架构与运行机制.md)
 
 ## BEYOND 带来什么
 
@@ -22,11 +22,11 @@ BEYOND 是面向 **Codex Desktop 本地项目**的开源 AI 项目协作系统�
 | 新对话不知道项目做到哪里 | 项目目标、当前主线、任务台和长期事实保存在项目内控制仓 |
 | PM 派完任务后需要不断等待、轮询和催促 | Worker 完成或暂停时保存短期回执并原生回调；PM被唤醒后统一验收 |
 | 设计、开发、测试、运维被拆成多轮人工接力 | 一个业务结果由同一 Worker连续推进，动作能力按需要切换 |
-| 提示词越短，AI越容易被规则拖入长路径 | 当前明确指令优先于BEYOND默认偏好；目标清晰直接执行，真正歧义才询问 |
+| 一句业务目标就开工，做到中途才发现理解不同 | 新业务先讨论确认需求与关键设计；已批准范围连续推进，不逐步骤请示 |
 | 测试通过、允许改文件、允许提交和允许发布被混为一谈 | 文件、Git、网络、服务器、数据和生产权限分别判断 |
 | 多个任务并行时互相覆盖或重复验收 | PM登记唯一Worker和写入边界；同一结果只验收、归档一次 |
 
-## 3.2.13 的核心能力
+## 3.2.14 的核心能力
 
 ### 1. 按任务选模型，按阶段升降档
 
@@ -51,6 +51,8 @@ PM 在同一执行者回合结束后的正常续接点升降档：先补齐事�
 ### 2. 有判断力的 PM，单人总管或多人分管
 
 PM 不只是任务转发器：它结合项目全貌澄清真正目标，进行产品与技术判断，把简短需求整理成结果、边界和验收要求。执行者方向偏了，PM 应指出原目标的缺口并指导继续，而不是只拒绝完成后停住。
+
+3.2.14 将新业务开工前的讨论落到已有需求与技术设计正文：说清完整流程、数据从哪来、权限与异常、如何验收，以及复用什么技术栈。用户确认相关版本和开发范围后，原执行者连续实施、测试和交付，并维护实际变化；不会让您逐命令审批。新方案默认加一个不同模型独立审查，关键分歧再加第三个；反复修复没有新证据时先换模型协助诊断，不继续盲改。审查不能代替用户决定，也不改变回调或模型矩阵。
 
 小项目可由一个 PM 管理全局；大项目可由多个 PM 在共同理解整体目标的基础上分管不同方向。独立结果可以并行，真实依赖直接协调；每个结果仍有明确负责人和唯一正式执行者，不另造一层总控或要求用户来回传话。
 
@@ -108,8 +110,8 @@ PM负责理解目标、分析问题、设计任务和纠偏，不只是转发任
 
 ### 1. 下载正式版本
 
-- [BEYOND-3.2.13.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.13/BEYOND-3.2.13.zip)
-- [BEYOND-3.2.13.zip.sha256（可选校验文件）](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.13/BEYOND-3.2.13.zip.sha256)
+- [BEYOND-3.2.14.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.14/BEYOND-3.2.14.zip)
+- [BEYOND-3.2.14.zip.sha256（可选校验文件）](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.14/BEYOND-3.2.14.zip.sha256)
 
 ZIP即可安装；`.sha256`缺失或下载失败不阻断安装。若提供了校验文件而哈希不一致，则必须停止。完整命令见[安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md)。
 
@@ -119,7 +121,7 @@ ZIP即可安装；`.sha256`缺失或下载失败不阻断安装。若提供了�
 
 ```text
 这是BEYOND安装维护请求，不建立PM、Worker或业务任务。
-请使用我已下载并验真通过的BEYOND 3.2.13正式发布包，安装或升级当前项目的beyond-control和六个全局Skill。
+请使用我已下载并验真通过的BEYOND 3.2.14正式发布包，安装或升级当前项目的beyond-control和六个全局Skill。
 先精确备份；保留项目原生规则以及local、projects、shared中的真实内容，不用空模板覆盖。
 完成项目入口融合和安装验真后停止，等待我重启Codex。不要启动、恢复或修改业务任务。
 ```
@@ -132,7 +134,7 @@ task-design      task-dev
 task-test        task-ops
 ```
 
-BEYOND 3.2.13不安装身份Hook、notify分支、常驻守护进程或额外Codex CLI。可选CLI路径使用本机已有CLI，按次启动有限生命周期后台执行与通知，不替换默认Desktop主链。
+BEYOND 3.2.14不安装身份Hook、notify分支、常驻守护进程或额外Codex CLI。可选CLI路径使用本机已有CLI，按次启动有限生命周期后台执行与通知，不替换默认Desktop主链。
 
 ### 3. 重启并接手项目
 
@@ -165,7 +167,7 @@ $identity-pm
 请登记一个正式任务，由唯一Worker连续完成需要的设计、开发、测试和测试环境验证。
 ```
 
-目标已经清楚时，PM直接登记并派发；Worker不会把设计、开发、测试拆成需要你反复输入“继续”的多个结果。普通失败在原任务中修复回测，真正缺少业务决定或高风险授权时才暂停。
+新业务先由PM讨论并记录需求与技术设计，确认后登记或续接原任务；已批准方案内不重新审批。Worker不会把设计、开发、测试拆成需要你反复输入“继续”的多个结果。普通失败在原任务中修复回测，真正缺少业务决定或高风险授权时才暂停。
 
 ## 适合与不适合
 
@@ -184,7 +186,7 @@ $identity-pm
 
 ## 当前边界
 
-- 当前正式版本是`v3.2.13`，主要面向Codex Desktop本地项目。
+- 当前正式版本是`v3.2.14`，主要面向Codex Desktop本地项目。
 - 标准安装与运行路径已在真实Windows项目中验证；公开脚本同时覆盖内容、安装结构和最小示例。
 - 不同平台对任务创建、线程回调和持久权限的支持不同，不能把一个平台的通过结论外推到所有环境。
 - 保留已结束但平台正文不可读时的本机只读补读；不保证所有宿主版本兼容，也不宣称彻底解决长上下文中的目标漂移。
@@ -198,7 +200,7 @@ $identity-pm
 | 安装、升级或回退 | [安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md) |
 | 在干净示例中体验 | [快速开始](docs/快速开始.md) |
 | 理解PM、Worker、文档和运行时 | [系统架构与运行机制](docs/系统架构与运行机制.md) |
-| 查看3.2.13变化 | [升级说明](docs/releases/v3.2.13.md) · [CHANGELOG](CHANGELOG.md) |
+| 查看3.2.14变化 | [升级说明](docs/releases/v3.2.14.md) · [CHANGELOG](CHANGELOG.md) |
 | 阅读控制仓结构 | [模板交付包说明](模板交付包/README.md) |
 | 提交问题或改进 | [Issues](https://github.com/adubeyond/beyond-ai-collaboration/issues) · [贡献指南](CONTRIBUTING.md) |
 | 私密报告安全问题 | [安全政策](SECURITY.md) |

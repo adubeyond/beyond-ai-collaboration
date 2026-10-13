@@ -13,7 +13,7 @@ Use one PM for the whole project or several PMs for explicit scopes. With a user
 
 It is built for people already using Codex on real repositories who are tired of repeated context loss, finished Workers that never return to the PM, stage-heavy workflows that require constant “continue” prompts, ambiguous claims such as “tests passed” versus “released,” and conflicting writes across parallel tasks.
 
-[Download BEYOND v3.2.13](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.13) · [Gitee mirror](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90-second real case](docs/en/real-case-and-90-second-demo.md) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [3.2.13 Upgrade Guide](docs/en/releases/v3.2.13.md) · [Architecture](docs/en/architecture.md)
+[Download BEYOND v3.2.14](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.14) · [Gitee mirror](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90-second real case](docs/en/real-case-and-90-second-demo.md) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [3.2.14 Upgrade Guide](docs/en/releases/v3.2.14.md) · [Architecture](docs/en/architecture.md)
 
 ## What BEYOND changes
 
@@ -22,11 +22,11 @@ It is built for people already using Codex on real repositories who are tired of
 | A new task does not know the project's current line | Objectives, the workbench, and reusable facts live in a project-local control repository |
 | The PM has to wait, poll, and chase finished Workers | A Worker saves a short-lived receipt and calls the PM back on completion or genuine pause |
 | Design, development, testing, and operations become manual handoffs | One Worker continuously owns the result and switches methods as needed |
-| Short prompts get trapped behind framework defaults | Current explicit instructions override ordinary BEYOND preferences; clear goals execute directly and only material ambiguity triggers a question |
+| A brief business goal starts development before intent is agreed | Discuss and confirm new requirements and key design choices first; continue approved scope without step-by-step approval |
 | “Tests passed,” “may commit,” and “may release” collapse into one permission | Files, Git, network, servers, data, and production remain separate evidence and authorization domains |
 | Parallel tasks overwrite one another or close twice | The PM registers one owner and write boundary per result; acceptance and archival are idempotent |
 
-## Core capabilities in 3.2.13
+## Core capabilities in 3.2.14
 
 ### 1. Select models by task, adjust them by stage
 
@@ -51,6 +51,8 @@ The PM adjusts the same Worker at normal continuation points. First supply missi
 ### 2. PM judgment, with whole-project or scoped responsibility
 
 PMs interpret objectives using project context, make product and technical judgments, and turn brief requests into an outcome, boundary, and acceptance criteria. When work drifts, they identify the gap and guide the original Worker rather than merely rejecting completion and stopping.
+
+Version 3.2.14 records pre-development discussion in existing requirements and technical-design documents: end-to-end behavior, data sources, permissions, errors, acceptance, and stack reuse. Once the user confirms the applicable revision and implementation scope, the original Worker develops, tests, delivers, and maintains implementation changes without per-command approval. New designs normally receive one different-model review, with a third model for consequential disagreement; repeated failed fixes without new evidence trigger independent diagnosis instead of blind retries. Review does not replace user decisions or change callbacks or the model matrix.
 
 One PM can manage a small project; several PMs can manage explicit scopes with a shared understanding of the overall objective. Independent results run in parallel and real dependencies are coordinated directly. Each result keeps one responsible owner and one formal Worker, without an extra supervisory layer or requiring the user to relay messages.
 
@@ -108,8 +110,8 @@ The PM understands objectives, analyzes problems, designs tasks, and corrects co
 
 ### 1. Download the official release
 
-- [BEYOND-3.2.13.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.13/BEYOND-3.2.13.zip)
-- [BEYOND-3.2.13.zip.sha256 (optional checksum)](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.13/BEYOND-3.2.13.zip.sha256)
+- [BEYOND-3.2.14.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.14/BEYOND-3.2.14.zip)
+- [BEYOND-3.2.14.zip.sha256 (optional checksum)](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.14/BEYOND-3.2.14.zip.sha256)
 
 The ZIP is sufficient for installation. A missing or unavailable `.sha256` file does not block installation; if a checksum file is supplied and does not match, stop. See the [Installation, Upgrade, and Project Initialization Guide](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) for exact commands.
 
@@ -119,7 +121,7 @@ Open a new ordinary Codex task in the target project and send this prompt withou
 
 ```text
 This is BEYOND installation maintenance. Do not create a PM, Worker, or business task.
-Use the verified official BEYOND 3.2.13 package I downloaded to install or upgrade this project's beyond-control directory and six global Skills.
+Use the verified official BEYOND 3.2.14 package I downloaded to install or upgrade this project's beyond-control directory and six global Skills.
 Create a precise backup first. Preserve native project rules and real content under local, projects, and shared; never replace them with empty templates.
 Fuse the project entry, run installation verification, then stop and wait for me to restart Codex. Do not start, resume, or modify business tasks.
 ```
@@ -132,7 +134,7 @@ task-design      task-dev
 task-test        task-ops
 ```
 
-BEYOND 3.2.13 does not install an identity Hook, notify branch, persistent daemon, or extra Codex CLI. The optional route uses an existing local CLI with finite per-dispatch background execution and notification; it does not replace the default Desktop route.
+BEYOND 3.2.14 does not install an identity Hook, notify branch, persistent daemon, or extra Codex CLI. The optional route uses an existing local CLI with finite per-dispatch background execution and notification; it does not replace the default Desktop route.
 
 ### 3. Restart and adopt the project
 
@@ -165,7 +167,7 @@ Authorization: code changes, tests, one local commit, and test-environment deplo
 Register one formal task and let one Worker continuously perform the required design, development, testing, and test-environment verification.
 ```
 
-When the result is clear, the PM dispatches it directly. The Worker does not split design, development, and testing into separate outcomes that require repeated “continue” prompts. Ordinary failures are repaired and retested in the same task; a genuine business decision or high-risk permission gap causes a real pause.
+For new business development, the PM discusses and records requirements and technical design before confirmation and dispatch or continuation. Approved implementation scope needs no repeated approval. The Worker does not split design, development, and testing into separate outcomes that require repeated “continue” prompts. Ordinary failures are repaired and retested in the same task; a genuine business decision or high-risk permission gap causes a real pause.
 
 ## Who it is for
 
@@ -184,7 +186,7 @@ It is not currently a good fit for:
 
 ## Current boundaries
 
-- The current stable release is `v3.2.13`, primarily for local Codex Desktop projects.
+- The current stable release is `v3.2.14`, primarily for local Codex Desktop projects.
 - Standard installation and operation have been validated in real Windows projects; public checks also cover package contents, installation structure, and the minimal fixture.
 - Task creation, callbacks, and persistent permissions vary across platforms. Evidence from one platform is not a universal compatibility claim.
 - The existing read-only local fallback for completed tasks with unavailable final text is retained. It does not guarantee compatibility with every host version or eliminate long-context goal drift.
@@ -198,7 +200,7 @@ It is not currently a good fit for:
 | Install, upgrade, or roll back | [Installation, Upgrade, and Project Initialization](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) |
 | Try a clean fixture | [Quick Start](docs/en/quick-start.md) |
 | Understand PM, Worker, documents, and runtime | [Architecture](docs/en/architecture.md) |
-| Review 3.2.13 changes | [Upgrade Guide](docs/en/releases/v3.2.13.md) · [CHANGELOG](CHANGELOG.md) |
+| Review 3.2.14 changes | [Upgrade Guide](docs/en/releases/v3.2.14.md) · [CHANGELOG](CHANGELOG.md) |
 | Inspect the control repository | [Template Package](模板交付包/README.md) |
 | Report a problem or propose an improvement | [Issues](https://github.com/adubeyond/beyond-ai-collaboration/issues) · [Contributing](CONTRIBUTING.en.md) |
 | Report a vulnerability privately | [Security Policy](SECURITY.en.md) |

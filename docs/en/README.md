@@ -29,7 +29,8 @@ These documents explain the public product, its operating model, and the first r
 | Previous release | [v3.1.7 Upgrade Guide](releases/v3.1.7.md) | Restore platform terminal delivery, protect a busy PM, and activate entry or Skill replacement after restart |
 | Previous release | [v3.2.0 Upgrade Guide](releases/v3.2.0.md) | Use the formal Worker final, one native wakeup, and idempotent workbench transactions for lossless non-interrupting terminal closeout |
 | Previous release | [v3.2.1 Upgrade Guide](releases/v3.2.1.md) | Prevent post-wakeup Worker activity and recursive copies of generated test caches or local backups |
-| Current release | [v3.2.13 Upgrade Guide](releases/v3.2.13.md) | Reconnect engineering and business documentation, maintain original sources incrementally, and repair registration and execution-root resolution |
+| Current release | [v3.2.14 Upgrade Guide](releases/v3.2.14.md) | Confirm requirements and design, review with another model, diagnose stalled fixes, and retain artifact-lifecycle repairs |
+| Previous release | [v3.2.13 Upgrade Guide](releases/v3.2.13.md) | Reconnect engineering and business documentation, maintain original sources incrementally, and repair registration and execution-root resolution |
 | Previous release | [v3.2.12 Upgrade Guide](releases/v3.2.12.md) | Three native CLI helpers, retained-session goal loops and owner transfer |
 | Previous release | [v3.2.11 Upgrade Guide](releases/v3.2.11.md) | Continue partial results, resolve dependencies, consolidate confirmations and preserve foreground requests |
 | Previous release | [v3.2.8 Upgrade Guide](releases/v3.2.8.md) | Single GPT-6.1 policy, optional CLI goal loops, and upgrade compatibility |

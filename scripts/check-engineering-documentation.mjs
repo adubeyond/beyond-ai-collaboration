@@ -114,11 +114,13 @@ test("已定目标、尚未实现方案、实现事实和活动任务有独立�
   assert.ok(read(facts).includes("阶段目标、实施依赖和决定理由保留在原方案"));
 });
 
-test("接入保留已有正文、允许缺项，维护不变成每任务必填或审批", () => {
+test("接入保留已有正文，不强制填满全部项目资料；业务确认归设计所有者", () => {
   const text = read(guide);
   for (const boundary of ["不是每个项目必须创建的文件清单", "已有项目升级不需要重新初始化所有正文",
     "不以补齐全套资料为开工条件", "没有新知识就不写", "相关性不自动扩大写权限",
     "不新增回传、唤醒、等待、验收或暂停规则"]) assert.ok(text.includes(boundary), boundary);
+  assert.ok(text.includes("业务任务的需求确认、技术设计、多模型审查及变更重新确认由`task-design`唯一规定"));
+  assert.ok(text.includes("不强制另建PRD、技术设计、实施报告三份文件"));
 });
 
 test("PM全局读取与执行者按需下钻继续使用原身份入口", () => {

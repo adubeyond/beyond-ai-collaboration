@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.14] - 2026-10-14
+
+### Added
+
+- Discuss new business requirements and technical design with the user, reuse existing document owners, and bind implementation authority to the confirmed scope and revision. Continue approved slices and ordinary repairs without repeated approval.
+- Independently review new designs with another explicitly selected model; use a third for consequential disagreement and use different-model diagnosis for repeated failed fixes without new evidence. Preserve the original implementer and current CLI protocols.
+- Verify document consumers, real links and anchors, approval boundaries, and frozen callback, CLI, and model-policy content, including negative mutation checks.
+
+### Fixed
+
+- Preserve rejected-decision reasons in task context and keep one current writer for shared design files. Maintain stable architecture separately from task-level confirmation records.
+- Include the previously completed artifact-lifecycle maintenance: owned temporary test trees are reclaimed, compact reproducible evidence is retained, and scoped backups reuse verified content instead of copying unrelated historical trees. Recovery and unique materials remain protected; there is no automatic project-wide deletion.
+
+### Boundaries
+
+- No changes to Desktop Worker callbacks, receipts, task states, CLI protocols, or the model matrix. Third-party model IDs are reported evidence, not independent proof of a gateway's internal backend identity.
+- This release does not install into an existing business project. See [validation and limits](docs/releases/v3.2.14-validation.md).
+
 ## [3.2.13] - 2026-10-12
 
 ### Added

@@ -128,8 +128,8 @@ requireText("英文外置SHA不一致仍停止", installGuideEn, "a supplied che
 // S1：普通局部 BUG。
 requireText("S1清晰请求不制造任务", agents, "清晰请求不输出接手仪式，不凭空制造正式任务");
 requireText("S1先结合已确认上下文判断请求", agents, "请求是否明确，要结合当前对话中已确认且未被撤回的目标、范围和授权判断");
-requireText("S1模糊动作请求先澄清再分流", agents, "结合上下文后仍只有动作意图和对象、没有可判定业务结果时，不进入Action Skill");
-requireText("S1仍缺业务结果时只问关键问题", agents, "当前基础智能体先问一个会改变结果的关键问题，得到答案后再分流");
+requireText("S1新业务开发先进入设计确认", agents, "新的业务开发任务先进入`task-design`，讨论并确认相关需求、技术设计后开发");
+requireText("S1其他模糊动作先问关键问题", agents, "其他仍只有动作意图和对象、没有可判定业务结果的请求先问一个会改变结果的关键问题");
 requireText("S1模糊优化不触发开发Skill", dev.split("---")[1], "目标仍模糊时先按根入口澄清");
 requireText("单独接手不启动旧任务", agents, "单独接手项目只恢复控制面，不自动创建、恢复或启动业务任务");
 requireText("接手并继续需要同轮明确指令", agents, "同一条用户指令已经明确要求推进某个结果");
@@ -182,8 +182,8 @@ requireText("正式Worker使用用户可见任务", pm, "全新用户可见项�
 requireText("PM和Worker都可使用内部子智能体辅助", pm, "内部子智能体可辅助PM或Worker");
 requireText("内部子智能体不拥有独立业务结果", pm, "不拥有结果");
 requireText("PM不能用内部子智能体绕过执行边界", pm, "PM不得借此执行Worker任务");
-requireText("安排其他人包含建任务意图", pm, "要求团队完成已明确或已批准的独立业务结果");
-requireText("明确团队任务不二次确认", pm, "不重复询问已经给出的目标和授权");
+requireText("安排其他人按独立业务结果组织", pm, "要求团队完成独立业务结果");
+requireText("已批准团队任务不重复确认", pm, "已批准方案内对照现有任务建立或恢复唯一Worker，不重复询问");
 requireText("任务包保留业务契约", pm, "任务包是业务契约");
 requireText("任务包不是固定表单", pm, "任务包通常只有两到四个短段");
 requireText("任务包不重复系统通则", pm, "系统通则已经生效时不在每个任务中重述");
@@ -195,7 +195,7 @@ requireText("安装PM从项目根映射团队入口", pm, "完整读取当前项
 forbidText("安装PM不使用安装目录相对团队链接", pm, "../../docs/AI编程协同机制/团队任务与协同.md");
 requireText("安装PM从项目根映射跨任务入口", pm, "先读项目根映射的跨任务机制");
 requireText("安装Worker从项目根映射跨任务入口", worker, "当前项目根`AGENTS.md`在“规则所有者”中映射的跨任务协同与共享对象机制");
-requireText("安装设计reference从项目根映射文档入口", complexDesign, "当前项目根`AGENTS.md`在“规则所有者”中映射的项目文档入口");
+requireText("安装设计reference从项目根映射文档入口", complexDesign, "当前项目根`AGENTS.md`映射的项目文档入口");
 forbidText("安装Skills不保留源码树项目文档相对链接", `${pm}\n${worker}\n${workerCollaboration}\n${complexDesign}`, "../docs/AI编程协同机制");
 requireText("业务项目按融合标记定位控制脚本", teamCollaboration, "`BEYOND-CONTROL-ROOT`定位同一控制仓脚本");
 requireText("入口融合改写控制脚本路径", controlScript, "source.replace(/`scripts\\//g");
@@ -529,7 +529,8 @@ requireText("替换工程路径前先核对现有入口", agents, "替换框架�
 requireText("现有入口可用时不替换", agents, "现有入口可用时不替换");
 requireText("每个动作直接服务业务结果", agents, "每个动作必须直接服务当前业务结果，说不清直接贡献就不做");
 requireText("现有路径足够时不增加工程对象", agents, "现有路径已经足够时，不新增框架、依赖、文档、任务、审查或长期机制，也不把简单请求扩成工程项目");
-requireText("重大判断检查反例但普通任务不增流程", agents, "普通低风险、可逆且范围明确的任务不因此增加审查、文档、子智能体、新对话或等待点");
+requireText("重大判断检查反例但普通实施细节不增流程", agents, "普通低风险、可逆且范围明确的实施细节不因此增加审查、文档、子智能体、新对话或等待点");
+requireText("轻量实施例外不跳过业务确认", agents, "但不能据此跳过新业务任务的需求与设计确认");
 requireText("反过度防御先走当前正常路径", agents, "现有正常做法能不能直接完成老板要的结果");
 requireText("明确授权不被理论失败阻断", agents, "不要因为“也许会失败”拒绝已经明确授权的正常操作");
 requireText("根入口理论边界需要不可达证据", agents, "当前根本走不到的假想情况，不进入本轮");
@@ -561,7 +562,7 @@ requireText("运维不以CLI优先否决指定方法", ops, "不能用CLI优先�
 requireText("根入口事实冲突先停止派生动作", agents, "先停止由该判断推导的写入、依赖安装和外部动作");
 requireText("根入口恢复事实反驳", agents, "明确指出冲突、说明依据并给出可执行替代");
 requireText("根入口事实冲突知情后再继续", agents, "只有老板知情后仍明确选择替换本身或另一个独立成立的结果才继续");
-requireText("只问一个改变结果的问题", agents, "才问一个关键问题");
+requireText("必要取舍与老板讨论而非模型自动批准", agents, "不把模型推断当成已批准方案");
 requireText("根入口禁止无主文件和文档", agents, "没有明确消费者、长期用途、唯一入口和回收方式时");
 requireText("工作区顶层禁止任务产物扩散", agents, "不在工作区根目录或正式项目父目录随手建立测试项目、临时clone、候选、备份、证据或安装验证目录");
 requireText("短期现场进入系统临时目录", agents, "短期现场使用操作系统临时目录并在任务结束时清理");
@@ -586,8 +587,10 @@ requireText("PM不把完整目标缩成易交付局部", pm, "把完整目标缩
 requireText("PM区分现场调查和老板取舍", pm, "Worker可调查细节与老板必须决定的取舍");
 requireText("PM只问一个方向问题", pm, "第三类只问一个改变方向的问题");
 requireText("PM首问不捆绑项目调查", pm, "环境、复现、日志和实现细节随后从项目事实调查，不捆成首轮问卷");
-requireText("PM短提示进入轻量任务设计", pm, "PM在派单前完整读取`task-design/SKILL.md`");
-requireText("PM轻量设计不新建过程产物", pm, "不新建设计文档、计划、报告或检查点");
+requireText("PM新业务进入需求与技术设计确认", pm, "PM在派单前完整读取`task-design/SKILL.md`");
+requireText("PM复用文档记录业务设计批准", pm, "复用已有文档记录需求、技术设计及确认依据");
+requireText("PM未确认不派开发", pm, "未确认不派开发");
+forbidText("PM不再禁止必要设计正文", pm, "不新建设计文档、计划、报告或检查点");
 requireText("PM轻量设计不读取控制实现", pm, "不为取得控制编号或路由读取runtime源码");
 requireText("PM任务包引用精确当前事实", pm, "指向与本结果直接相关的精确当前所有者");
 requireText("PM任务标题和方法不得缩窄验收", pm, "任务标题、模型类别、Action Skill名称和PM的实现猜测都不能覆盖或缩窄结果与验收");
@@ -601,9 +604,10 @@ forbidText("PM主入口不复制Git操作清单", pm, "merge / rebase");
 const normalizedPm = pm.replace(/\r\n/g, "\n");
 // 已验证的补读入口前移净增171字符；保留120行限制，只同步本次入口预算。
 requireCondition("PM主入口保持控制面短核心", normalizedPm.split("\n").length <= 120 && normalizedPm.length <= 6700, "identity-pm主入口超过120行或6700字符的短核心上限");
-requireText("设计Skill保留PM轻量模式", design, "PM轻量任务设计回答五件事");
+requireText("设计Skill复用有效批准而非步骤审批", design, "已有明确批准且仍适用的方案直接复用，不逐步骤重新审批");
 forbidText("设计Skill不再禁止PM技术路径分析", design, "不替Worker选择实现、测试或发布方法");
-requireText("PM轻量设计不形成文档", design, "PM轻量任务设计只进入任务包，不形成项目文档");
+requireText("业务需求和技术设计回到已有正文", design, "业务需求与技术设计复用已有正文，记录确认来源、适用范围和修订");
+forbidText("设计Skill不再强制业务设计只留任务包", design, "PM轻量任务设计只进入任务包，不形成项目文档");
 requireText("设计Skill禁止PM读取控制实现", design, "不读取控制runtime实现");
 requireText("Worker不按方法拆任务", worker, "不按 Skill、步骤或文件数量机械拆任务");
 requireText("Worker首个专业动作加载方法", worker, "进入第一个专业动作前必须完整读取一个与主要问题匹配的 Action Skill");
@@ -707,11 +711,11 @@ requireText("00入口读取项目身份与路由", documentEntry, "确认当前�
 requireText("00入口读取全部当前主事实", documentEntry, "登记的全部当前主事实正文");
 requireText("初始化不进入普通任务热路径", agents, "不进入普通任务热路径");
 requireText("升级先核对当前直接事实", agents, "初始化优先复用现有`AGENTS.md`、代码、Git和Markdown事实");
-requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.2.13");
+requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.2.14");
 requireText("项目覆盖有专用边界", agents, "BEGIN BEYOND PROJECT OVERRIDES");
 requireText("安装逐文件对账六个Skill", installVerifier, "安装Skill内容不一致");
 requireText("安装核对项目完整运行内核", installVerifier, "项目入口的BEYOND运行内核与控制仓候选不一致");
-requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.2.13"');
+requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.2.14"');
 requireText("个人路径不读取团队共享区", agents, "普通项目接手、正式Worker任务、Action Skill切换和个人任务不读取共享区");
 requireText("团队协同不替代正式Worker", agents, "不替代当前成员自己的正式Worker");
 requireText("PM初始化与协同权限严格限域", pmDispatch, "两者都不扩张到业务源码、测试、仓库配置、成员权限、环境、数据或发布");

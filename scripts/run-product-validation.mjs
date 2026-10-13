@@ -67,6 +67,7 @@ export function productCommands(sourceRoot) {
     { name: 'backup-deduplication', args: ['scripts/check-backup-dedup-regressions.mjs'] },
     ...['check-initialization-markdown-regressions', 'check-project-registration-regressions', 'check-project-preimage-regressions'].map(n => ({ name: n, args: ['scripts/' + n + '.mjs', '--product-root', '模板交付包'] })),
     { name: 'engineering-documentation', args: ['scripts/check-engineering-documentation.mjs'] },
+    { name: 'design-confirmation-static', args: ['scripts/check-design-confirmation.mjs'] },
     { name: 'retained-cli-regressions', args: ['--test', ...fs.readdirSync(path.join(sourceRoot, '模板交付包/scripts/cli')).filter(n => n.endsWith('.test.mjs')).map(n => '模板交付包/scripts/cli/' + n)] },
     { name: 'team-control-results', args: ['scripts/check-team-control-results.mjs'] },
     { name: 'runtime-and-cli', args: ['--test', '--test-concurrency=4', ...runtime] },
