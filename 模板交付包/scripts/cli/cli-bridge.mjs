@@ -98,10 +98,12 @@ async function transferOwners(request, context, store) {
   for (const key of ['projectId', 'fromOwnerThreadId', 'toOwnerThreadId']) validIdentifier(input[key]);
   if (input.fromOwnerThreadId === input.toOwnerThreadId || ![input.fromOwnerThreadId, input.toOwnerThreadId].includes(context.ownerThreadId)) throw new Error('CLI transfer caller identity mismatch');
   if (typeof input.authorizationLocator !== 'string' || !input.authorizationLocator.trim()) throw new Error('CLI transfer authorization required');
-  if (!Number.isSafeInteger(input.expectedWorkbenchStateRevision) || input.expectedWorkbenchStateRevision < 0) throw new Error('CLI transfer workbench basis required');
+  if (!['formal', 'assist'].includes(input.taskMode ?? 'formal')) throw new Error('invalid CLI transfer mode');
   if (!Array.isArray(input.tasks) || !input.tasks.length || new Set(input.tasks.map(item => item?.taskId)).size !== input.tasks.length) throw new Error('CLI transfer unique task set required');
   const provider = new ProjectIdentityProvider({ controlRoot: context.controlRoot, runtimeRoot: path.join(context.controlRoot, 'local/runtime/project-identity') });
   const canonical = provider.validateSameRootProject(input.projectId, { executionRoot: context.executionRoot });
+  if (input.taskMode === 'assist') return transferAssistance(request, context, store, provider, canonical, operationId);
+  if (!Number.isSafeInteger(input.expectedWorkbenchStateRevision) || input.expectedWorkbenchStateRevision < 0) throw new Error('CLI transfer workbench basis required');
   const workbench = new WorkbenchTransactionStore({ runtimeRoot: path.join(context.controlRoot, 'local/runtime/workbench'), viewPath: path.join(context.controlRoot, 'local/当前工作台.md'), historyRoot: path.join(context.controlRoot, 'local/history/workbench') });
   const snapshot = workbench.snapshot();
   const prepared = input.tasks.map(item => {
@@ -154,6 +156,57 @@ async function transferOwners(request, context, store) {
     return { taskId: item.intent.taskId, phase: record.phase, sessionId: record.expectedSessionId, preimageDirectory: store.transferDirectory({ ...item.intent, ownerThreadId: input.toOwnerThreadId }, operationId) };
   });
   return { operationId, workbenchResult: result, tasks };
+}
+
+async function transferAssistance(request, context, store, provider, canonical, operationId) {
+  const input = request.input;
+  if (input.tasks.length !== 1) throw new Error('CLI assist transfer requires one explicit task');
+  if (input.expectedWorkbenchStateRevision !== undefined || input.tasks[0].expectedStatus !== undefined) throw new Error('CLI assist transfer does not change the workbench');
+  const item = input.tasks[0];
+  validIdentifier(item.taskId); validIdentifier(item.expectedSessionId);
+  if (!Number.isSafeInteger(item.expectedRunNumber) || item.expectedRunNumber < 1 || ['expectedStateSha256', 'expectedResultSha256'].some(key => !/^[a-f0-9]{64}$/.test(item[key] ?? ''))) throw new Error('CLI transfer exact task fingerprint required');
+  const intent = { taskMode: 'assist', operationId, projectId: input.projectId, fromOwnerThreadId: input.fromOwnerThreadId, toOwnerThreadId: input.toOwnerThreadId, authorizationLocator: input.authorizationLocator,
+    taskId: item.taskId, expectedStateSha256: item.expectedStateSha256, expectedResultSha256: item.expectedResultSha256, expectedRunNumber: item.expectedRunNumber, expectedSessionId: item.expectedSessionId };
+  const original = { projectId: input.projectId, taskId: item.taskId, ownerThreadId: input.fromOwnerThreadId };
+  const directory = store.transferDirectory(original, operationId), file = path.join(directory, 'transfer.json');
+  const record = fs.existsSync(file) ? store.readJson(file) : null;
+  if (record && Object.entries(intent).some(([key, value]) => record[key] !== value)) throw new Error('CLI transfer request conflict');
+  const result = saved => ({ operationId, taskMode: 'assist', tasks: [{ taskId: item.taskId, phase: saved.phase, sessionId: saved.expectedSessionId, preimageDirectory: directory }] });
+  // A completed request is a historical receipt, not a second ownership change.
+  if (record?.phase === 'completed') return result(record);
+  const assertUnregistered = () => {
+    const stateFile = path.join(context.controlRoot, 'local/runtime/workbench/workbench-state.json');
+    if (fs.existsSync(stateFile) && store.readJson(stateFile).tasks?.[item.taskId]) throw new Error('CLI assist transfer cannot reassign a registered Worker or formal task');
+    const historyRoot = path.join(context.controlRoot, 'local/history/workbench');
+    if (fs.existsSync(historyRoot)) for (const entry of fs.readdirSync(historyRoot).filter(name => name.endsWith('.json'))) {
+      const history = store.readJson(path.join(historyRoot, entry));
+      if ((Array.isArray(history) ? history : history.records ?? []).some(row => row.taskId === item.taskId)) throw new Error('CLI goal is already archived');
+    }
+  };
+  assertUnregistered();
+  const state = store.readJson(store.locator(original));
+  if (state.taskMode !== 'assist') throw new Error('CLI transfer task mode mismatch');
+  if (![input.fromOwnerThreadId, input.toOwnerThreadId].includes(state.ownerThreadId)) throw new Error('CLI transfer source owner mismatch');
+  if (!projectIdentityInternals.samePath(state.executionRoot, canonical.canonicalProjectRoot)) {
+    if (!state.projectRoute) throw new Error('CLI cross-root transfer requires projectRoute');
+    provider.validateWorkerRoute(input.projectId, state.projectRoute, { executionRoot: state.executionRoot });
+  }
+  if (state.ownerThreadId === input.toOwnerThreadId) {
+    if (!record) throw new Error('CLI transfer evidence missing');
+    store.verifyTransferredTransfer(intent);
+  } else {
+    if (digest(state) !== intent.expectedStateSha256 || state.status !== 'completed' || state.managerPid || state.processIdentity
+      || state.runNumber !== intent.expectedRunNumber || state.sessionId !== intent.expectedSessionId || sha256File(state.currentResultPath) !== intent.expectedResultSha256) throw new Error('CLI transfer stable result or fingerprint mismatch');
+    if (store.readResult(original, state.runNumber).status !== 'completed') throw new Error('CLI transfer requires a completed result');
+    if (['accept', 'close'].includes(store.readReview(original, state.runNumber)?.decision)) throw new Error('CLI transfer cannot reopen a terminal review');
+    await detachForTransfer(store, original);
+    store.validateTransferCandidate(intent);
+  }
+  // Reuse the same durable transfer journal and per-task lock; no workbench row is manufactured.
+  assertUnregistered();
+  store.beginTransfer({ ownerThreadId: context.ownerThreadId }, intent);
+  store.applyTransfer(intent);
+  return result(store.completeTransfer(intent));
 }
 
 async function startManager(store, binding, run, profile, prompt, context) {
