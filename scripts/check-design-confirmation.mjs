@@ -34,6 +34,26 @@ const receiptRenameAfter = [
   '        // Bound attempts without changing the lock or atomic replacement semantics.',
   '        retryTransientFileOperation(() => fs.renameSync(temporary, target), 200);',
 ].join('\n');
+// Explicitly authorized 3.2.15 assist-owner transfer. Preserve the original
+// fixture: only these reviewed complete contents replace their old hashes.
+// Do not exempt CLI directories, callbacks, Skills or the model policy.
+const assistTransferFingerprints = [
+  { path: cli,
+    before: 'f919553d21558e8265f8a59a7ee1b9321419cddd22912d86d112524f81604a51',
+    after: 'ebedc6b6f61956d5a9d713bb48afcee3fa27941774dd5c430a8f52e1711b72a5' },
+  { path: product + 'scripts/cli/cli-bridge.mjs',
+    before: '3b5a76f1f94124195ee0259ee97dc79dd96cc8f6392e938bd65bb582c8892660',
+    after: '926f60ae449203194a25baca943f823511bdeadbe90e8e9ea740df0c402a6c35' },
+  { path: product + 'scripts/cli/cli-task-store.mjs',
+    before: '8ca4e392dff1ea77e8ebb32d07d7e5e8272b2798578c794218534f27876f4d60',
+    after: 'a5ded774c6805b295fc86acc5b8348dd3a2ceb802273d59d143ccc1e69e1000f' },
+];
+function matchesFrozenFingerprint(item, currentHash) {
+  const approved = assistTransferFingerprints.find(change => change.path === item.path);
+  return approved
+    ? item.sha256 === approved.before && currentHash === approved.after
+    : currentHash === item.sha256;
+}
 
 function headings(text) {
   const seen = new Map();
@@ -84,7 +104,7 @@ function frozenFailures(source = read) {
         if (current.split(receiptRenameAfter).length !== 2) { errors.push(item.path); continue; }
         current = current.replace(receiptRenameAfter, receiptRenameBefore);
       }
-      if (sha256(current) !== item.sha256) errors.push(item.path);
+      if (!matchesFrozenFingerprint(item, sha256(current))) errors.push(item.path);
     }
     catch { errors.push(item.path + ': missing or unreadable'); }
   }
@@ -247,7 +267,7 @@ test('reviewed boundary checks reject removal of every declared safeguard', () =
   }
 });
 
-test('protected source is frozen except the precisely authorized receipt replacement retry', () => {
+test('protected source is frozen except the precise receipt retry and assist transfer changes', () => {
   assert.equal(fixture.schemaVersion, 1);
   assert.equal(fixture.baselineCommit, '041b0fe0f290ad628dc5c9f29b9d725419958781');
   assert.equal(new Set(fixture.files.map(item => item.path)).size, fixture.files.length);
@@ -260,6 +280,30 @@ test('protected source is frozen except the precisely authorized receipt replace
       'frozen directory membership changed: ' + directory);
   }
   assert.deepEqual(frozenFailures(), [], 'frozen source changed; do not refresh this fixture to silence a regression');
+});
+
+test('assist transfer permits exactly the reviewed files and rejects rollback or further changes', () => {
+  assert.deepEqual(assistTransferFingerprints.map(item => item.path).sort(), [
+    cli, product + 'scripts/cli/cli-bridge.mjs', product + 'scripts/cli/cli-task-store.mjs',
+  ].sort());
+  for (const change of assistTransferFingerprints) {
+    const original = fixture.files.find(item => item.path === change.path);
+    assert.ok(original, change.path);
+    assert.equal(change.before, original.sha256);
+    assert.match(change.after, /^[a-f0-9]{64}$/);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false, 'old contents must not pass');
+    assert.equal(matchesFrozenFingerprint(original, sha256(read(change.path))), true);
+    for (const mutate of [text => text + '\nextra content', text => text.slice(1)]) {
+      assert.ok(frozenFailures(file => file === change.path ? mutate(read(file)) : read(file)).includes(change.path));
+    }
+    assert.ok(frozenFailures(file => {
+      if (file === change.path) throw Error('missing');
+      return read(file);
+    }).includes(change.path + ': missing or unreadable'));
+  }
+  const callback = fixture.files.find(item => item.path.endsWith('/cli-notify.mjs'));
+  assert.ok(callback);
+  assert.equal(matchesFrozenFingerprint(callback, sha256(read(callback.path) + '\nchanged')), false);
 });
 
 test('receipt exception rejects removal, changed retry budget and unrelated receipt edits', () => {

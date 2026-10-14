@@ -85,13 +85,25 @@ runtime从受管结果及核验读取正式证据和验收结论；一次事务�
 
 ## 负责人移交
 
-用户明确要求把直接登记的 CLI 任务交给另一位 PM 时，用同一入口的 `cli.transfer`；不另建任务、不重开会话、不改变默认 Worker 唯一执行者规则。仅移交已结束且稳定保存结果的正式 CLI 任务；正在执行的轮次、未知退出状态和属于原 Worker 的辅助 CLI 不强行接管。空闲原生窗口由入口正常 detach，确认保存的进程均已退出后再变更负责人。
+用户明确要求把 CLI 任务交给另一位负责人时，用同一入口的 `cli.transfer`；不另建任务、不重开会话、不改变默认 Worker 唯一执行者规则。仅移交已结束且稳定保存结果、尚未验收或关闭的任务；正在执行的轮次、未知退出状态和绑定正式 Worker 的辅助 CLI 不强行接管。空闲原生窗口由入口正常 detach，确认保存的进程均已退出后再变更负责人。
+
+正式 CLI 沿用下面的工作台移交请求（不填 `taskMode` 时仍按正式任务处理）：
 
 ```json
 {"schemaVersion":1,"requestId":"handoff-cli-goals","action":"cli.transfer","input":{"projectId":"<项目>","fromOwnerThreadId":"<原负责人>","toOwnerThreadId":"<新负责人>","authorizationLocator":"<老板明确移交指令入口>","expectedWorkbenchStateRevision":1,"tasks":[{"taskId":"<任务>","expectedStatus":"进行中","expectedStateSha256":"<task.json解析对象的SHA256>","expectedRunNumber":1,"expectedSessionId":"<保存的会话>","expectedResultSha256":"<result.json文件SHA256>"}]}}
 ```
 
 由原负责人或接手人调用，先核对真实项目、任务与原负责人；不根据项目名称猜归属。每个任务保存移交前像与过程记录，工作台统一更新负责人，状态仍是原来的进行中或已暂停。中断时重放同一请求继续；移交尚未完成的任务不续跑或收口，不影响无关任务推进。
+
+未登记在工作台的独立辅助 CLI，只有老板明确授权移交后，才使用 `input.taskMode="assist"`，一次指定一个任务；不提供工作台 revision 或任务 status，不新建、伪造正式任务记录。已绑定正式 Worker 或已归档的任务不走这条路径。仍从已核实的项目主根目录调用，工作目录在另一个仓库/工作树时核对任务保存的 `projectRoute`，不能把负责人移交变成项目搬迁。
+
+```json
+{"schemaVersion":1,"requestId":"handoff-one-assist","action":"cli.transfer","input":{"taskMode":"assist","projectId":"<项目>","fromOwnerThreadId":"<原负责人>","toOwnerThreadId":"<新负责人>","authorizationLocator":"<老板明确移交指令入口>","tasks":[{"taskId":"<原辅助任务>","expectedStateSha256":"<task.json解析对象的SHA256>","expectedRunNumber":14,"expectedSessionId":"<原会话>","expectedResultSha256":"<result.json文件SHA256>"}]}}
+```
+
+辅助移交保持 `assist`、原 taskId、sessionId、模型配置、执行目录、任务契约和历史记录；只变更控制归属并保存移交证据。旧负责人不能再用普通控制入口操作该任务，新负责人须独立审查原结果后才能续跑同一会话。重复提交已完成的同一请求只返回原移交回执，不夺回后续归属；中断请求必须沿用原 requestId、双方身份和指纹，不能换新请求抢占。工作台与其他任务不受辅助移交影响。
+
+移交请求从项目主根目录发起；接手后的 `cli.result / cli.review / cli.resume` 要在保存的原 `executionRoot` 执行，不迁移工作目录。同一请求并发可能一次成功、另一次安全拒绝，随后原样重放即可核对结果。进程硬退出若留下任务锁，仍保持封锁，须先核实持锁进程已经退出并恢复原锁，再重放移交；不能把“防止双控”当成“任意故障都会自动恢复”。
 
 历史运行、回答、复核和通知不改写。新负责人先读原目标、项目事实与已有结果，独立复核缺口，再在同一 sessionId 续做或按已有业务标准验收；不继承前任的验收结论。新轮通知新负责人，旧结果不重复通知。移交不是完成、验收或新的业务授权。
 

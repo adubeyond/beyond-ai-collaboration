@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [3.2.15] - 2026-10-14
+
+### Added
+
+- Extend the existing CLI owner-transfer protocol to a single unregistered `assist` task under explicit user authorization. Preserve its task identity, native session, model configuration, contract, results and historical reviews without converting it to `formal` or creating a workbench record.
+- Require an independent successor review before continuing the same session; reject control by the former owner. Existing formal-task transfers remain compatible.
+- Cover duplicate requests, competing destinations, interrupted transfer phases and a real process exit with an orphaned lock. Recovery verifies identity and state instead of ignoring the lock or allowing two controllers.
+
+### Boundaries
+
+- Transfer does not start a new CLI session, resume business work, replay historical notifications, or grant additional business authority. Active or unverified process ownership remains a refusal condition.
+- Six Skills, Desktop Worker callbacks, receipt order, the model matrix and existing CLI fixes remain unchanged. Installation and any live task handoff require their own explicit scope; installing this release does not transfer existing tasks.
+- See [validation and limits](docs/releases/v3.2.15-validation.md) for the completed isolated checks and remaining release gates.
+
 ## [3.2.14] - 2026-10-14
 
 ### Added

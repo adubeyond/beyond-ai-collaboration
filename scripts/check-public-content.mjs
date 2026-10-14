@@ -221,6 +221,13 @@ function validateText(path, text) {
     if (label === "疑似动态 SHA-256" && rel === "scripts/fixtures/design-confirmation-frozen-baseline.json") {
       checkedText = checkedText.replace(/^\s*"sha256": "[0-9a-f]{64}"$/gm, '"sha256": "<public-source-pin>"');
     }
+    // The assist-transfer exception pins reviewed public source, not private
+    // runtime receipts. The freeze test verifies the exact three files and
+    // their before/after contents; other hashes and sensitive fields stay checked.
+    if (label === "疑似动态 SHA-256" && rel === "scripts/check-design-confirmation.mjs") {
+      checkedText = checkedText.replace(/^const assistTransferFingerprints = \[[\s\S]*?^\];$/m,
+        section => section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'"));
+    }
     if (label === "疑似秘密赋值" && fixtureTokens.has(rel)) {
       checkedText = checkedText.replace(/\btoken\s*[:=]\s*'([^'\n]+)'/g,
         (assignment, value) => fixtureTokens.get(rel).includes(value) ? "token: '<test>'" : assignment);

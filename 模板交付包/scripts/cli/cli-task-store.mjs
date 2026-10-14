@@ -379,12 +379,14 @@ export class CliTaskStore {
     validIdentifier(input.operationId); validIdentifier(input.projectId); validIdentifier(input.taskId);
     validIdentifier(input.fromOwnerThreadId); validIdentifier(input.toOwnerThreadId); validIdentifier(input.expectedSessionId);
     validNonEmpty(input.authorizationLocator, 'authorizationLocator');
+    if (!['formal', 'assist'].includes(input.taskMode ?? 'formal')) throw new Error('invalid CLI transfer mode');
     if (input.fromOwnerThreadId === input.toOwnerThreadId) throw new Error('CLI transfer owner unchanged');
     if (!Number.isSafeInteger(input.expectedRunNumber) || input.expectedRunNumber < 1) throw new Error('invalid CLI transfer run');
     for (const key of ['expectedStateSha256', 'expectedResultSha256']) if (!/^[a-f0-9]{64}$/.test(input[key] ?? '')) throw new Error('CLI transfer exact fingerprint required');
     return input;
   }
   #verifyTransferInput(record, input) {
+    if ((record.taskMode ?? 'formal') !== (input.taskMode ?? 'formal')) throw new Error('CLI transfer request conflict');
     for (const key of ['operationId', 'projectId', 'taskId', 'fromOwnerThreadId', 'toOwnerThreadId', 'expectedStateSha256', 'expectedSessionId', 'expectedRunNumber', 'expectedResultSha256', 'authorizationLocator']) {
       if (record[key] !== input[key]) throw new Error('CLI transfer request conflict');
     }
@@ -396,7 +398,7 @@ export class CliTaskStore {
     throw new Error('CLI transfer recovery caller mismatch or previous transfer caller still active');
   }
   #verifyStableTransferState(input, state) {
-    if (state.taskMode !== 'formal') throw new Error('only formal CLI tasks can transfer');
+    if (state.taskMode !== (input.taskMode ?? 'formal')) throw new Error('CLI transfer task mode mismatch');
     if (state.status !== 'completed' || state.managerPid !== null || state.processIdentity) throw new Error('CLI transfer requires a completed stable run');
     if (state.sessionId !== input.expectedSessionId || state.runNumber !== input.expectedRunNumber) throw new Error('CLI transfer session or run mismatch');
     const result = this.readResult({ ...state, ownerThreadId: state.ownerThreadId }, state.runNumber);
@@ -506,8 +508,9 @@ export class CliTaskStore {
       return completed;
     });
   }
-  completeTransfer(input, { workbenchStateSha256 }) {
-    this.#transferInput(input); validNonEmpty(workbenchStateSha256, 'workbenchStateSha256');
+  completeTransfer(input, { workbenchStateSha256 } = {}) {
+    this.#transferInput(input);
+    if ((input.taskMode ?? 'formal') === 'formal') validNonEmpty(workbenchStateSha256, 'workbenchStateSha256');
     return this.withLock({ ...input, ownerThreadId: input.toOwnerThreadId }, () => {
       const file = this.checkedPath(path.join(this.transferDirectory({ ...input, ownerThreadId: input.toOwnerThreadId }, input.operationId), 'transfer.json'));
       const record = this.readJson(file); this.#verifyTransferInput(record, input);
@@ -515,7 +518,7 @@ export class CliTaskStore {
       if (record.phase !== 'task-transferred') throw new Error('CLI transfer phase conflict');
       const state = this.read({ ...input, ownerThreadId: input.toOwnerThreadId });
       if (state.ownerThreadId !== input.toOwnerThreadId || state.transferOperationId !== input.operationId) throw new Error('CLI transferred state mismatch');
-      const completed = { ...record, phase: 'completed', workbenchStateSha256, completedAt: now() };
+      const completed = { ...record, phase: 'completed', ...((input.taskMode ?? 'formal') === 'formal' ? { workbenchStateSha256 } : {}), completedAt: now() };
       atomicJson(file, completed);
       return completed;
     });
