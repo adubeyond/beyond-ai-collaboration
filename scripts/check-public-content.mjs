@@ -215,6 +215,12 @@ function validateText(path, text) {
     let checkedText = label === "疑似动态 SHA-256" && rel === "模板交付包/scripts/cli/zcode-profile.mjs"
       ? text.replace(/^const TUI_SHA256 = '[0-9a-f]{64}';$/m, "const TUI_SHA256 = '<upstream-content-pin>';")
       : text;
+    // These are public-source pins from a declared Git baseline, not runtime
+    // receipts. Only the hash fields are exempt; the freeze test validates them
+    // against the actual protected files and every other value remains checked.
+    if (label === "疑似动态 SHA-256" && rel === "scripts/fixtures/design-confirmation-frozen-baseline.json") {
+      checkedText = checkedText.replace(/^\s*"sha256": "[0-9a-f]{64}"$/gm, '"sha256": "<public-source-pin>"');
+    }
     if (label === "疑似秘密赋值" && fixtureTokens.has(rel)) {
       checkedText = checkedText.replace(/\btoken\s*[:=]\s*'([^'\n]+)'/g,
         (assignment, value) => fixtureTokens.get(rel).includes(value) ? "token: '<test>'" : assignment);
@@ -481,8 +487,8 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/task-design/SKILL.md",
-    label: "PM uses design only for the business task contract",
-    value: "PM轻量任务设计只进入任务包，不形成项目文档",
+    label: "business design records approval scope and revision in its existing owner",
+    value: "业务需求与技术设计复用已有正文，记录确认来源、适用范围和修订",
   },
   {
     path: "模板交付包/skills/task-design/SKILL.md",

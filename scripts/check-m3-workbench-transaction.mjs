@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+import { createTestWorkspace } from './lib/test-workspace.mjs';
 import path from 'node:path';
 import test from 'node:test';
 import { InjectedFault, WorkbenchTransactionStore } from '../模板交付包/scripts/runtime/workbench-transaction.mjs';
 
 function fixture(name) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), `beyond-workbench-${name}-`));
+  const root = createTestWorkspace(`beyond-workbench-${name}-`);
   const local = path.join(root, 'local');
   fs.mkdirSync(local, { recursive: true });
   const viewPath = path.join(local, '当前工作台.md');

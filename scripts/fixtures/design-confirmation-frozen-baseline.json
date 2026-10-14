@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "041b0fe0f290ad628dc5c9f29b9d725419958781",
+  "normalization": "Only CRLF is normalized to LF; all other characters are compared exactly.",
+  "purpose": "Frozen callback, CLI and model policy source; not live-platform E2E evidence.",
+  "directories": [
+    "模板交付包/scripts/cli",
+    "模板交付包/scripts/runtime",
+    "模板交付包/skills/identity-worker"
+  ],
+  "files": [
+    {
+      "path": "模板交付包/docs/AI编程协同机制/机制/04-CLI目标协作机制.md",
+      "sha256": "f919553d21558e8265f8a59a7ee1b9321419cddd22912d86d112524f81604a51"
+    },
+    {
+      "path": "模板交付包/scripts/beyond-control.mjs",
+      "sha256": "3055caf33c21cbbd905a39fcb0c98368a017767c55610f79bc41b28937a71b28"
+    },
+    {
+      "path": "模板交付包/scripts/cli/app-server-rpc.mjs",
+      "sha256": "a06ab1b6ef52a7732867d3c06f0430f0f4b9fe8aa367204c6d816dbdc5ada48d"
+    },
+    {
+      "path": "模板交付包/scripts/cli/claude-client.mjs",
+      "sha256": "c2c57dd6a10ed1d9b343114e1f885d5186cb66416e995919952d341fe79bb66b"
+    },
+    {
+      "path": "模板交付包/scripts/cli/claude-command-channel.test.mjs",
+      "sha256": "d398167d9730218de264b6e6ded48abe59ff6c8492bf8a391c149ef98f7e73ed"
+    },
+    {
+      "path": "模板交付包/scripts/cli/claude-hook.mjs",
+      "sha256": "623b46edf87f39316fe0b457b69fd3813cc86eb468c3e41d1b6bea7800b7f55d"
+    },
+    {
+      "path": "模板交付包/scripts/cli/claude-profile.mjs",
+      "sha256": "44f667cfe730fc92c739b0e16a62b100e155392dc764b2e483a4a36aff2a37e9"
+    },
+    {
+      "path": "模板交付包/scripts/cli/claude-version-compatibility.test.mjs",
+      "sha256": "c394825879c2327e183f23201dfdbe05c1a2abfea1581244c76f3e722268dbdf"
+    },
+    {
+      "path": "模板交付包/scripts/cli/cli-bridge.mjs",
+      "sha256": "3b5a76f1f94124195ee0259ee97dc79dd96cc8f6392e938bd65bb582c8892660"
+    },
+    {
+      "path": "模板交付包/scripts/cli/cli-lock-race.test.mjs",
+      "sha256": "95f41eba3dbe8eb56370c1cb09443ab0f13364174db07b0565283ccea91b7fa6"
+    },
+    {
+      "path": "模板交付包/scripts/cli/cli-notify.mjs",
+      "sha256": "9787ad1801cc18a943ef4e9f8742c69bebc795bde216b5866e70848e040782d9"
+    },
+    {
+      "path": "模板交付包/scripts/cli/cli-task-store.mjs",
+      "sha256": "8ca4e392dff1ea77e8ebb32d07d7e5e8272b2798578c794218534f27876f4d60"
+    },
+    {
+      "path": "模板交付包/scripts/cli/cli-unbound-start-recovery.test.mjs",
+      "sha256": "e7d78ebed041f676e4a7f402cab87cee2fe03b7dffe1fe2293b03838c3aef2f5"
+    },
+    {
+      "path": "模板交付包/scripts/cli/desktop-host.mjs",
+      "sha256": "1677d428b75b22f5bc64a4851c37adf07d4936162f4962d80f46396feb641eeb"
+    },
+    {
+      "path": "模板交付包/scripts/cli/interactive-cli-runner.mjs",
+      "sha256": "e6f49e8b4d7efce4fd781e249e0bc5e9bb949d5c38cd7b358e3f4bb6899d88e0"
+    },
+    {
+      "path": "模板交付包/scripts/cli/interactive-client.mjs",
+      "sha256": "6e2c7ff9fb8e6a320246c50c4f7f8ee2c847bf873a9f074a26a81fc72271148d"
+    },
+    {
+      "path": "模板交付包/scripts/cli/native-cli-runner.mjs",
+      "sha256": "4d1da06de84d65bb8a14441a4312b24ba503807f44cb22ed05958498deb0f2d3"
+    },
+    {
+      "path": "模板交付包/scripts/cli/process-identity.mjs",
+      "sha256": "649bd6e7106ea3f27f7bb99f35ff8d9d215d383aba4373363d1b7ff52cdff10a"
+    },
+    {
+      "path": "模板交付包/scripts/cli/process-identity.window-recovery.test.mjs",
+      "sha256": "2d442b9ab503e31c911b7f7e8118cbad9868d0375f9e46ad76493618433c4d36"
+    },
+    {
+      "path": "模板交付包/scripts/cli/visible-cli-runner.mjs",
+      "sha256": "73896a0d56cb22dfdd66a564cc4464588edde5de1b6c7b824245bea30c3a929a"
+    },
+    {
+      "path": "模板交付包/scripts/cli/zcode-cli-runner.mjs",
+      "sha256": "a6fb21a369be09f5e9d4b99586b1edbb4f8c7805457caa9320bbf4db8a46a414"
+    },
+    {
+      "path": "模板交付包/scripts/cli/zcode-client.mjs",
+      "sha256": "4cbe5a975eb0065fcfe42c09d4aaf38dea1dee8147c6e32d793c9753df5f7f70"
+    },
+    {
+      "path": "模板交付包/scripts/cli/zcode-profile.mjs",
+      "sha256": "0195dcf24e942d20cc7dfe20182cc882e1f91a1d53ba651852aabbded5cbac59"
+    },
+    {
+      "path": "模板交付包/scripts/cli/zcode-tui-hook.mjs",
+      "sha256": "881fdfb38d59618ff2d70ba49550583f0ded90b1687376e85b42b7861172e69a"
+    },
+    {
+      "path": "模板交付包/scripts/runtime/control-runtime.mjs",
+      "sha256": "cef99605ad2a3f436085443275beb07908ebca85392ad84273171cca04986122"
+    },
+    {
+      "path": "模板交付包/scripts/runtime/project-identity-provider.mjs",
+      "sha256": "c0c257509782ebb7ba3ee3af8b5f1d3006938faa5ad203c085adb29787b57cf8"
+    },
+    {
+      "path": "模板交付包/scripts/runtime/workbench-transaction.mjs",
+      "sha256": "6554383e59f6dc6bbaec8128b1b75abbad06ebce50b0d972f5b3d15709616aa8"
+    },
+    {
+      "path": "模板交付包/scripts/runtime/worker-result-receipts.mjs",
+      "sha256": "f4c2d54568b07fbe0872d5f1caaa19e3326ad8e438d638602bd75cef16f1c1e2"
+    },
+    {
+      "path": "模板交付包/skills/identity-pm/references/lifecycle-and-closeout.md",
+      "sha256": "1d7488ae62a81afb316a3377f6070d8d528bdb66bbdc41924067a6cf7af8afac"
+    },
+    {
+      "path": "模板交付包/skills/identity-worker/SKILL.md",
+      "sha256": "90df3379827811b20fda8959a22fca98a19643cc14a962572e1176377c46e9e3"
+    },
+    {
+      "path": "模板交付包/skills/identity-worker/agents/openai.yaml",
+      "sha256": "d15ff52e60d2a39bf2764f3a431a9adac59c949d650b6a4a600d954e505a8cd7"
+    },
+    {
+      "path": "模板交付包/skills/identity-worker/references/capability-correction-and-cost.md",
+      "sha256": "05a561ba345c61a1af7e343dce4735a027615cc49fec61b0ac9f5ab49cb34447"
+    },
+    {
+      "path": "模板交付包/skills/identity-worker/references/collaboration-and-rework.md",
+      "sha256": "0bbcb50fd883d09ec2a4e4e28e479d2ebfe5ea0121444ac75a138297439563e2"
+    },
+    {
+      "path": "模板交付包/skills/identity-worker/references/lifecycle-and-recovery.md",
+      "sha256": "39eb1a6ae5af776097867797b11d08a9345ae3c02dd269ad31bc6849b07e965d"
+    },
+    {
+      "path": "模板交付包/skills/identity-worker/references/takeover-and-output.md",
+      "sha256": "31a437661ad35be89567fe5e92de4c73a16d4b893c63c322f3036e93ab5dcbaf"
+    }
+  ],
+  "portions": [
+    {
+      "path": "模板交付包/skills/identity-pm/SKILL.md",
+      "start": "## 5. 状态与执行边界",
+      "end": null,
+      "sha256": "eeaadd9d8cd218a9e65a6912b3e17556d92fa424ffd8aa303f255fc7cba425a1"
+    },
+    {
+      "path": "模板交付包/skills/identity-pm/references/dispatch-and-init.md",
+      "start": "### 模型分类与创建异常",
+      "end": "## 2. 首次项目接入",
+      "sha256": "e2f992e771a709094daf8a3641cb4d9518f69e632a0dea61783c37f400b67ea8"
+    }
+  ]
+}

@@ -2,11 +2,16 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
   copyFileSync,
+  closeSync,
+  constants as fsConstants,
   cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readlinkSync,
+  readSync,
   realpathSync,
   readdirSync,
   renameSync,
@@ -907,19 +912,80 @@ function timestamp() {
   return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
+function backupTree(path, filter = () => true) {
+  const entries = [];
+  function visit(file) {
+    let info;
+    try { info = lstatSync(file); }
+    catch (error) { if (error.code === "ENOENT") return; throw error; }
+    const name = display(relative(path, file)) || ".";
+    if (!filter(file)) return;
+    if (info.isSymbolicLink()) {
+      // cpSync preserves the link, resolving relative targets rather than following it.
+      entries.push([name, "link", resolve(dirname(file), readlinkSync(file))]);
+    } else if (info.isDirectory()) {
+      entries.push([name, "directory", info.mode & 0o777]);
+      for (const child of readdirSync(file).sort()) visit(join(file, child));
+    } else if (info.isFile()) {
+      const hash = createHash("sha256");
+      const descriptor = openSync(file, "r");
+      try {
+        const buffer = Buffer.allocUnsafe(64 * 1024);
+        for (let count; (count = readSync(descriptor, buffer)) > 0;) hash.update(buffer.subarray(0, count));
+      } finally { closeSync(descriptor); }
+      entries.push([name, "file", info.mode & 0o777, info.size, hash.digest("hex")]);
+    } else throw new Error(`不支持备份的文件类型：${display(file)}`);
+  }
+  visit(path);
+  return entries;
+}
+
+function backupSignature(value) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function findVerifiedBackup(root, accepts, verify) {
+  if (!existsSync(root)) return null;
+  for (const name of readdirSync(root).sort().reverse()) {
+    if (!accepts(name)) continue;
+    const path = join(root, name);
+    const info = lstatSync(path);
+    if (info.isSymbolicLink() || !info.isDirectory()) continue;
+    try { if (verify(path)) return path; }
+    catch (error) { if (error.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error; }
+  }
+  return null;
+}
+
 function backupLocal(reason = "manual") {
   ensureControl();
   const source = join(controlRoot, "local");
-  const stem = `${timestamp()}-${reason.replace(/[^a-z0-9_-]+/gi, "-")}`;
+  const filter = (path) => path === source || !ignoredDiscoveryDirectories.has(basename(path));
+  const signature = backupSignature(backupTree(source, filter));
+  const marker = `-local-content-${signature}-`;
+  const reusable = findVerifiedBackup(backupRoot(),
+    (name) => name.includes(marker) && !name.endsWith(".partial"),
+    (path) => backupSignature(backupTree(path)) === signature);
+  if (reusable) {
+    if (backupSignature(backupTree(source, filter)) !== signature) throw new Error("复用备份前源内容发生变化；停止写入");
+    return reusable;
+  }
+  const stem = `${timestamp()}${marker}${reason.replace(/[^a-z0-9_-]+/gi, "-")}`;
   let target = join(backupRoot(), stem);
   let suffix = 1;
-  while (existsSync(target)) target = join(backupRoot(), `${stem}-${suffix++}`);
+  while (existsSync(target) || existsSync(`${target}.partial`)) target = join(backupRoot(), `${stem}-${suffix++}`);
   mkdirSync(dirname(target), { recursive: true });
-  cpSync(source, target, {
+  const temporary = `${target}.partial`;
+  cpSync(source, temporary, {
     recursive: true,
     errorOnExist: true,
-    filter: (sourcePath) => sourcePath === source || !ignoredDiscoveryDirectories.has(basename(sourcePath)),
+    force: false,
+    filter,
   });
+  if (backupSignature(backupTree(temporary)) !== signature || backupSignature(backupTree(source, filter)) !== signature) {
+    throw new Error(`备份校验失败或源内容发生变化；保留未完成前像：${display(temporary)}`);
+  }
+  renameSync(temporary, target);
   return target;
 }
 
@@ -928,9 +994,41 @@ function backupControlFile(path, reason) {
   if (!nested || nested.startsWith(`..${sep}`) || nested === ".." || isAbsolute(nested)) {
     fail(`只能备份当前控制仓内文件：${display(path)}`);
   }
-  const target = join(backupRoot(), `${timestamp()}-${reason.replace(/[^a-z0-9_-]+/gi, "-")}`, nested);
-  mkdirSync(dirname(target), { recursive: true });
-  copyFileSync(path, target);
+  const signature = backupSignature(backupTree(path));
+  const marker = `-file-content-${signature}-`;
+  const reusable = findVerifiedBackup(backupRoot(), (name) => name.includes(marker) && !name.endsWith(".partial"),
+    (directory) => backupSignature(backupTree(join(directory, nested))) === signature);
+  if (reusable) {
+    if (backupSignature(backupTree(path)) !== signature) throw new Error("复用单文件前像前源内容发生变化；停止写入");
+    return join(reusable, nested);
+  }
+  const stem = `${timestamp()}${marker}${reason.replace(/[^a-z0-9_-]+/gi, "-")}`;
+  let directory = join(backupRoot(), stem);
+  for (let suffix = 1; existsSync(directory) || existsSync(`${directory}.partial`); suffix += 1) directory = join(backupRoot(), `${stem}-${suffix}`);
+  const temporary = join(`${directory}.partial`, nested);
+  mkdirSync(dirname(temporary), { recursive: true });
+  copyFileSync(path, temporary, fsConstants.COPYFILE_EXCL);
+  if (backupSignature(backupTree(temporary)) !== signature || backupSignature(backupTree(path)) !== signature) throw new Error(`备份校验失败：${display(temporary)}`);
+  renameSync(`${directory}.partial`, directory);
+  return join(directory, nested);
+}
+
+function backupCompatibilityFile(source, directory, suffix, stamp) {
+  const signature = backupSignature(backupTree(source));
+  if (existsSync(directory)) for (const name of readdirSync(directory)) {
+    const file = join(directory, name);
+    const info = lstatSync(file);
+    if (name.endsWith(`-${suffix}`) && info.isFile() && !info.isSymbolicLink()
+      && backupSignature(backupTree(file)) === signature) {
+      if (backupSignature(backupTree(source)) !== signature) throw new Error("复用兼容前像前源内容发生变化；停止写入");
+      return file;
+    }
+  }
+  mkdirSync(directory, { recursive: true });
+  let target = join(directory, `${stamp}-${suffix}`);
+  for (let index = 1; existsSync(target); index += 1) target = join(directory, `${stamp}-${index}-${suffix}`);
+  copyFileSync(source, target, fsConstants.COPYFILE_EXCL);
+  if (backupSignature(backupTree(target)) !== signature || backupSignature(backupTree(source)) !== signature) throw new Error(`兼容备份校验失败：${display(target)}`);
   return target;
 }
 
@@ -957,17 +1055,38 @@ function backupProjectMutation(project, install = false) {
   let target = join(backupRoot(), stem);
   for (let suffix = 1; existsSync(target); suffix += 1) target = join(backupRoot(), `${stem}-${suffix}`);
   try {
+    const originalTrees = objects.map((object) => backupTree(object.path));
+    for (const [index, object] of objects.entries()) object.existed = originalTrees[index].length > 0;
+    const contentSignature = backupSignature({ projectId: project.projectId, controlRoot, projectRoot: project.projectRoot, objects, originalTrees });
+    const verify = (directory) => {
+      const manifest = JSON.parse(readFileSync(join(directory, "project-preimage.json"), "utf8"));
+      if (manifest.schemaVersion !== 1 || manifest.kind !== "project-preimage" || manifest.projectId !== project.projectId
+        || manifest.controlRoot !== controlRoot || manifest.projectRoot !== project.projectRoot
+        || manifest.contentSignature !== contentSignature || JSON.stringify(manifest.objects) !== JSON.stringify(objects)) return false;
+      return objects.every((object, index) => backupSignature(backupTree(join(directory, object.saved))) === backupSignature(originalTrees[index]));
+    };
+    const reusable = findVerifiedBackup(backupRoot(), (name) => /-project-preimage-(?:entry|register)(?:-\d+)?$/.test(name), verify);
+    if (reusable) {
+      if (!objects.every((object, index) => backupSignature(backupTree(object.path)) === backupSignature(originalTrees[index]))) {
+        throw new Error("复用项目写入前像前源内容发生变化；停止写入");
+      }
+      console.error(`复用已核验项目写入前像：${display(reusable)}（内容未变化）`);
+      return reusable;
+    }
     mkdirSync(target, { recursive: true });
     for (const object of objects) {
-      object.existed = existsSync(object.path);
       if (!object.existed) continue;
       const saved = join(target, object.saved);
       mkdirSync(dirname(saved), { recursive: true });
       cpSync(object.path, saved, { recursive: true, errorOnExist: true, force: false });
     }
+    if (!objects.every((object, index) => backupSignature(backupTree(join(target, object.saved))) === backupSignature(originalTrees[index])
+      && backupSignature(backupTree(object.path)) === backupSignature(originalTrees[index]))) {
+      throw new Error("前像校验失败或源内容发生变化");
+    }
     writeUtf8(join(target, "project-preimage.json"), `${JSON.stringify({
       schemaVersion: 1, kind: "project-preimage", projectId: project.projectId,
-      controlRoot, projectRoot: project.projectRoot, objects,
+      controlRoot, projectRoot: project.projectRoot, objects, contentSignature,
     }, null, 2)}\n`);
   } catch (error) {
     fail(`项目写入前备份失败，尚未开始登记或融合；不完整备份：${display(target)}\n${error.message}`);
@@ -1936,24 +2055,19 @@ function installProjectEntry(project) {
   const backupDirectory = join(controlRoot, "local", "backups", "project-entry", project.projectId);
   const backupStamp = timestamp();
   if (existing) {
-    mkdirSync(backupDirectory, { recursive: true });
-    copyFileSync(target, join(backupDirectory, `${backupStamp}-AGENTS.md`));
+    backupCompatibilityFile(target, backupDirectory, "AGENTS.md", backupStamp);
   }
   if (projectRuntimeCleanup.hadHooks) {
-    mkdirSync(backupDirectory, { recursive: true });
-    copyFileSync(projectRuntimeCleanup.hooksPath, join(backupDirectory, `${backupStamp}-project-hooks.json`));
+    backupCompatibilityFile(projectRuntimeCleanup.hooksPath, backupDirectory, "project-hooks.json", backupStamp);
   }
   if (projectRuntimeCleanup.hadGuard) {
-    mkdirSync(backupDirectory, { recursive: true });
-    copyFileSync(projectRuntimeCleanup.guardPath, join(backupDirectory, `${backupStamp}-project-beyond-runtime-guard.mjs`));
+    backupCompatibilityFile(projectRuntimeCleanup.guardPath, backupDirectory, "project-beyond-runtime-guard.mjs", backupStamp);
   }
   if (controlRuntimeCleanup.hadHooks) {
-    mkdirSync(backupDirectory, { recursive: true });
-    copyFileSync(controlRuntimeCleanup.hooksPath, join(backupDirectory, `${backupStamp}-control-hooks.json`));
+    backupCompatibilityFile(controlRuntimeCleanup.hooksPath, backupDirectory, "control-hooks.json", backupStamp);
   }
   if (controlRuntimeCleanup.hadGuard) {
-    mkdirSync(backupDirectory, { recursive: true });
-    copyFileSync(controlRuntimeCleanup.guardPath, join(backupDirectory, `${backupStamp}-control-beyond-runtime-guard.mjs`));
+    backupCompatibilityFile(controlRuntimeCleanup.guardPath, backupDirectory, "control-beyond-runtime-guard.mjs", backupStamp);
   }
   const migratedEntry = workerPolicyMode ? removeLegacyWorkerPolicyOverrides(existing) : { text: existing, removed: [] };
   const rendered = renderProjectEntry(project, migratedEntry.text);
@@ -2148,6 +2262,16 @@ function restoreLocal() {
     fail(`备份不属于当前控制仓：${display(snapshot)}`);
   }
   for (let directory = snapshot; !samePath(directory, root); directory = dirname(directory)) {
+    if (/-file-content-[a-f0-9]{64}-/.test(basename(directory))) {
+      fail("这是单文件前像，不能作为整个local快照恢复", 2);
+    }
+    if (/-local-content-[a-f0-9]{64}-.*\.partial$/.test(basename(directory))) {
+      fail("这是尚未核验完成的local备份，不能恢复", 2);
+    }
+    const complete = basename(directory).match(/-local-content-([a-f0-9]{64})-/);
+    if (complete && (!samePath(directory, snapshot) || backupSignature(backupTree(snapshot)) !== complete[1])) {
+      fail("local备份内容不完整、已变化或指向其子目录；停止恢复", 2);
+    }
     if (existsSync(join(directory, "project-preimage.json")) || /-project-preimage-(?:register|entry)(?:-\d+)?$/.test(basename(directory))) {
       fail("这是项目写入前像（或其未完成备份），不能作为整个local快照恢复；请按project-preimage.json逐项恢复", 2);
     }

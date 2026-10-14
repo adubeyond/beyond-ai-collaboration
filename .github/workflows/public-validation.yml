@@ -54,6 +54,7 @@ jobs:
       - name: Validate engineering documents and initialization preservation
         run: |
           node scripts/check-engineering-documentation.mjs
+          node scripts/check-design-confirmation.mjs
           node scripts/check-project-initialization-runtime.mjs
           node scripts/check-initialization-markdown-regressions.mjs --product-root 模板交付包
           node scripts/check-project-registration-regressions.mjs --product-root 模板交付包

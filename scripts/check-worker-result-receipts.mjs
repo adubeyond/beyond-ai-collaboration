@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
+import { createTestWorkspace } from './lib/test-workspace.mjs';
 import path from 'node:path';
 import test from 'node:test';
 import { executeRuntimeRequest } from '../模板交付包/scripts/runtime/control-runtime.mjs';
@@ -50,7 +50,7 @@ function inspectInChild(controlRoot, projectId, taskId) {
 }
 
 function fixture(name) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), `beyond-worker-result-${name}-`));
+  const root = createTestWorkspace(`beyond-worker-result-${name}-`);
   registerProject(root);
   return {
     root,
@@ -137,7 +137,7 @@ test('worker-result actions derive requestId when the envelope omits it', () => 
 });
 
 test('runtime write requires a local project registration and exact same-root execution', () => {
-  const localRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-local-only-'));
+  const localRoot = createTestWorkspace('beyond-worker-result-local-only-');
   registerProject(localRoot, 'local-project-a', { shared: false });
   const created = runtime(localRoot, 'local-enqueue', 'worker-result.enqueue', receipt()).result.record;
   assert.equal(runtime(localRoot, 'local-list', 'worker-result.list', { projectId: 'local-project-a' }).result.count, 1);
@@ -145,13 +145,13 @@ test('runtime write requires a local project registration and exact same-root ex
     projectId: 'local-project-a', taskId: 'task-a', receiptId: created.receiptId,
   });
 
-  const sharedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-shared-only-'));
+  const sharedRoot = createTestWorkspace('beyond-worker-result-shared-only-');
   registerProject(sharedRoot, 'local-project-a', { local: false });
   assert.throws(() => runtime(sharedRoot, 'shared-enqueue', 'worker-result.enqueue', receipt()), /local project registration/);
   assert.throws(() => runtime(sharedRoot, 'shared-list', 'worker-result.list', { projectId: 'local-project-a' }), /local project registration/);
   assert.equal(fs.existsSync(path.join(sharedRoot, 'local', 'runtime', 'worker-results', 'pending')), false);
 
-  const crossRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-cross-root-'));
+  const crossRoot = createTestWorkspace('beyond-worker-result-cross-root-');
   registerProject(crossRoot);
   assert.throws(() => executeRuntimeRequest({
     schemaVersion: 1, action: 'worker-result.enqueue', input: receipt(),
@@ -160,7 +160,7 @@ test('runtime write requires a local project registration and exact same-root ex
 });
 
 test('runtime rejects a project not registered in this control root without writing pending data', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-wrong-root-'));
+  const root = createTestWorkspace('beyond-worker-result-wrong-root-');
   registerProject(root, 'local-project-b');
   assert.throws(() => runtime(root, 'wrong-enqueue', 'worker-result.enqueue', receipt()), /not registered in this control root/);
   assert.equal(fs.existsSync(path.join(root, 'local', 'runtime', 'worker-results', 'pending')), false);
@@ -170,7 +170,7 @@ test('runtime rejects a project not registered in this control root without writ
 });
 
 test('runtime rejects a receipt that names the registered Worker as its source', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-self-source-'));
+  const root = createTestWorkspace('beyond-worker-result-self-source-');
   registerProject(root);
   registerActiveTask(root);
   assert.throws(() => runtime(root, 'self-source-enqueue', 'worker-result.enqueue', receipt({
@@ -182,7 +182,7 @@ test('runtime rejects a receipt that names the registered Worker as its source',
 });
 
 test('runtime leaves source-PM matching to the PM consumer after rejecting self-source', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-non-worker-source-'));
+  const root = createTestWorkspace('beyond-worker-result-non-worker-source-');
   registerProject(root);
   registerActiveTask(root);
   const created = runtime(root, 'non-worker-source-enqueue', 'worker-result.enqueue', receipt({
@@ -194,7 +194,7 @@ test('runtime leaves source-PM matching to the PM consumer after rejecting self-
 });
 
 test('runtime accepts an omitted optional Worker id without claiming owner verification', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-optional-worker-'));
+  const root = createTestWorkspace('beyond-worker-result-optional-worker-');
   registerProject(root);
   registerActiveTask(root);
   const created = runtime(root, 'optional-worker-enqueue', 'worker-result.enqueue', receipt()).result.record;
@@ -202,7 +202,7 @@ test('runtime accepts an omitted optional Worker id without claiming owner verif
 });
 
 test('runtime fails closed when machine state exists without its workbench view', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-missing-view-'));
+  const root = createTestWorkspace('beyond-worker-result-missing-view-');
   registerProject(root);
   registerActiveTask(root);
   fs.unlinkSync(path.join(root, 'local', '当前工作台.md'));
@@ -216,7 +216,7 @@ test('runtime fails closed when machine state exists without its workbench view'
 });
 
 test('runtime rejects a Worker id that conflicts with the registered task owner', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-worker-mismatch-'));
+  const root = createTestWorkspace('beyond-worker-result-worker-mismatch-');
   registerProject(root);
   registerActiveTask(root);
   assert.throws(() => runtime(root, 'worker-mismatch-enqueue', 'worker-result.enqueue', receipt({
@@ -228,7 +228,7 @@ test('runtime rejects a Worker id that conflicts with the registered task owner'
 });
 
 test('runtime accepts a non-Worker source and Worker that match an active task', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-active-match-'));
+  const root = createTestWorkspace('beyond-worker-result-active-match-');
   registerProject(root);
   registerActiveTask(root);
   const created = runtime(root, 'active-match-enqueue', 'worker-result.enqueue', receipt({
@@ -239,7 +239,7 @@ test('runtime accepts a non-Worker source and Worker that match an active task',
 });
 
 test('runtime preserves the pre-registration completion race', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-pre-register-'));
+  const root = createTestWorkspace('beyond-worker-result-pre-register-');
   registerProject(root);
   fs.mkdirSync(path.join(root, 'local'), { recursive: true });
   fs.writeFileSync(path.join(root, 'local', '当前工作台.md'), '# 当前工作台\n', 'utf8');
@@ -251,8 +251,8 @@ test('runtime preserves the pre-registration completion race', () => {
 });
 
 test('copied local registration cannot make another control root return a fake empty list', () => {
-  const source = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-control-source-'));
-  const copied = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-control-copy-'));
+  const source = createTestWorkspace('beyond-worker-result-control-source-');
+  const copied = createTestWorkspace('beyond-worker-result-control-copy-');
   registerProject(source);
   fs.mkdirSync(path.join(copied, 'local', 'projects'), { recursive: true });
   fs.mkdirSync(path.join(copied, 'shared', 'projects'), { recursive: true });
@@ -270,7 +270,7 @@ test('copied local registration cannot make another control root return a fake e
 });
 
 test('two local project ids cannot share one canonical path at runtime', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-duplicate-path-'));
+  const root = createTestWorkspace('beyond-worker-result-duplicate-path-');
   registerProject(root);
   const projectRoot = projectRootFor(root, 'local-project-a');
   fs.writeFileSync(path.join(root, 'local', 'projects', 'local-project-b.md'), [
@@ -282,7 +282,7 @@ test('two local project ids cannot share one canonical path at runtime', () => {
 });
 
 test('registered project list distinguishes a legitimate empty result from a wrong-root query', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-empty-'));
+  const root = createTestWorkspace('beyond-worker-result-empty-');
   registerProject(root);
   assert.deepEqual(runtime(root, 'registered-empty', 'worker-result.list', { projectId: 'local-project-a' }).result, {
     count: 0,
@@ -291,7 +291,7 @@ test('registered project list distinguishes a legitimate empty result from a wro
 });
 
 test('ack remains able to remove an existing receipt after source registration disappears', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-cleanup-'));
+  const root = createTestWorkspace('beyond-worker-result-cleanup-');
   registerProject(root);
   const created = runtime(root, 'cleanup-enqueue', 'worker-result.enqueue', receipt()).result.record;
   fs.rmSync(path.join(root, 'local', 'projects'), { recursive: true, force: true });
@@ -459,7 +459,7 @@ test('same task id in two projects has separate pending files and project-bound 
 });
 
 test('runtime keeps the same task id isolated across projects and rejects cross-project ack', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-runtime-namespace-'));
+  const root = createTestWorkspace('beyond-worker-result-runtime-namespace-');
   registerProject(root, 'local-project-a');
   registerProject(root, 'local-project-b');
   const first = runtime(root, 'runtime-namespace-a', 'worker-result.enqueue', receipt()).result.record;
@@ -484,7 +484,7 @@ test('runtime keeps the same task id isolated across projects and rejects cross-
 });
 
 test('a crash after workbench acceptance retries the same operation without duplicate history', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-crash-'));
+  const root = createTestWorkspace('beyond-worker-result-crash-');
   registerProject(root);
   fs.mkdirSync(path.join(root, 'local'), { recursive: true });
   fs.writeFileSync(path.join(root, 'local', '当前工作台.md'), '# 当前工作台\n', 'utf8');
@@ -516,7 +516,7 @@ test('a crash after workbench acceptance retries the same operation without dupl
 });
 
 test('workbench.inspect distinguishes active review, committed ack and unresolved conflict without writing', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-workbench-inspect-'));
+  const root = createTestWorkspace('beyond-workbench-inspect-');
   registerProject(root);
   registerActiveTask(root);
   const completed = runtime(root, 'inspect-enqueue-complete', 'worker-result.enqueue', receipt({
@@ -604,7 +604,7 @@ test('workbench.inspect distinguishes active review, committed ack and unresolve
 });
 
 test('workbench.inspect treats a second pause with a new reason as a new result to review', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-inspect-second-pause-'));
+  const root = createTestWorkspace('beyond-inspect-second-pause-');
   registerProject(root);
   registerActiveTask(root);
   const first = runtime(root, 'first-pause-receipt', 'worker-result.enqueue', receipt({
@@ -627,7 +627,7 @@ test('workbench.inspect treats a second pause with a new reason as a new result 
 });
 
 test('workbench.inspect preserves a receipt when archived evidence contradicts the committed record', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-inspect-history-conflict-'));
+  const root = createTestWorkspace('beyond-inspect-history-conflict-');
   registerProject(root);
   registerActiveTask(root);
   const record = runtime(root, 'history-conflict-enqueue', 'worker-result.enqueue', receipt({ workerThreadId: 'worker-a' })).result.record;
@@ -647,7 +647,7 @@ test('workbench.inspect preserves a receipt when archived evidence contradicts t
 });
 
 test('workbench.inspect reads an upgraded workbench without creating a missing transaction directory', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-workbench-inspect-upgraded-'));
+  const root = createTestWorkspace('beyond-workbench-inspect-upgraded-');
   registerProject(root);
   const workbenchRoot = path.join(root, 'local', 'runtime', 'workbench');
   const stateFile = path.join(workbenchRoot, 'workbench-state.json');
@@ -690,7 +690,7 @@ test('workbench.inspect reads an upgraded workbench without creating a missing t
 });
 
 test('concurrent workbench.inspect processes return one stable read-only classification', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-workbench-inspect-concurrent-'));
+  const root = createTestWorkspace('beyond-workbench-inspect-concurrent-');
   registerProject(root);
   registerActiveTask(root);
   runtime(root, 'concurrent-inspect-enqueue', 'worker-result.enqueue', receipt({ workerThreadId: 'worker-a' }));
@@ -719,7 +719,7 @@ test('concurrent workbench.inspect processes return one stable read-only classif
 });
 
 test('workbench.inspect recognizes a committed pause and does not migrate legacy receipt paths', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-workbench-inspect-pause-'));
+  const root = createTestWorkspace('beyond-workbench-inspect-pause-');
   registerProject(root);
   registerActiveTask(root, { taskId: 'task-pause', worker: 'worker-pause' });
   const paused = runtime(root, 'inspect-enqueue-pause', 'worker-result.enqueue', receipt({
@@ -746,7 +746,7 @@ test('workbench.inspect recognizes a committed pause and does not migrate legacy
 });
 
 test('runtime lifecycle keeps one task through pause, resume, completion and receipt deletion', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-runtime-'));
+  const root = createTestWorkspace('beyond-worker-result-runtime-');
   registerProject(root);
   fs.mkdirSync(path.join(root, 'local'), { recursive: true });
   fs.writeFileSync(path.join(root, 'local', '当前工作台.md'), '# 当前工作台\n', 'utf8');
@@ -788,7 +788,7 @@ test('runtime lifecycle keeps one task through pause, resume, completion and rec
 });
 
 test('fixed beyond-control CLI enqueues, lists and acknowledges the same receipt', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-worker-result-cli-'));
+  const root = createTestWorkspace('beyond-worker-result-cli-');
   const controlRoot = path.join(root, 'beyond-control');
   fs.mkdirSync(path.join(controlRoot, 'scripts'), { recursive: true });
   registerProject(controlRoot);
@@ -817,7 +817,7 @@ test('fixed beyond-control CLI enqueues, lists and acknowledges the same receipt
 });
 
 test('fixed beyond-control CLI exposes workbench.inspect without mutating control files', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-workbench-inspect-cli-'));
+  const root = createTestWorkspace('beyond-workbench-inspect-cli-');
   const controlRoot = path.join(root, 'beyond-control');
   fs.mkdirSync(path.join(controlRoot, 'scripts'), { recursive: true });
   registerProject(controlRoot);

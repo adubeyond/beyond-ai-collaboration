@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { CliTaskStore, sha256File } from '../模板交付包/scripts/cli/cli-task-store.mjs';
 const modules = async () => ({ ...await import('../模板交付包/scripts/cli/desktop-host.mjs'), ...await import('../模板交付包/scripts/cli/cli-notify.mjs') });
-function fixture(t, schema = 'valid', reply = 'ok', replyDelay = 0, { handoffDelay = 0, autoHandoff = true } = {}) {
+function fixture(t, schema = 'valid', reply = 'ok', replyDelay = 0, { handoffDelay = 0, autoHandoff = true, initializeDelay = 0 } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-cli-notify-'));
   const actors = [];
   // The fake MCP child has just been killed; Windows can retain its cwd handle briefly.
@@ -31,7 +31,7 @@ function fixture(t, schema = 'valid', reply = 'ok', replyDelay = 0, { handoffDel
   fs.writeFileSync(path.join(plugin, '.codex-plugin/plugin.json'), JSON.stringify({ name: 'codex-app-tools', version: '7.8.9', mcpServers: './.mcp.json' }));
   const script = path.join(plugin, 'server.cjs'), calls = path.join(root, 'calls.jsonl'), trace = path.join(root, 'trace.jsonl');
   const inputSchema = { type: 'object', properties: { threadId: { type: 'string' }, [schema === 'valid' ? 'prompt' : 'message']: { type: 'string' } }, required: ['threadId', schema === 'valid' ? 'prompt' : 'message'] };
-  fs.writeFileSync(script, `const fs=require('node:fs'),path=require('node:path'),rl=require('node:readline').createInterface({input:process.stdin});let sequence=0;rl.on('line',async l=>{const r=JSON.parse(l);if(!r.id)return;let result={};if(r.method==='tools/list')result={tools:[{name:'send_message_to_thread',inputSchema:${JSON.stringify(inputSchema)}}]};if(r.method==='tools/call'){fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(r.params)+'\\n');const log=phase=>fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify({phase,pid:process.pid,owner:r.params.arguments.threadId})+'\\n');log('start');if(${JSON.stringify(reply)}==='timeout')return;await new Promise(resolve=>setTimeout(resolve,${replyDelay}));result=${reply === 'error' ? '{isError:true,content:[{type:"text",text:"denied"}]}' : '{content:[{type:"text",text:"ok"}]}' };if(${autoHandoff}&&!result.isError){const advance=()=>{const file=path.join(${JSON.stringify(root)},'rollout-'+r.params.arguments.threadId+'.jsonl'),turn='notification-'+process.pid+'-'+(++sequence);for(const type of ['task_started','task_complete'])fs.appendFileSync(file,JSON.stringify({type:'event_msg',payload:{type,turn_id:turn}})+'\\n');};if(${handoffDelay})setTimeout(advance,${handoffDelay});else advance();}log('end');}console.log(JSON.stringify({jsonrpc:'2.0',id:r.id,result}));});`);
+  fs.writeFileSync(script, `const fs=require('node:fs'),path=require('node:path'),rl=require('node:readline').createInterface({input:process.stdin});let sequence=0;rl.on('line',async l=>{const r=JSON.parse(l);if(!r.id)return;if(r.method==='initialize'&&${initializeDelay})await new Promise(resolve=>setTimeout(resolve,${initializeDelay}));let result={};if(r.method==='tools/list')result={tools:[{name:'send_message_to_thread',inputSchema:${JSON.stringify(inputSchema)}}]};if(r.method==='tools/call'){fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(r.params)+'\\n');const log=phase=>fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify({phase,pid:process.pid,owner:r.params.arguments.threadId})+'\\n');log('start');if(${JSON.stringify(reply)}==='timeout')return;await new Promise(resolve=>setTimeout(resolve,${replyDelay}));result=${reply === 'error' ? '{isError:true,content:[{type:"text",text:"denied"}]}' : '{content:[{type:"text",text:"ok"}]}' };if(${autoHandoff}&&!result.isError){const advance=()=>{const file=path.join(${JSON.stringify(root)},'rollout-'+r.params.arguments.threadId+'.jsonl'),turn='notification-'+process.pid+'-'+(++sequence);for(const type of ['task_started','task_complete'])fs.appendFileSync(file,JSON.stringify({type:'event_msg',payload:{type,turn_id:turn}})+'\\n');};if(${handoffDelay})setTimeout(advance,${handoffDelay});else advance();}log('end');}console.log(JSON.stringify({jsonrpc:'2.0',id:r.id,result}));});`);
   fs.writeFileSync(path.join(plugin, '.mcp.json'), JSON.stringify({ mcpServers: { codex_app: { command: process.execPath, args: [script], cwd: plugin } } }));
   const env = { ...Object.fromEntries(['PATH', 'Path', 'SystemRoot', 'USERPROFILE', 'HOME', 'TEMP', 'TMP'].filter(key => process.env[key] !== undefined).map(key => [key, process.env[key]])), CODEX_HOME: root, CODEX_THREAD_ID: ownerThreadId, CODEX_APP_TOOLS_PIPE_PATH: 'test-inherited-transport' };
   const binding = { projectId: 'local-test', taskId: 'goal', ownerThreadId, ownerTurnId, executionRoot: root, profilePath: path.join(root, 'profile.json'), taskMode: 'assist', contract: { goal: 'temporary result', boundaries: 'temporary only', acceptance: 'evidence', factEntries: [], skillEntries: [] } };
@@ -303,12 +303,25 @@ test('plugin version discovered from declaration; mismatched schema is unavailab
   assert.equal((await createDesktopHost(f).checkCapability()).available, false);
 });
 test('delivery timeout is recorded unknown and cannot be blindly resent', async t => {
-  const { createDesktopHost, notifyWhenReady } = await modules(); const f = fixture(t, 'valid', 'timeout'); f.end(); f.finish();
-  const host = createDesktopHost({ ...f, requestTimeoutMs: 100 });
+  const { createDesktopHost, notifyWhenReady } = await modules();
+  const f = fixture(t, 'valid', 'timeout', 0, { initializeDelay: 250 }); f.end(); f.finish();
+  // Discovery must finish even when startup exceeds the deliberately short send
+  // timeout. Only tools/call is meant to time out in this delivery test.
+  const host = createDesktopHost({ ...f, requestTimeoutMs: 5000, messageTimeoutMs: 100 });
   const result = await notifyWhenReady({ store: f.store, identity: f.binding, runNumber: 1, host });
   assert.equal(result.status, 'delivery-unknown');
   assert.equal((await notifyWhenReady({ store: f.store, identity: f.binding, runNumber: 1, host })).status, 'duplicate-suppressed');
   assert.equal(fs.readFileSync(f.calls, 'utf8').trim().split('\n').length, 1);
+});
+test('discovery timeout is unavailable and never counted as an attempted delivery', async t => {
+  const { createDesktopHost, notifyWhenReady } = await modules();
+  const f = fixture(t, 'valid', 'timeout', 0, { initializeDelay: 250 }); f.end(); f.finish();
+  const host = createDesktopHost({ ...f, requestTimeoutMs: 100, messageTimeoutMs: 100 });
+  const result = await notifyWhenReady({ store: f.store, identity: f.binding, runNumber: 1, host });
+  assert.equal(result.status, 'unavailable');
+  assert.match(result.error, /timeout/);
+  assert.equal(result.sentAt, undefined);
+  assert.equal(fs.existsSync(f.calls), false);
 });
 test('aborted source observer releases resources without sending', async t => {
   const { createDesktopHost } = await modules(); const f = fixture(t); const abort = new AbortController();

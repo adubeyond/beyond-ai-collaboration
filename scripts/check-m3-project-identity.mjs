@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
+import { createTestWorkspace } from './lib/test-workspace.mjs';
 import path from 'node:path';
 import test from 'node:test';
 import {
@@ -11,7 +11,7 @@ import {
 } from '../模板交付包/scripts/runtime/project-identity-provider.mjs';
 
 function temporary(name) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), `beyond-m3-identity-${name}-`));
+  return createTestWorkspace(`beyond-m3-identity-${name}-`);
 }
 
 function fixture(name = 'base') {

@@ -84,8 +84,177 @@ function fixture(t) {
     assert.equal(child.finished, false, 'same-task mutation must wait, not overlap');
   }
   const ack = { projectId: input.projectId, taskId: input.taskId, receiptId: old.receiptId };
-  return { root, store, input, old, ack, run, release, entered, blocked };
+  return { root, store, input, old, ack, run, release, entered, blocked, trackChild: child => children.push(child) };
 }
+
+function assertReceiptWriteClean(f) {
+  assert.deepEqual(fs.readdirSync(path.join(f.root, 'locks')), []);
+  assert.equal(fs.readdirSync(f.store.pendingRoot).some(name => name.endsWith('.tmp')), false);
+}
+
+function interceptReceiptRename(f, input, intercept) {
+  const target = f.store.receiptPath(input.projectId, input.taskId);
+  const rename = fs.renameSync;
+  let attempts = 0;
+  fs.renameSync = function(source, destination, ...args) {
+    if (path.resolve(String(source)) === `${target}.tmp` && path.resolve(String(destination)) === target) {
+      attempts += 1;
+      intercept({ attempts, source, destination });
+    }
+    return rename.call(this, source, destination, ...args);
+  };
+  return { attempts: () => attempts, restore: () => { fs.renameSync = rename; } };
+}
+
+for (const code of ['EPERM', 'EACCES', 'EBUSY']) {
+  test(`receipt replacement retries transient ${code} without exposing partial or missing evidence`, t => {
+    const f = fixture(t), target = f.store.receiptPath(f.input.projectId, f.input.taskId);
+    const before = fs.readFileSync(target);
+    const input = { ...f.input, finalText: `已完成：${code}占用后替换` };
+    const intercepted = interceptReceiptRename(f, input, ({ attempts }) => {
+      if (attempts > 3) return;
+      assert.deepEqual(fs.readFileSync(target), before, 'old receipt must stay byte-identical before successful replacement');
+      throw Object.assign(new Error('injected transient receipt rename denial'), { code });
+    });
+    let result;
+    try {
+      result = f.store.enqueue(input);
+      assert.equal(intercepted.attempts(), 4);
+    } finally { intercepted.restore(); }
+    assert.equal(result.mode, 'replaced');
+    assert.equal(result.supersededReceiptId, f.old.receiptId);
+    assert.notEqual(result.record.receiptId, f.old.receiptId);
+    assert.deepEqual(f.store.list({ projectId: f.input.projectId }).records, [result.record]);
+    assertReceiptWriteClean(f);
+  });
+
+  test(`receipt replacement bounds persistent ${code}, preserves old bytes and permits a later caller retry`, t => {
+    const f = fixture(t), target = f.store.receiptPath(f.input.projectId, f.input.taskId);
+    const before = fs.readFileSync(target);
+    const input = { ...f.input, finalText: `已完成：${code}持续占用` };
+    const denied = Object.assign(new Error('injected persistent receipt rename denial'), { code });
+    const intercepted = interceptReceiptRename(f, input, () => {
+      assert.deepEqual(fs.readFileSync(target), before);
+      throw denied;
+    });
+    try {
+      assert.throws(() => f.store.enqueue(input), error => error === denied, 'must propagate failure, not return a successful receipt');
+      assert.equal(intercepted.attempts(), 200, 'only the receipt replacement gets this finite retry budget');
+    } finally { intercepted.restore(); }
+    assert.deepEqual(fs.readFileSync(target), before);
+    assertReceiptWriteClean(f);
+    const recovered = f.store.enqueue(input);
+    assert.equal(recovered.mode, 'replaced');
+    assert.equal(recovered.supersededReceiptId, f.old.receiptId);
+    assert.equal(f.store.list({ projectId: f.input.projectId }).records[0].finalText, input.finalText);
+    assertReceiptWriteClean(f);
+  });
+}
+
+for (const code of ['ENOSPC', 'EIO', 'ENOENT']) {
+  test(`receipt replacement does not retry non-transient ${code}`, t => {
+    const f = fixture(t), target = f.store.receiptPath(f.input.projectId, f.input.taskId);
+    const before = fs.readFileSync(target), input = { ...f.input, finalText: '已完成：不应伪造成功' };
+    const failure = Object.assign(new Error('injected non-transient rename failure'), { code });
+    const intercepted = interceptReceiptRename(f, input, () => { throw failure; });
+    try {
+      assert.throws(() => f.store.enqueue(input), error => error === failure);
+      assert.equal(intercepted.attempts(), 1);
+    } finally { intercepted.restore(); }
+    assert.deepEqual(fs.readFileSync(target), before);
+    assertReceiptWriteClean(f);
+  });
+}
+
+test('receipt creation retries a transient rename and duplicate enqueue remains existing without another rename', t => {
+  const f = fixture(t), input = { ...f.input, taskId: 'first-create', createdAt: '2026-10-14T00:00:00.000Z' };
+  const target = f.store.receiptPath(input.projectId, input.taskId);
+  const intercepted = interceptReceiptRename(f, input, ({ attempts }) => {
+    if (attempts === 1) {
+      assert.equal(fs.existsSync(target), false);
+      throw Object.assign(new Error('injected first-create denial'), { code: 'EPERM' });
+    }
+  });
+  try {
+    const created = f.store.enqueue(input);
+    assert.equal(created.mode, 'created');
+    assert.equal(created.supersededReceiptId, null);
+    assert.equal(intercepted.attempts(), 2);
+    const before = fs.readFileSync(target);
+    const duplicate = f.store.enqueue({ ...input, createdAt: '2026-10-15T00:00:00.000Z' });
+    assert.equal(duplicate.mode, 'existing');
+    assert.deepEqual(duplicate.record, created.record);
+    assert.deepEqual(fs.readFileSync(target), before);
+    assert.equal(intercepted.attempts(), 2, 'idempotent enqueue must not enter the replacement retry');
+  } finally { intercepted.restore(); }
+  assertReceiptWriteClean(f);
+});
+
+test('Windows file handle releases after a real rename denial and the same enqueue then succeeds',
+  { skip: process.platform !== 'win32', timeout: 20_000 }, async t => {
+    const f = fixture(t), target = f.store.receiptPath(f.input.projectId, f.input.taskId);
+    const before = fs.readFileSync(target);
+    const ready = path.join(f.root, 'handle.ready'), release = path.join(f.root, 'handle.release');
+    const released = path.join(f.root, 'handle.released');
+    const literal = value => `'${value.replaceAll("'", "''")}'`;
+    // ReadWrite deliberately omits FileShare.Delete. The child releases only
+    // after the parent observes an actual OS rename failure, not after a guessed delay.
+    const script = `$ErrorActionPreference='Stop'; $handle=$null; try {
+      $handle=[System.IO.File]::Open(${literal(target)},[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::ReadWrite);
+      [System.IO.File]::WriteAllText(${literal(ready)},'ready');
+      $clock=[System.Diagnostics.Stopwatch]::StartNew();
+      while(-not [System.IO.File]::Exists(${literal(release)})) {
+        if($clock.ElapsedMilliseconds -gt 15000){throw 'test release signal timed out'};
+        [System.Threading.Thread]::Sleep(2)
+      }
+    } finally { if($null -ne $handle){$handle.Dispose(); [System.IO.File]::WriteAllText(${literal(released)},'released')} }`;
+    const windowsRoot = process.env.SystemRoot || process.env.WINDIR;
+    const shell = windowsRoot
+      ? path.join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+      : 'powershell.exe';
+    const child = spawn(shell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+      { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const holder = { process: child, finished: false, stdout: '', stderr: '' };
+    holder.done = new Promise((resolve, reject) => {
+      child.on('error', reject);
+      child.stdout.on('data', b => holder.stdout += b);
+      child.stderr.on('data', b => holder.stderr += b);
+      child.on('close', status => { holder.finished = true; resolve({ status, stdout: holder.stdout, stderr: holder.stderr }); });
+    });
+    f.trackChild(holder);
+    await until(() => fs.existsSync(ready) || holder.finished, 'Windows handle opened', 10_000);
+    assert.equal(fs.existsSync(ready), true, holder.stderr);
+    const rename = fs.renameSync, errors = [];
+    let attempts = 0, result, failure;
+    fs.renameSync = function(source, destination, ...args) {
+      if (path.resolve(String(source)) !== `${target}.tmp` || path.resolve(String(destination)) !== target) {
+        return rename.call(this, source, destination, ...args);
+      }
+      attempts += 1;
+      try { return rename.call(this, source, destination, ...args); }
+      catch (error) {
+        errors.push(error.code);
+        assert.deepEqual(fs.readFileSync(target), before);
+        if (errors.length === 1) fs.writeFileSync(release, 'release-after-real-denial');
+        throw error;
+      }
+    };
+    try { result = f.store.enqueue({ ...f.input, finalText: '已完成：真实Windows占用解除' }); }
+    catch (error) { failure = error; }
+    finally { fs.renameSync = rename; }
+    const held = await holder.done;
+    assert.equal(held.status, 0, held.stdout + held.stderr);
+    assert.equal(fs.existsSync(released), true);
+    assert.ok(errors.length > 0, 'a real operating-system denial must be observed');
+    assert.ok(errors.every(code => ['EPERM', 'EACCES', 'EBUSY'].includes(code)), JSON.stringify(errors));
+    t.diagnostic(`real Windows rename attempts=${attempts}; failures=${errors.join(',')}; handle released after first failure`);
+    assert.ifError(failure);
+    assert.ok(attempts > 1);
+    assert.equal(result.mode, 'replaced');
+    assert.equal(result.supersededReceiptId, f.old.receiptId);
+    assert.equal(f.store.list({ projectId: f.input.projectId }).records[0].receiptId, result.record.receiptId);
+    assertReceiptWriteClean(f);
+  });
 
 test('new enqueue waits while old ack has read its receipt; new result survives', async t => {
   const f = fixture(t);
