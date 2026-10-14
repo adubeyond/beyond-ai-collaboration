@@ -287,6 +287,7 @@ test('assist transfer permits exactly the reviewed files and rejects rollback or
     cli, product + 'scripts/cli/cli-bridge.mjs', product + 'scripts/cli/cli-task-store.mjs',
   ].sort());
   for (const change of assistTransferFingerprints) {
+    assert.deepEqual(Object.keys(change).sort(), ['after', 'before', 'path'], 'no extra or nested pin fields');
     const original = fixture.files.find(item => item.path === change.path);
     assert.ok(original, change.path);
     assert.equal(change.before, original.sha256);

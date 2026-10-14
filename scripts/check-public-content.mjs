@@ -226,7 +226,8 @@ function validateText(path, text) {
     // their before/after contents; other hashes and sensitive fields stay checked.
     if (label === "疑似动态 SHA-256" && rel === "scripts/check-design-confirmation.mjs") {
       checkedText = checkedText.replace(/^const assistTransferFingerprints = \[[\s\S]*?^\];$/m,
-        section => section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'"));
+        section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 6
+          ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
     }
     if (label === "疑似秘密赋值" && fixtureTokens.has(rel)) {
       checkedText = checkedText.replace(/\btoken\s*[:=]\s*'([^'\n]+)'/g,
