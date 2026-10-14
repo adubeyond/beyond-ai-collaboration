@@ -21,7 +21,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Boundaries
 
-- No changes to Desktop Worker callbacks, receipts, task states, CLI protocols, or the model matrix. Third-party model IDs are reported evidence, not independent proof of a gateway's internal backend identity.
+- Retry only the final atomic receipt replacement on transient Windows sharing errors, reusing the existing I/O helper with a 200-attempt bound and 5ms requested waits (not a wall-clock deadline). Persistent or unrelated errors remain visible; no delete-and-recreate fallback is added.
+- Desktop Worker callback order, receipt format, task states, CLI protocols, and the model matrix are unchanged. Third-party model IDs are reported evidence, not independent proof of a gateway's internal backend identity.
 - This release does not install into an existing business project. See [validation and limits](docs/releases/v3.2.14-validation.md).
 
 ## [3.2.13] - 2026-10-12

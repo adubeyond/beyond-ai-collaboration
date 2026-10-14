@@ -25,6 +25,15 @@ const agents = product + 'AGENTS.md';
 const cli = product + 'docs/AI编程协同机制/机制/04-CLI目标协作机制.md';
 const productTemplate = product + 'docs/AI编程协同机制/模板/产品设计与契约基线模板.md';
 const architectureTemplate = product + 'docs/AI编程协同机制/模板/技术架构与核心代码逻辑模板.md';
+// Explicitly authorized 2026-10-14 exception: only enqueue's final atomic
+// replacement gains the existing bounded I/O retry. Keep the original hashes.
+const receiptFile = product + 'scripts/runtime/worker-result-receipts.mjs';
+const receiptRenameBefore = '        fs.renameSync(temporary, target);';
+const receiptRenameAfter = [
+  '        // Brief Windows sharing conflicts must not discard an otherwise valid receipt.',
+  '        // Bound attempts without changing the lock or atomic replacement semantics.',
+  '        retryTransientFileOperation(() => fs.renameSync(temporary, target), 200);',
+].join('\n');
 
 function headings(text) {
   const seen = new Map();
@@ -69,7 +78,14 @@ function filesBelow(directory) {
 function frozenFailures(source = read) {
   const errors = [];
   for (const item of fixture.files) {
-    try { if (sha256(source(item.path)) !== item.sha256) errors.push(item.path); }
+    try {
+      let current = source(item.path);
+      if (item.path === receiptFile) {
+        if (current.split(receiptRenameAfter).length !== 2) { errors.push(item.path); continue; }
+        current = current.replace(receiptRenameAfter, receiptRenameBefore);
+      }
+      if (sha256(current) !== item.sha256) errors.push(item.path);
+    }
     catch { errors.push(item.path + ': missing or unreadable'); }
   }
   for (const item of fixture.portions) {
@@ -231,7 +247,7 @@ test('reviewed boundary checks reject removal of every declared safeguard', () =
   }
 });
 
-test('callback, CLI implementation, model policy and PM closeout are frozen to the declared baseline', () => {
+test('protected source is frozen except the precisely authorized receipt replacement retry', () => {
   assert.equal(fixture.schemaVersion, 1);
   assert.equal(fixture.baselineCommit, '041b0fe0f290ad628dc5c9f29b9d725419958781');
   assert.equal(new Set(fixture.files.map(item => item.path)).size, fixture.files.length);
@@ -244,6 +260,18 @@ test('callback, CLI implementation, model policy and PM closeout are frozen to t
       'frozen directory membership changed: ' + directory);
   }
   assert.deepEqual(frozenFailures(), [], 'frozen source changed; do not refresh this fixture to silence a regression');
+});
+
+test('receipt exception rejects removal, changed retry budget and unrelated receipt edits', () => {
+  assert.ok(fixture.files.some(item => item.path === receiptFile));
+  for (const mutate of [
+    text => text.replace(receiptRenameAfter, receiptRenameBefore),
+    text => text.replace('fs.renameSync(temporary, target), 200)', 'fs.renameSync(temporary, target), 201)'),
+    text => text.replace('attempts = 20', 'attempts = 200'),
+    text => text + '\n// unrelated receipt change\n',
+  ]) {
+    assert.ok(frozenFailures(file => file === receiptFile ? mutate(read(file)) : read(file)).includes(receiptFile));
+  }
 });
 
 test('the freeze checker detects edits in both complete files and protected sections', () => {

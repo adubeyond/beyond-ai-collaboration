@@ -263,7 +263,9 @@ export class WorkerResultReceiptStore {
       try {
         if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
         fs.writeFileSync(temporary, `${JSON.stringify(record, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
-        fs.renameSync(temporary, target);
+        // Brief Windows sharing conflicts must not discard an otherwise valid receipt.
+        // Bound attempts without changing the lock or atomic replacement semantics.
+        retryTransientFileOperation(() => fs.renameSync(temporary, target), 200);
       } finally {
         if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
       }
