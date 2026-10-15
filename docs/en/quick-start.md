@@ -1,4 +1,4 @@
-# BEYOND 3.2.14 Quick Start
+# BEYOND 4.0.0 Quick Start
 
 This page is for the minimal fixture. For real-project installation, upgrades, new/existing-project initialization, and copy-ready prompts, use the [Installation, Upgrade, and Project Initialization Guide](../../模板交付包/docs/en/installation-upgrade-and-project-initialization.md) instead of assembling an adoption sequence from this example.
 
@@ -140,7 +140,7 @@ Normal behavior:
 - Ordinary implementation or test failures are repaired and retested in the same task.
 - Git, dependencies, servers, production, and data remain untouched because they were not authorized.
 
-### Execution decisions in 3.2.14
+### Execution decisions in 4.0.0
 
 - When the confirmed design and implementation scope remain applicable, continue along the shortest viable path without repeated approval. New business work or material scope changes first require confirmation of the affected requirements and design.
 - When wording such as “optimize this” can lead to materially different outcomes, ask one result-changing question. Investigate technical details that the project itself can answer instead of sending them back to the user.

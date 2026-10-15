@@ -88,6 +88,28 @@ try {
   cpSync(join(packageRoot, "AGENTS.md"), join(exactRoot, "AGENTS.md"));
   run("完全一致内容", 0, join(exactRoot, "skills"), join(exactRoot, "AGENTS.md"), "内容验真通过");
 
+  // Release major versions are independent of the unchanged manifest schema.
+  // Exercise the copied real verifier; never rewrite the candidate under test.
+  const versionRoot = join(scratch, "version-fixture");
+  cpSync(packageRoot, versionRoot, { recursive: true });
+  const versionManifest = JSON.parse(readFileSync(join(versionRoot, "beyond-release.json"), "utf8"));
+  for (const [version, schema, valid] of [
+    ["3.2.15", 3, true], ["4.0.0", 3, true], ["5.1.0", 3, true],
+    ["4.0.0", 4, false], ["v4.0.0", 3, false], ["4.0", 3, false],
+    ["04.0.0", 3, false], ["4.0.0-rc1", 3, false],
+    [4, 3, false], [null, 3, false], [undefined, 3, false],
+  ]) {
+    writeFileSync(join(versionRoot, "beyond-release.json"), JSON.stringify({ ...versionManifest, releaseVersion: version, schemaVersion: schema }));
+    writeFileSync(join(versionRoot, "AGENTS.md"), cpEntry().replace(
+      `BEYOND-RUNTIME-VERSION: ${releaseVersion}`, `BEYOND-RUNTIME-VERSION: ${version}`));
+    const result = spawnSync(process.execPath, [join(versionRoot, "scripts", "verify-install-integrity.mjs"),
+      "--installed-skills-root", join(versionRoot, "skills"), "--project-agents", join(versionRoot, "AGENTS.md"), "--content-only"],
+    { encoding: "utf8", windowsHide: true });
+    const output = String(result.stdout) + String(result.stderr);
+    if (result.status === (valid ? 0 : 1) && output.includes(valid ? "内容验真通过" : "候选版本清单字段无效")) passed++;
+    else errors.push(`发行版本与schema分离 ${version}/${schema}: ${output}`);
+  }
+
   const controlRoot = join(scratch, "beyond-control");
   cpSync(packageRoot, controlRoot, { recursive: true });
   const policyProjectId = "project-aabbccddeeff";

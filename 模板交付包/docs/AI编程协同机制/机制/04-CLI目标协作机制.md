@@ -117,7 +117,7 @@ Codex交互模式通过官方app-server连接原生TUI，连接仅绑定127.0.0.
 
 ## 可选 ZCode 原生助手（试验适配）
 
-需要可见 ZCode 会话协助开发、审查时，仍用上面的同一入口和 start / review / resume / result 协议，只换显式配置；默认 Codex 路径不变。当前支持 Windows、Node.js 24、社区 `zcode-app-cli 3.14.4-32` 的指定 TUI 内容。用户先拥有可用的独立 ZCode 启动器及第三方认证；BEYOND 不安装 ZCode、不拷贝密钥、不修改其默认模型或其他会话。
+需要可见 ZCode 会话协助开发、审查时，仍用上面的同一入口和 start / review / resume / result 协议，只换显式配置；默认 Codex 路径不变。当前适配 Windows、Node.js 24、社区 `zcode-app-cli`，不设置精确版本号或整文件哈希白名单。用户先拥有可用的独立 ZCode 启动器及第三方认证；BEYOND 不安装 ZCode、不拷贝密钥、不修改其默认模型或其他会话。
 
 ```json
 {"schemaVersion":1,"provider":"zcode","runner":{"command":"<node.exe绝对路径>","args":["<已配置认证的ZCode启动器绝对路径>"]},"packageRoot":"<zcode-app-cli安装目录>","model":"<providerId/modelId>","mode":"interactive","ui":"window"}
@@ -128,13 +128,13 @@ Codex交互模式通过官方app-server连接原生TUI，连接仅绑定127.0.0.
 - 指定 effort 时先从当前模型的原生选项核对，再通过仅本会话的 `/effort` 应用并回读；不照搬其他 CLI 的档位名称。选项不支持或回读不一致时，在派发业务提示前失败。
 - 每轮等原生 submit 实际返回、结果稳定落盘，再复用既有通知原调用者的流程；调用者不陪跑。ZCode 自己不发桌面消息、不生成 Worker pending，也不自行认定目标完成。同一 sessionId 支持“审查 → 修复 → 复核”连续协作。
 - 与 Codex 的可分离视图不同，这版 ZCode 窗口就是实际运行进程。cli.open 只报告已经打开的原窗口，不重复开进程；正常关闭后需明确 resume 保存的 sessionId。窗口意外退出记为 unknown，先核对结果再决定续做。cli.detach 在当前轮结束后关闭该窗口；cli.stop 请求中断当前轮。
-- **支持限制**：上游没有把私有 TUI 实现承诺为稳定宿主接口。本适配只在任务目录生成局部副本，不改原安装；版本或内容不匹配就报告需重新验证，不自动升级、不静默退回日志模式。它不是通用的任意版本 ZCode 支持。依据：[上游项目](https://github.com/kingsword09/zcode-cli)、[宿主集成边界](https://github.com/kingsword09/zcode-cli/blob/main/docs/HOST_INTEGRATION.md)。
+- **兼容检查**：启动前检查原生依赖、唯一接入位置和生成副本的语法；接入后、派发前检查实际对象的提交、结束、模型选择、会话识别及忙碌/结果接口。版本号、无关注释或其他代码变化不单独构成拒绝原因；缺失或歧义接口则明确报告缺哪项能力，不自动新建会话或跳过检查。上游私有 TUI 不是稳定宿主 API，因此这不承诺任意未来版本均兼容。适配仍只生成任务内副本，不改原安装、不自动升级、不退回日志模式。依据：[上游项目](https://github.com/kingsword09/zcode-cli)、[宿主集成边界](https://github.com/kingsword09/zcode-cli/blob/main/docs/HOST_INTEGRATION.md)。
 
-自动回归使用 `scripts/check-cli-zcode.mjs`，不调用付费模型；人工明确要求真实验证时，使用开发仓的 `scripts/probe-zcode-native.mjs --profile <配置> --allow-live-model`。该探针只创建临时计算器项目，验证原生可见会话三轮协作和独立测试；它不向真实桌面 PM 发消息，因此不能当成真实 PM 自动唤醒的通过证据。
+自动回归使用 `scripts/check-cli-zcode.mjs` 与 `scripts/check-zcode-capabilities.mjs`，不调用付费模型；人工明确要求真实验证时，使用开发仓的 `scripts/probe-zcode-native.mjs --profile <配置> --allow-live-model`。该探针只创建临时计算器项目，验证原生可见会话三轮协作和独立测试；它不向真实桌面 PM 发消息，因此不能当成真实 PM 自动唤醒的通过证据。
 
 ## 可选 Claude Code 原生助手（试验适配）
 
-Claude Code 使用同一 CLI 入口、结果核验和原会话续跑流程，不增加第二套任务状态或改变默认 Worker 回传。当前适配 Windows 原生 `claude.exe 2.1.296`；已有认证继续由 Claude 自己读取，不复制密钥、不修改其全局设置。配置示例：
+Claude Code 使用同一 CLI 入口、结果核验和原会话续跑流程，不增加第二套任务状态或改变默认 Worker 回传。当前适配 Windows 原生 `claude.exe`，不设置精确版本白名单或版本范围；已有认证继续由 Claude 自己读取，不复制密钥、不修改其全局设置。配置示例：
 
 ```json
 {"schemaVersion":1,"provider":"claude","runner":{"command":"<claude.exe绝对路径>","args":[]},"model":"<Claude端当前可用的模型>","permissionMode":"bypassPermissions","mode":"interactive","ui":"window"}
@@ -146,7 +146,7 @@ Claude Code 使用同一 CLI 入口、结果核验和原会话续跑流程，不
 - `permissionMode` 必须显式选择，不继承桌面权限。上述免确认示例只用于用户已授权完全访问的 CLI；auto 仍会进行逐次判定，dontAsk 会拒绝需要批准的动作，二者不能等同完全访问。启动和恢复沿用同一明确权限；首次目录信任、系统 ACL、管理员或组织限制不能靠参数保证消失，失败需保留并通知负责人，不假装任务仍正常执行，也不伪造批准。
 - 本版本通过 `--effort` 传入 low / medium / high / xhigh / max，并只为该子进程设置对应环境值，避免继承值覆盖本轮选择；不修改 Claude 全局设置。底层模型或服务端仍可能不支持、限制或忽略强度，不能仅凭参数存在宣称推理预算已经生效。依据：[Claude 原生参数](https://code.claude.com/docs/en/cli-reference)。
 - `cli.open` 只报告已存在的原窗口；`cli.detach` 等当前回答结束后关闭，`cli.stop` 停止有进程证明的本次 Claude 进程并等实际退出后记录 stopped。CLI 在外部另起的业务服务不在该停止动作内。
-- **支持限制**：生命周期 hooks 是[Claude官方能力](https://code.claude.com/docs/en/hooks)，但向可见终端注入消息使用本机已验证版本的消息管道，并非上游稳定公共接口。版本变化必须重新验证；不要自行加入会反复阻止 Stop、切换会话或另行调度任务的 hooks，并据此宣称该适配保证完成。启动未登记保留 unknown 证据，不自动重启另一会话。
+- **支持限制**：生命周期 hooks 是[Claude官方能力](https://code.claude.com/docs/en/hooks)，但向可见终端注入消息使用原生消息管道，并非上游稳定公共接口。版本信息仅用于诊断，不因升级或版本号未列举而拒绝启动、续跑或恢复；可执行文件不可用、实际握手或消息传递失败时仍准确报错，不承诺未来协议变化必然兼容。不要自行加入会反复阻止 Stop、切换会话或另行调度任务的 hooks，并据此宣称该适配保证完成。启动未登记保留 unknown 证据，不自动重启另一会话。
 
 隔离回归：`scripts/check-cli-claude.mjs`。明确授权真实模型后，可运行 `scripts/probe-visible-cli.mjs --profile <Claude配置> --allow-live-model --exercise-reopen`；需要沿用已经信任的演示目录时，增加 `--execution-parent <已信任演示目录>`，探针只在其中新建唯一测试子目录。它验证审查、修复、复核和同会话恢复，不验证真实桌面 PM 已被自动唤醒。
 

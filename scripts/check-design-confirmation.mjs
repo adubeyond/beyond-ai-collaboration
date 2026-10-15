@@ -48,8 +48,55 @@ const assistTransferFingerprints = [
     before: '8ca4e392dff1ea77e8ebb32d07d7e5e8272b2798578c794218534f27876f4d60',
     after: 'a5ded774c6805b295fc86acc5b8348dd3a2ceb802273d59d143ccc1e69e1000f' },
 ];
+// Authorized 2026-10-15 removal of Claude version gating, not a general freeze refresh.
+// Normalize only these exact edits back to the already approved baseline.
+const claudeCompatibilityEdits = [
+  { path: product + 'scripts/cli/claude-profile.mjs', before: [
+    '// Completion hooks are documented; interactive message injection is version-specific.',
+    "export const CLAUDE_VERSION = '2.1.296';",
+  ].join('\n'), after: [
+    '// Probe executable availability, never a version allowlist or version range.',
+    '// Native session identity, handshake and delivery checks remain authoritative.',
+  ].join('\n') },
+  { path: product + 'scripts/cli/claude-profile.mjs',
+    before: "Claude effort unsupported by the pinned native CLI",
+    after: "Claude effort unsupported by the native adapter" },
+  { path: product + 'scripts/cli/claude-profile.mjs',
+    before: "  if (version.status !== 0 || version.stdout.trim() !== `${CLAUDE_VERSION} (Claude Code)`) throw new Error('Claude Code version changed or unavailable; interactive adapter revalidation required');",
+    after: "  if (version.error || version.status !== 0 || typeof version.stdout !== 'string' || !version.stdout.trim()) throw new Error('Claude Code version probe failed; executable unavailable or returned no version information');" },
+  { path: cli, before: '`claude.exe 2.1.296`', after: '`claude.exe`，不设置精确版本白名单或版本范围' },
+  { path: cli,
+    before: '但向可见终端注入消息使用本机已验证版本的消息管道，并非上游稳定公共接口。版本变化必须重新验证；不要自行加入',
+    after: '但向可见终端注入消息使用原生消息管道，并非上游稳定公共接口。版本信息仅用于诊断，不因升级或版本号未列举而拒绝启动、续跑或恢复；可执行文件不可用、实际握手或消息传递失败时仍准确报错，不承诺未来协议变化必然兼容。不要自行加入' },
+];
+// Only the reviewed compatibility-test revision is allowed; keep the fixture.
+const claudeCompatibilityTestFingerprints = [
+  { path: product + 'scripts/cli/claude-version-compatibility.test.mjs',
+    before: 'c394825879c2327e183f23201dfdbe05c1a2abfea1581244c76f3e722268dbdf',
+    after: 'e72ee3134cfec81b9700853c5af170d8ea37eef82e193f506f696a469c2d539c' },
+];
+// Authorized 4.0 capability repair. Chain from the approved source, never
+// refresh the original freeze or exempt an entire CLI directory.
+const zcodeCompatibilityFingerprints = [
+  { path: cli,
+    before: 'ebedc6b6f61956d5a9d713bb48afcee3fa27941774dd5c430a8f52e1711b72a5',
+    after: 'f649c326dbd354cfd316e82495130d0707d96b99cde2fc02454d0f9f99f52fe9' },
+  { path: product + 'scripts/cli/zcode-profile.mjs',
+    before: '0195dcf24e942d20cc7dfe20182cc882e1f91a1d53ba651852aabbded5cbac59',
+    after: '1b9c6c8f8e66d980f650b4831313b6673b1b96838fea89f4a85ffc9fa4b1db86' },
+];
+function normalizeClaudeCompatibility(file, text) {
+  for (const change of claudeCompatibilityEdits.filter(item => item.path === file)) {
+    if (text.split(change.after).length !== 2) return null;
+    text = text.replace(change.after, change.before);
+  }
+  return text;
+}
 function matchesFrozenFingerprint(item, currentHash) {
-  const approved = assistTransferFingerprints.find(change => change.path === item.path);
+  const approved = [...assistTransferFingerprints, ...claudeCompatibilityTestFingerprints].find(change => change.path === item.path);
+  const compatibility = zcodeCompatibilityFingerprints.find(change => change.path === item.path);
+  if (compatibility) return (!approved || item.sha256 === approved.before)
+    && compatibility.before === (approved?.after ?? item.sha256) && currentHash === compatibility.after;
   return approved
     ? item.sha256 === approved.before && currentHash === approved.after
     : currentHash === item.sha256;
@@ -99,7 +146,8 @@ function frozenFailures(source = read) {
   const errors = [];
   for (const item of fixture.files) {
     try {
-      let current = source(item.path);
+      let current = normalizeClaudeCompatibility(item.path, source(item.path));
+      if (current === null) { errors.push(item.path); continue; }
       if (item.path === receiptFile) {
         if (current.split(receiptRenameAfter).length !== 2) { errors.push(item.path); continue; }
         current = current.replace(receiptRenameAfter, receiptRenameBefore);
@@ -267,7 +315,7 @@ test('reviewed boundary checks reject removal of every declared safeguard', () =
   }
 });
 
-test('protected source is frozen except the precise receipt retry and assist transfer changes', () => {
+test('protected source is frozen except the precise authorized receipt and CLI repairs', () => {
   assert.equal(fixture.schemaVersion, 1);
   assert.equal(fixture.baselineCommit, '041b0fe0f290ad628dc5c9f29b9d725419958781');
   assert.equal(new Set(fixture.files.map(item => item.path)).size, fixture.files.length);
@@ -293,7 +341,7 @@ test('assist transfer permits exactly the reviewed files and rejects rollback or
     assert.equal(change.before, original.sha256);
     assert.match(change.after, /^[a-f0-9]{64}$/);
     assert.equal(matchesFrozenFingerprint(original, change.before), false, 'old contents must not pass');
-    assert.equal(matchesFrozenFingerprint(original, sha256(read(change.path))), true);
+    assert.equal(matchesFrozenFingerprint(original, sha256(normalizeClaudeCompatibility(change.path, read(change.path)))), true);
     for (const mutate of [text => text + '\nextra content', text => text.slice(1)]) {
       assert.ok(frozenFailures(file => file === change.path ? mutate(read(file)) : read(file)).includes(change.path));
     }
@@ -316,6 +364,48 @@ test('receipt exception rejects removal, changed retry budget and unrelated rece
     text => text + '\n// unrelated receipt change\n',
   ]) {
     assert.ok(frozenFailures(file => file === receiptFile ? mutate(read(file)) : read(file)).includes(receiptFile));
+  }
+});
+
+test('ZCode compatibility exception admits only reviewed contents, not rollback or extra protocol edits', () => {
+  assert.deepEqual(zcodeCompatibilityFingerprints.map(item => item.path).sort(), [cli, product + 'scripts/cli/zcode-profile.mjs'].sort());
+  for (const change of zcodeCompatibilityFingerprints) {
+    assert.deepEqual(Object.keys(change).sort(), ['after', 'before', 'path']);
+    const original = fixture.files.find(item => item.path === change.path);
+    assert.ok(original);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false);
+    assert.equal(matchesFrozenFingerprint(original, sha256(normalizeClaudeCompatibility(change.path, read(change.path)))), true);
+    for (const mutate of [text => text + '\nextra content', text => text.slice(1)]) {
+      assert.ok(frozenFailures(file => file === change.path ? mutate(read(file)) : read(file)).includes(change.path));
+    }
+  }
+  const hook = fixture.files.find(item => item.path.endsWith('/zcode-tui-hook.mjs'));
+  assert.ok(hook);
+  assert.equal(matchesFrozenFingerprint(hook, sha256(read(hook.path) + '\nchanged')), false);
+});
+
+test('Claude compatibility exception rejects version gate restoration and protocol changes', () => {
+  assert.equal(claudeCompatibilityEdits.length, 5);
+  for (const change of claudeCompatibilityEdits) {
+    assert.ok(frozenFailures(file => file === change.path ? read(file).replace(change.after, change.before) : read(file)).includes(change.path));
+  }
+  const profile = product + 'scripts/cli/claude-profile.mjs';
+  for (const mutate of [
+    text => text.replace('version.error ||', "version.stdout.trim() !== '2.1.300 (Claude Code)' || version.error ||"),
+    text => text.replace('version.error ||', 'version.stdout.trim().startsWith(\'2.\') === false || version.error ||'),
+    text => text.replace("'--resume'", "'--continue'"),
+    text => text + '\n// unrelated change\n',
+  ]) assert.ok(frozenFailures(file => file === profile ? mutate(read(file)) : read(file)).includes(profile));
+  assert.equal(claudeCompatibilityTestFingerprints.length, 1);
+  const change = claudeCompatibilityTestFingerprints[0];
+  assert.equal(change.path, product + 'scripts/cli/claude-version-compatibility.test.mjs');
+  assert.deepEqual(Object.keys(change).sort(), ['after', 'before', 'path']);
+  const original = fixture.files.find(item => item.path === change.path);
+  assert.equal(change.before, original.sha256);
+  assert.equal(matchesFrozenFingerprint(original, change.before), false);
+  assert.equal(matchesFrozenFingerprint(original, sha256(read(change.path))), true);
+  for (const mutate of [text => text + '\nextra', text => text.slice(1)]) {
+    assert.ok(frozenFailures(file => file === change.path ? mutate(read(file)) : read(file)).includes(change.path));
   }
 });
 

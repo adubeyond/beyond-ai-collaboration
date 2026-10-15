@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import crypto from 'node:crypto';
+import childProcess from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
 import { CliTaskStore, atomicJson, digest, sha256File } from '../模板交付包/scripts/cli/cli-task-store.mjs';
 import { currentProcessIdentity } from '../模板交付包/scripts/cli/process-identity.mjs';
 import { runVisibleCli } from '../模板交付包/scripts/cli/visible-cli-runner.mjs';
@@ -158,7 +160,7 @@ test('Claude native arguments preserve an exact session and explicit permissions
   }
 });
 
-test('Claude profiles reject embedded credentials and arbitrary launcher arguments', () => {
+test('Claude profiles reject embedded credentials, arbitrary launcher arguments and failed probes', t => {
   const p = { schemaVersion: 1, provider: 'claude', mode: 'interactive', ui: 'window', permissionMode: 'dontAsk', runner: { command: process.execPath, args: [] }, model: 'model' };
   assert.throws(() => readClaudeProfile({ ...p, api_key: 'secret' }), /credentials/);
   // Non-Windows hosts reject the adapter before inspecting native Windows options.
@@ -166,7 +168,10 @@ test('Claude profiles reject embedded credentials and arbitrary launcher argumen
   assert.throws(() => readClaudeProfile({ ...p, runner: { ...p.runner, args: ['--resume','unowned'] } }), expected(/native executable/));
   assert.throws(() => readClaudeProfile({ ...p, permissionMode: 'typo' }), expected(/permissionMode/));
   for (const effort of ['ultra', '', 3, 'high\n--debug']) assert.throws(() => readClaudeProfile({ ...p, effort }), expected(/effort unsupported/));
-  assert.throws(() => readClaudeProfile(p), expected(/revalidation/));
+  t.mock.method(childProcess, 'spawnSync', () => ({ status: 1, stdout: '', stderr: 'fixture executable failure' }));
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  assert.throws(() => readClaudeProfile(p), expected(/version probe failed/));
 });
 
 test('hook transport requires loopback and matching event identity', async () => {

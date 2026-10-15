@@ -146,10 +146,10 @@ test('loopback endpoint rejects foreign origin and missing authorization', { tim
   assert.equal((await fetch(ep.controlUrl + 'event', { method: 'POST', headers: { origin: 'https://example.com', authorization: 'Bearer ' + fs.readFileSync(ep.tokenPath, 'utf8') } })).status, 403);
 });
 
-test('unsupported provider builds and profiles fail before a window launches', t => {
+test('missing native capabilities and invalid profiles fail before a window launches', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-zcode-profile-')); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   atomicJson(path.join(root, 'package.json'), { name: 'zcode-app-cli', version: 'future' });
-  assert.throws(() => checkZcodeCapability({ packageRoot: root }), /revalidation/);
+  assert.throws(() => checkZcodeCapability({ packageRoot: root }), /capability unavailable: native TUI source/);
   const p = { schemaVersion: 1, provider: 'zcode', mode: 'interactive', ui: 'window', runner: { command: process.execPath, args: [] }, packageRoot: root, model: 'test' };
   assert.throws(() => readZcodeProfile({ ...p, api_key: 'secret' }), /credentials/);
   assert.throws(() => readZcodeProfile({ ...p, mode: 'exec' }), /interactive/);

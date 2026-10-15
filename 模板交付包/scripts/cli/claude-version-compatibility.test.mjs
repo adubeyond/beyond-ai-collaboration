@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { syncBuiltinESMExports } from 'node:module';
 import test from 'node:test';
-import { CLAUDE_VERSION, checkClaudeCapability, claudeArguments } from './claude-profile.mjs';
+import { checkClaudeCapability, claudeArguments } from './claude-profile.mjs';
 import { readProfile } from './cli-bridge.mjs';
 import { createClaudeSession } from './claude-client.mjs';
 
@@ -15,18 +15,61 @@ function versionProbe(t, result) {
   t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
 }
 
-test('native version guard accepts only the validated 2.1.296 response', t => {
-  let response = { status: 0, stdout: '2.1.296 (Claude Code)\r\n' };
+test('native availability probe never gates on a version number or output format', t => {
+  const response = { status: 0, stdout: '' };
   versionProbe(t, response);
   const profile = { runner: { command: process.execPath } };
-  assert.equal(CLAUDE_VERSION, '2.1.296');
-  assert.doesNotThrow(() => checkClaudeCapability(profile));
-  for (const stdout of ['2.1.297 (Claude Code)', '2.1.295 (Claude Code)', '2.1.294 (Claude Code)', '2.1.296', '']) {
+  for (const stdout of ['2.1.296 (Claude Code)', '2.1.299 (Claude Code)', '2.1.300 (Claude Code)',
+    '2.1.295 (Claude Code)', '3.0.0 (Claude Code)', '42.7.100-preview.1 (Claude Code)',
+    '2.1.300', 'Claude Code v3.0.0\r\n', 'development build']) {
     response.stdout = stdout;
-    assert.throws(() => checkClaudeCapability(profile), /revalidation required/);
+    assert.doesNotThrow(() => checkClaudeCapability(profile));
   }
-  response.stdout = '2.1.296 (Claude Code)'; response.status = 1;
-  assert.throws(() => checkClaudeCapability(profile), /revalidation required/);
+});
+
+test('native availability probe still rejects actual launch, exit and output failures', t => {
+  const response = { status: 0, stdout: '' };
+  versionProbe(t, response);
+  const profile = { runner: { command: process.execPath } };
+  for (const stdout of ['', ' \r\n\t', null, undefined, 300]) {
+    response.stdout = stdout;
+    assert.throws(() => checkClaudeCapability(profile), /version probe failed/);
+  }
+  response.stdout = '2.1.300 (Claude Code)';
+  for (const status of [1, -1, null, undefined]) {
+    response.status = status;
+    assert.throws(() => checkClaudeCapability(profile), /version probe failed/);
+  }
+  response.status = 0;
+  for (const code of ['ENOENT', 'EACCES', 'ETIMEDOUT']) {
+    response.error = Object.assign(new Error('fixture executable failure'), { code });
+    assert.throws(() => checkClaudeCapability(profile), /version probe failed/);
+  }
+});
+
+test('new native versions reach original-session resume without changing the persisted profile', t => {
+  const response = { status: 0, stdout: '2.1.300 (Claude Code)' };
+  versionProbe(t, response);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-claude-null-effort-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'profile.json');
+  const base = JSON.stringify({ schemaVersion: 1, provider: 'claude', runner: { command: process.execPath, args: [] },
+    model: 'test-model', effort: 'max', permissionMode: 'dontAsk', mode: 'interactive', ui: 'window' });
+  fs.writeFileSync(file, base);
+  if (process.platform !== 'win32') {
+    assert.throws(() => readProfile(file, { model: 'test-model-满血', effort: null }), /requires Windows/);
+    return;
+  }
+  for (const stdout of ['2.1.300 (Claude Code)', '4.0.0 (Claude Code)', 'Claude Code development build']) {
+    response.stdout = stdout;
+    const profile = readProfile(file, { model: 'test-model-满血', effort: null });
+    assert.equal(profile.model, 'test-model-满血');
+    assert.equal(Object.hasOwn(profile, 'effort'), false);
+    const args = claudeArguments(profile, { taskId: 'same-task', sessionId: 'same-session' }, 'settings.json', 'unused');
+    assert.ok(!args.includes('--effort'));
+    assert.deepEqual(args.slice(-2), ['--resume', 'same-session']);
+    assert.equal(fs.readFileSync(file, 'utf8'), base);
+  }
 });
 
 test('registered max preserves the base profile and respects native platform support', t => {
