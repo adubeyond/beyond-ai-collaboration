@@ -210,11 +210,7 @@ function validateText(path, text) {
     errors.push(`尾随空白：${rel}`);
   }
   for (const [label, pattern] of sensitivePatterns) {
-    // A pinned upstream compatibility fingerprint is product data, not a run receipt.
-    // Exempt only this exact declaration; all other hashes in the file remain checked.
-    let checkedText = label === "疑似动态 SHA-256" && rel === "模板交付包/scripts/cli/zcode-profile.mjs"
-      ? text.replace(/^const TUI_SHA256 = '[0-9a-f]{64}';$/m, "const TUI_SHA256 = '<upstream-content-pin>';")
-      : text;
+    let checkedText = text;
     // These are public-source pins from a declared Git baseline, not runtime
     // receipts. Only the hash fields are exempt; the freeze test validates them
     // against the actual protected files and every other value remains checked.
@@ -227,6 +223,13 @@ function validateText(path, text) {
     if (label === "疑似动态 SHA-256" && rel === "scripts/check-design-confirmation.mjs") {
       checkedText = checkedText.replace(/^const assistTransferFingerprints = \[[\s\S]*?^\];$/m,
         section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 6
+          ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      // One reviewed public compatibility test, not a runtime record.
+      checkedText = checkedText.replace(/^const claudeCompatibilityTestFingerprints = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 2
+          ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      checkedText = checkedText.replace(/^const zcodeCompatibilityFingerprints = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 4
           ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
     }
     if (label === "疑似秘密赋值" && fixtureTokens.has(rel)) {
@@ -506,7 +509,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/task-design/SKILL.md",
     label: "complex design has one active document",
-    value: "复杂设计必须使用一个明确的活动设计文档",
+    value: "复杂设计使用一个明确的正式资料入口",
   },
   {
     path: "模板交付包/skills/task-design/references/complex-design-document-and-implementation.md",

@@ -419,7 +419,8 @@ function normalizeProjectEntry(text, label) {
 
 if (manifest) {
   for (const file of expectedCliProductFiles) readUtf8(join(candidateRoot, file), `候选CLI产品文件${file}`);
-  if (manifest.schemaVersion !== 3 || !/^3\.\d+\.\d+$/.test(manifest.releaseVersion)) {
+  if (manifest.schemaVersion !== 3 || typeof manifest.releaseVersion !== "string"
+    || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(manifest.releaseVersion)) {
     errors.push("候选版本清单字段无效");
   }
   if (

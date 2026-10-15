@@ -6,6 +6,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-10-15
+
+- 发行主版本与清单 schema 分离：允许 4.0.0，保留原 schemaVersion=3；同步双语安装入口并增加正反例回归。
+
+### Changed
+
+- Separate task progress and ownership from reusable engineering requirements, design, architecture, contracts, tests and runbooks. Reuse existing document owners and connect PM/Worker reading paths instead of duplicating or bulk-moving project documents.
+- Strengthen PM evidence-led analysis and correction, Worker outcome reporting, and correspondence between business behavior, technical design and acceptance.
+- Maintain current documents incrementally across tasks. Preserve approved unimplemented designs and valid sections when only part becomes obsolete; task completion does not retire effective engineering sources.
+- Remove Claude exact-version gating and replace ZCode exact-version/full-file-hash gating with actual integration and runtime capability checks. Retain concrete startup failures in the existing per-run error channel.
+
+### Validation and boundaries
+
+- Add document-consumer, selective-retirement and CLI capability regressions to the normal product runner and Windows/Ubuntu CI. Keep the original frozen baseline and admit only the reviewed compatibility deltas.
+- Preserve Desktop callbacks, receipt order, task states, model policy, existing CLI sessions and prior CLI fixes. This release does not install, migrate or resume any existing project.
+- See [validation and limits](docs/releases/v4.0.0-validation.md) and [upgrade instructions](docs/releases/v4.0.0-install.md).
+
 ## [3.2.15] - 2026-10-14
 
 ### Added

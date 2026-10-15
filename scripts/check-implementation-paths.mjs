@@ -143,7 +143,7 @@ requireText("S1运维不截获本地提交", ops, "普通代码任务自己的�
 // S2：需要设计的新功能。
 requireText("S2设计回原Worker", design, "结果回到同一个 Worker");
 requireText("S2复用任务入口", complexDesign, "已有有效的项目/子项目文档入口和事实索引时直接复用");
-requireText("S2单一活动设计", design, "复杂设计必须使用一个明确的活动设计文档");
+requireText("S2正式资料入口", design, "复杂设计使用一个明确的正式资料入口");
 requireText("S2调查证据不冒充实施路径", design, "只是证据");
 requireText("S2设计目录不承载下游证据", complexDesign, "不作为后续开发、测试、发布或运行证据的通用工作区");
 requireText("S2跨任务只传最小设计摘要", complexDesign, "不复制设计正文");
@@ -711,11 +711,11 @@ requireText("00入口读取项目身份与路由", documentEntry, "确认当前�
 requireText("00入口读取全部当前主事实", documentEntry, "登记的全部当前主事实正文");
 requireText("初始化不进入普通任务热路径", agents, "不进入普通任务热路径");
 requireText("升级先核对当前直接事实", agents, "初始化优先复用现有`AGENTS.md`、代码、Git和Markdown事实");
-requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 3.2.15");
+requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 4.0.0");
 requireText("项目覆盖有专用边界", agents, "BEGIN BEYOND PROJECT OVERRIDES");
 requireText("安装逐文件对账六个Skill", installVerifier, "安装Skill内容不一致");
 requireText("安装核对项目完整运行内核", installVerifier, "项目入口的BEYOND运行内核与控制仓候选不一致");
-requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "3.2.15"');
+requireText("安装清单声明当前版本", releaseManifest, '"releaseVersion": "4.0.0"');
 requireText("个人路径不读取团队共享区", agents, "普通项目接手、正式Worker任务、Action Skill切换和个人任务不读取共享区");
 requireText("团队协同不替代正式Worker", agents, "不替代当前成员自己的正式Worker");
 requireText("PM初始化与协同权限严格限域", pmDispatch, "两者都不扩张到业务源码、测试、仓库配置、成员权限、环境、数据或发布");

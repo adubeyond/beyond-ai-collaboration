@@ -61,13 +61,14 @@ function atomicWrite(target, bytes, immutable = false) {
 
 export function productCommands(sourceRoot) {
   const runtime = ['check-m3-project-identity', 'check-project-runtime-routing', 'check-worker-result-receipts', 'check-receipt-write-concurrency', 'check-receipt-list-concurrency', 'check-accept-receipt-cache-expiry', 'check-m3-workbench-transaction', 'check-workbench-upgrade-migration', 'check-native-worker-return',
-    'check-cli-task-store', 'check-cli-launcher', 'check-cli-notification', 'check-cli-workbench', 'check-cli-routing', 'check-cli-recovery', 'check-cli-goal-loop', 'check-cli-interactive', 'check-cli-zcode', 'check-cli-claude', 'check-cli-transfer'].map(n => 'scripts/' + n + '.mjs');
+    'check-cli-task-store', 'check-cli-launcher', 'check-cli-notification', 'check-cli-workbench', 'check-cli-routing', 'check-cli-recovery', 'check-cli-goal-loop', 'check-cli-interactive', 'check-cli-zcode', 'check-zcode-capabilities', 'check-cli-claude', 'check-cli-transfer'].map(n => 'scripts/' + n + '.mjs');
   return [
     { name: 'artifact-lifecycle', args: ['--test', '--test-concurrency=1', 'scripts/check-temporary-workspace.mjs', 'scripts/check-validation-cleanup.mjs'] },
     { name: 'backup-deduplication', args: ['scripts/check-backup-dedup-regressions.mjs'] },
     ...['check-initialization-markdown-regressions', 'check-project-registration-regressions', 'check-project-preimage-regressions'].map(n => ({ name: n, args: ['scripts/' + n + '.mjs', '--product-root', '模板交付包'] })),
     { name: 'engineering-documentation', args: ['scripts/check-engineering-documentation.mjs'] },
     { name: 'design-confirmation-static', args: ['scripts/check-design-confirmation.mjs'] },
+    { name: 'task-engineering-separation', args: ['scripts/check-task-engineering-separation.mjs'] },
     { name: 'retained-cli-regressions', args: ['--test', ...fs.readdirSync(path.join(sourceRoot, '模板交付包/scripts/cli')).filter(n => n.endsWith('.test.mjs')).map(n => '模板交付包/scripts/cli/' + n)] },
     { name: 'team-control-results', args: ['scripts/check-team-control-results.mjs'] },
     { name: 'runtime-and-cli', args: ['--test', '--test-concurrency=4', ...runtime] },

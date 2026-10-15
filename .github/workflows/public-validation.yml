@@ -55,6 +55,7 @@ jobs:
         run: |
           node scripts/check-engineering-documentation.mjs
           node scripts/check-design-confirmation.mjs
+          node scripts/check-task-engineering-separation.mjs
           node scripts/check-project-initialization-runtime.mjs
           node scripts/check-initialization-markdown-regressions.mjs --product-root 模板交付包
           node scripts/check-project-registration-regressions.mjs --product-root 模板交付包
@@ -65,7 +66,7 @@ jobs:
       - name: Validate workbench upgrade migration
         run: node --test scripts/check-workbench-upgrade-migration.mjs
       - name: Validate CLI store, execution, notification, routing, recovery, and goal loops
-        run: node --test --test-concurrency=4 scripts/check-cli-task-store.mjs scripts/check-cli-launcher.mjs scripts/check-cli-notification.mjs scripts/check-cli-workbench.mjs scripts/check-cli-routing.mjs scripts/check-cli-recovery.mjs scripts/check-cli-goal-loop.mjs scripts/check-cli-interactive.mjs scripts/check-cli-zcode.mjs scripts/check-cli-claude.mjs scripts/check-cli-transfer.mjs
+        run: node --test --test-concurrency=4 scripts/check-cli-task-store.mjs scripts/check-cli-launcher.mjs scripts/check-cli-notification.mjs scripts/check-cli-workbench.mjs scripts/check-cli-routing.mjs scripts/check-cli-recovery.mjs scripts/check-cli-goal-loop.mjs scripts/check-cli-interactive.mjs scripts/check-cli-zcode.mjs scripts/check-zcode-capabilities.mjs scripts/check-cli-claude.mjs scripts/check-cli-transfer.mjs
       - name: Validate implementation paths
         run: node scripts/check-implementation-paths.mjs
       - name: Validate progress-decision fixtures and evaluator

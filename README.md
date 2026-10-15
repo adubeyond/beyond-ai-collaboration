@@ -13,7 +13,7 @@ Use one PM for the whole project or several PMs for explicit scopes. With a user
 
 It is built for people already using Codex on real repositories who are tired of repeated context loss, finished Workers that never return to the PM, stage-heavy workflows that require constant “continue” prompts, ambiguous claims such as “tests passed” versus “released,” and conflicting writes across parallel tasks.
 
-[Download BEYOND v3.2.15](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v3.2.15) · [Gitee mirror](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90-second real case](docs/en/real-case-and-90-second-demo.md) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [3.2.15 Upgrade Guide](docs/en/releases/v3.2.15.md) · [Architecture](docs/en/architecture.md)
+[Download BEYOND v4.0.0](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v4.0.0) · [Gitee mirror](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90-second real case](docs/en/real-case-and-90-second-demo.md) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [4.0.0 Upgrade Guide](docs/en/releases/v4.0.0.md) · [Architecture](docs/en/architecture.md)
 
 ## What BEYOND changes
 
@@ -26,7 +26,7 @@ It is built for people already using Codex on real repositories who are tired of
 | “Tests passed,” “may commit,” and “may release” collapse into one permission | Files, Git, network, servers, data, and production remain separate evidence and authorization domains |
 | Parallel tasks overwrite one another or close twice | The PM registers one owner and write boundary per result; acceptance and archival are idempotent |
 
-## Core capabilities in 3.2.15
+## Core capabilities in 4.0.0
 
 ### 1. Select models by task, adjust them by stage
 
@@ -68,7 +68,7 @@ Goals, architecture, development conventions, tests, operational entry points, a
 
 Existing documents can stay in place with registered entry points. Stale documents must be checked against current evidence rather than treated as unquestionable instructions. Missing documentation is not a new gate when safe investigation can establish the needed facts.
 
-Version 3.2.13 reconnects the 2.0 software-engineering documentation structure: business flows, product interactions, architecture, data/API contracts, implementation guides, stage decisions, tests, and operations. PMs learn the current main facts; Workers follow task-relevant source documents and direct dependencies. Initialize entry points, fill real gaps during work, and maintain the original owners incrementally—no duplicate document system or requirement to complete every template. See the [engineering documentation guide](模板交付包/docs/AI编程协同机制/工程资料指南.md).
+Version 4.0.0 separates tasks from lasting engineering documents. Tasks describe the current outcome, scope, and evidence; requirements and designs describe how the business should work, its interfaces, data, errors, and acceptance. PMs analyze the gap before dispatching or correcting work; Workers follow applicable source sections and maintain actual changes at their original locations. Existing documents stay in place. Obsolete sections are corrected or retired locally without hiding still-valid designs or treating an approved, unimplemented design as obsolete. See the [engineering documentation guide](模板交付包/docs/AI编程协同机制/工程资料指南.md).
 
 ### 5. Reporting, verification, and recovery close the loop
 
@@ -80,11 +80,11 @@ Busy PMs handle injected callbacks at safe tool boundaries and then continue the
 
 The native Desktop Worker route remains the default. Optional routes support PM → Worker → CLI and PM or Worker → CLI. Codex, ZCode, and Claude Code can use real native interactive terminals, show execution, accept corrections, and resume the same session rather than presenting JSON logs as a conversation. Runs can finish concurrently; notifications for the same owner are serialized and wait for that owner's latest foreground turn to end before review, continuation, or acceptance.
 
-Each CLI task selects its own model and effort. Configuration changes resume the saved session after the previous run ends and is reviewed, without changing shared defaults. Explicitly authorized full-access modes avoid per-command approvals, but cannot override business scope, OS permissions, or provider entitlements. ZCode and Claude Code are version-pinned experimental integrations, not arbitrary-version compatibility promises; see the [CLI mechanism and support boundaries](模板交付包/docs/AI编程协同机制/机制/04-CLI目标协作机制.md).
+Each CLI task selects its own model and effort. Configuration changes resume the saved session after the previous run ends and is reviewed, without changing shared defaults. Explicitly authorized full-access modes avoid per-command approvals, but cannot override business scope, OS permissions, or provider entitlements. Claude Code and ZCode no longer reject an upgrade solely because its version number changed: Claude uses the existing native startup/handshake, and ZCode checks actual integration points and runtime capabilities before dispatch. Unsupported interfaces still fail explicitly; see the [CLI mechanism and support boundaries](模板交付包/docs/AI编程协同机制/机制/04-CLI目标协作机制.md).
 
 A notification means a run ended, not that the business goal was achieved. Direct CLI work has its own result and acceptance records instead of impersonating Worker receipts; Worker-mediated work still returns through the original Worker protocol. Recovery, concurrency isolation, duplicate-notification suppression, and explicit closure after a goal change are supported. Third-party API settings and authentication come from the existing local CLI profile, not the user's Codex subscription or credentials shipped in the package.
 
-Version 3.2.15 adds explicitly authorized, single-task owner transfer for an unregistered `assist` CLI task after its current run has completed. It preserves the original task, session, model, results and reviews without creating a formal workbench task. The successor independently reviews the result before continuing the same session; the previous owner loses control. Transfer journals and task locks reject competing control and allow interrupted or duplicate requests to be handled without silently taking over a live process. Existing formal transfers, Desktop callbacks and the model matrix are unchanged.
+Version 4.0.0 preserves the 3.2.15 explicitly authorized, single-task owner transfer for an unregistered `assist` CLI task after its current run has completed. It preserves the original task, session, model, results and reviews without creating a formal workbench task. The successor independently reviews the result before continuing the same session; the previous owner loses control. Transfer journals and task locks reject competing control and allow interrupted or duplicate requests to be handled without silently taking over a live process. Existing formal transfers, Desktop callbacks and the model matrix are unchanged.
 
 ### 7. Lightweight adoption with real boundaries
 
@@ -112,8 +112,8 @@ The PM understands objectives, analyzes problems, designs tasks, and corrects co
 
 ### 1. Download the official release
 
-- [BEYOND-3.2.15.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.15/BEYOND-3.2.15.zip)
-- [BEYOND-3.2.15.zip.sha256 (optional checksum)](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v3.2.15/BEYOND-3.2.15.zip.sha256)
+- [BEYOND-4.0.0.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.0.0/BEYOND-4.0.0.zip)
+- [BEYOND-4.0.0.zip.sha256 (optional checksum)](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.0.0/BEYOND-4.0.0.zip.sha256)
 
 The ZIP is sufficient for installation. A missing or unavailable `.sha256` file does not block installation; if a checksum file is supplied and does not match, stop. See the [Installation, Upgrade, and Project Initialization Guide](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) for exact commands.
 
@@ -123,7 +123,7 @@ Open a new ordinary Codex task in the target project and send this prompt withou
 
 ```text
 This is BEYOND installation maintenance. Do not create a PM, Worker, or business task.
-Use the verified official BEYOND 3.2.15 package I downloaded to install or upgrade this project's beyond-control directory and six global Skills.
+Use the verified official BEYOND 4.0.0 package I downloaded to install or upgrade this project's beyond-control directory and six global Skills.
 Create a precise backup first. Preserve native project rules and real content under local, projects, and shared; never replace them with empty templates.
 Fuse the project entry, run installation verification, then stop and wait for me to restart Codex. Do not start, resume, or modify business tasks.
 ```
@@ -136,7 +136,7 @@ task-design      task-dev
 task-test        task-ops
 ```
 
-BEYOND 3.2.15 does not install an identity Hook, notify branch, persistent daemon, or extra Codex CLI. The optional route uses an existing local CLI with finite per-dispatch background execution and notification; it does not replace the default Desktop route.
+BEYOND 4.0.0 does not install an identity Hook, notify branch, persistent daemon, or extra Codex CLI. The optional route uses an existing local CLI with finite per-dispatch background execution and notification; it does not replace the default Desktop route.
 
 ### 3. Restart and adopt the project
 
@@ -188,7 +188,7 @@ It is not currently a good fit for:
 
 ## Current boundaries
 
-- The current stable release is `v3.2.15`, primarily for local Codex Desktop projects.
+- The current stable release is `v4.0.0`, primarily for local Codex Desktop projects.
 - Standard installation and operation have been validated in real Windows projects; public checks also cover package contents, installation structure, and the minimal fixture.
 - Task creation, callbacks, and persistent permissions vary across platforms. Evidence from one platform is not a universal compatibility claim.
 - The existing read-only local fallback for completed tasks with unavailable final text is retained. It does not guarantee compatibility with every host version or eliminate long-context goal drift.
@@ -202,7 +202,7 @@ It is not currently a good fit for:
 | Install, upgrade, or roll back | [Installation, Upgrade, and Project Initialization](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) |
 | Try a clean fixture | [Quick Start](docs/en/quick-start.md) |
 | Understand PM, Worker, documents, and runtime | [Architecture](docs/en/architecture.md) |
-| Review 3.2.15 changes | [Upgrade Guide](docs/en/releases/v3.2.15.md) · [CHANGELOG](CHANGELOG.md) |
+| Review 4.0.0 changes | [Upgrade Guide](docs/en/releases/v4.0.0.md) · [CHANGELOG](CHANGELOG.md) |
 | Inspect the control repository | [Template Package](模板交付包/README.md) |
 | Report a problem or propose an improvement | [Issues](https://github.com/adubeyond/beyond-ai-collaboration/issues) · [Contributing](CONTRIBUTING.en.md) |
 | Report a vulnerability privately | [Security Policy](SECURITY.en.md) |
