@@ -17,6 +17,28 @@ const contract = {
 const firstStage = { goal: 'Inspect the first bounded window', acceptance: 'Retain the first stable result' };
 const nextStage = { goal: 'Repair and verify the next bounded window', acceptance: 'Show continued input and persisted recovery' };
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+function isolatedHostEnvironment(source = process.env, platform = process.platform) {
+  const keys = ['PATH', 'Path', 'SystemRoot', 'SystemDrive', 'windir', 'ComSpec',
+    'USERPROFILE', 'HOME', 'HOMEDRIVE', 'HOMEPATH', 'TEMP', 'TMP',
+    'APPDATA', 'LOCALAPPDATA', 'ALLUSERSPROFILE', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432'];
+  const env = Object.fromEntries(keys.filter(key => source[key] !== undefined).map(key => [key, source[key]]));
+  // powershell.exe is Windows PowerShell, not the invoking pwsh's module host.
+  // Keep its system modules available without inheriting user/plugin modules.
+  if (platform === 'win32') env.PSModulePath = path.win32.join(source.SystemRoot ?? source.windir, 'System32', 'WindowsPowerShell', 'v1.0', 'Modules');
+  return env;
+}
+test('isolated desktop environment preserves OS startup inputs without credentials or live routing', () => {
+  const source = { SystemRoot: 'C:\\Windows', APPDATA: 'C:\\Fake\\Roaming', LOCALAPPDATA: 'C:\\Fake\\Local',
+    PATH: 'fake-path', TEMP: 'fake-temp', PSModulePath: 'untrusted-pwsh-module',
+    OPENAI_API_KEY: 'fake-key', ANTHROPIC_API_KEY: 'fake-key', GH_TOKEN: 'fake-token', NODE_OPTIONS: 'fake-preload',
+    CODEX_HOME: 'live-home', CODEX_THREAD_ID: 'live-owner', CODEX_APP_TOOLS_PIPE_PATH: 'live-pipe' };
+  const env = isolatedHostEnvironment(source, 'win32');
+  assert.deepEqual(Object.keys(env).sort(), ['SystemRoot', 'APPDATA', 'LOCALAPPDATA', 'PATH', 'TEMP', 'PSModulePath'].sort());
+  assert.equal(env.PSModulePath, 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules');
+  for (const key of ['SystemRoot', 'APPDATA', 'LOCALAPPDATA', 'PATH', 'TEMP']) assert.equal(env[key], source[key]);
+  const routed = { ...env, CODEX_HOME: 'fixture-home', CODEX_THREAD_ID: 'fixture-owner', CODEX_APP_TOOLS_PIPE_PATH: 'fixture-pipe' };
+  assert.equal(routed.CODEX_HOME, 'fixture-home'); assert.equal(routed.CODEX_THREAD_ID, 'fixture-owner'); assert.equal(routed.CODEX_APP_TOOLS_PIPE_PATH, 'fixture-pipe');
+});
 async function until(check, timeout = 15000) {
   const deadline = Date.now() + timeout;
   for (;;) {
@@ -88,7 +110,7 @@ if(q.method==='tools/call'){
 }console.log(JSON.stringify({jsonrpc:'2.0',id:q.id,result}));});
 `);
     atomicJson(path.join(plugin, '.mcp.json'), { mcpServers: { codex_app: { command: process.execPath, args: [server], cwd: plugin } } });
-    const env = Object.fromEntries(['PATH', 'Path', 'SystemRoot', 'USERPROFILE', 'HOME', 'TEMP', 'TMP'].filter(key => process.env[key] !== undefined).map(key => [key, process.env[key]]));
+    const env = isolatedHostEnvironment();
     context.hostSpec = { env: { ...env, CODEX_HOME: root, CODEX_THREAD_ID: binding.ownerThreadId, CODEX_APP_TOOLS_PIPE_PATH: 'isolated-fake-transport' }, pluginRoot, sourceRecordPath: source, handoffTimeoutMs: 5000 };
   }
   const identity = Object.fromEntries(['projectId', 'taskId', 'ownerThreadId'].map(key => [key, binding[key]]));
