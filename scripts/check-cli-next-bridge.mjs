@@ -92,6 +92,7 @@ if(q.method==='tools/call'){
   const request = (action, requestId, input = {}) => ({ schemaVersion: 1, requestId, action, input: { ...identity, ...input } });
   const send = (action, requestId, input) => launchCliRequest(request(action, requestId, input), context);
   let entrySequence = 0;
+  const entryProbe = path.join(root, 'entry-probe.cjs');
   if (entryPoint) {
     assert.equal(notifications, true, 'entrypoint fixture requires its isolated desktop environment');
     const scripts = path.join(controlRoot, 'scripts');
@@ -101,13 +102,29 @@ if(q.method==='tools/call'){
     for (const file of ['project-identity-provider.mjs', 'workbench-transaction.mjs']) {
       fs.copyFileSync(fileURLToPath(new URL('../模板交付包/scripts/runtime/' + file, import.meta.url)), path.join(scripts, 'runtime', file));
     }
+    // Trace only this fixture's subprocess boundaries. No argv, environment or
+    // subprocess output is logged; keep the real commands and deadlines intact.
+    fs.writeFileSync(entryProbe, `
+const cp = require('node:child_process'), path = require('node:path');
+const original = cp.spawnSync, started = Date.now();
+const report = data => process.stderr.write(JSON.stringify({fixtureEntry: true, elapsedMs: Date.now() - started, ...data}) + '\\n');
+report({phase: 'started'});
+cp.spawnSync = function(command, ...args) {
+  const at = Date.now(), executable = path.basename(String(command));
+  report({phase: 'subprocess-start', executable});
+  try { const result = original.call(this, command, ...args); report({phase: 'subprocess-end', executable, durationMs: Date.now() - at, status: result.status, error: result.error?.code}); return result; }
+  catch (error) { report({phase: 'subprocess-throw', executable, durationMs: Date.now() - at, error: error.code}); throw error; }
+};
+require('node:module').syncBuiltinESMExports();
+process.on('beforeExit', () => report({phase: 'beforeExit', resources: process.getActiveResourcesInfo()}));
+`);
   }
   async function sendEntry(action, requestId, input) {
     assert.equal(entryPoint, true);
     const file = path.join(root, 'entry-request-' + (++entrySequence) + '.json');
     atomicJson(file, request(action, requestId, input));
     const outcome = await new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [path.join(controlRoot, 'scripts/cli/cli-bridge.mjs'), '--request', file], {
+      const child = spawn(process.execPath, ['--require', entryProbe, path.join(controlRoot, 'scripts/cli/cli-bridge.mjs'), '--request', file], {
         cwd: executionRoot, env: context.hostSpec.env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
       });
       let stdout = '', stderr = '', expired = false;
@@ -117,7 +134,16 @@ if(q.method==='tools/call'){
       child.once('error', error => { clearTimeout(timer); reject(error); });
       child.once('close', code => { clearTimeout(timer); resolve({ code, stdout, stderr, expired }); });
     });
-    assert.equal(outcome.expired, false, 'isolated CLI bridge entry timed out');
+    const observed = {
+      action, requestId, code: outcome.code, expired: outcome.expired,
+      responseWritten: outcome.stdout.trim().startsWith('{'), trace: outcome.stderr.trim(),
+      queueSaved: fs.existsSync(store.locator(binding)) && store.read(binding).continuations?.some(item => item.requestId === requestId),
+      lockPresent: fs.existsSync(path.join(store.taskDir(binding), '.lock')),
+    };
+    // Emit compact evidence before cleanup even on a failed test, instead of
+    // discarding the only distinction between startup, command and exit stalls.
+    t.diagnostic(JSON.stringify(observed));
+    assert.equal(outcome.expired, false, 'isolated CLI bridge entry timed out: ' + JSON.stringify(observed));
     assert.equal(outcome.code, 0, outcome.stderr);
     const response = JSON.parse(outcome.stdout.trim());
     assert.equal(response.ok, true); return response.result;
