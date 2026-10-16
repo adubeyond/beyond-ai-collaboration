@@ -231,6 +231,25 @@ function validateText(path, text) {
       checkedText = checkedText.replace(/^const zcodeCompatibilityFingerprints = \[[\s\S]*?^\];$/m,
         section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 4
           ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      // Seven reviewed public-source repairs; no runtime hashes or file-wide exemption.
+      checkedText = checkedText.replace(/^const cliContractTurnCompletionFingerprints = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 14
+          ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      // Six reviewed stage/continuation files; only their twelve public pin fields.
+      checkedText = checkedText.replace(/^const cliStageContinuationFingerprints = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 12
+          ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      // Four document-entry source pins, never runtime receipts or secrets.
+      checkedText = checkedText.replace(/^const cliDocumentContextFingerprints = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 8
+          ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      // Two reviewed executable-discovery files, not a general freeze refresh.
+      checkedText = checkedText.replace(/^const codexExecutableFingerprints = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 4
+          ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      checkedText = checkedText.replace(/^const cliManagerLifetimeFingerprints = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 4
+          ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
     }
     if (label === "疑似秘密赋值" && fixtureTokens.has(rel)) {
       checkedText = checkedText.replace(/\btoken\s*[:=]\s*'([^'\n]+)'/g,

@@ -5,8 +5,9 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { atomicJson, digest, sha256File } from './cli-task-store.mjs';
-import { cliEnvironment, redact } from './native-cli-runner.mjs';
+import { cliEnvironment, redact, stageInstruction } from './native-cli-runner.mjs';
 import { processStart } from './process-identity.mjs';
+import { buildCliContext } from './cli-context.mjs';
 import { connectAppServer } from './app-server-rpc.mjs';
 import { openInteractiveWindow, projectTrustOverride } from './interactive-client.mjs';
 import { notifyWhenReady } from './cli-notify.mjs';
@@ -199,7 +200,10 @@ export async function runInteractiveCli({ binding, run: initialRun, profile, pro
     });
     async function dispatch(instruction, first) {
       dispatching = true; currentText = ''; persistEndpoint('dispatching');
-      const text = [first ? 'You are a native CLI session managed by a Desktop owner. Never call Desktop callbacks or worker-result receipts. Return evidence; the owner decides business completion. Read project AGENTS.md and relevant Action Skills as needed.' : '', `Goal: ${binding.contract.goal}`, `Boundaries: ${binding.contract.boundaries}`, `Acceptance: ${binding.contract.acceptance}`, `Relevant entries: ${JSON.stringify([...binding.contract.factEntries, ...binding.contract.skillEntries])}`, `Current authorized instruction: ${instruction}`].filter(Boolean).join('\n');
+      const contract = run.effectiveContract ?? binding.contract;
+      const context = buildCliContext({ binding, run, controlRoot: store.controlRoot });
+      atomicJson(store.checkedPath(path.join(runDirectory(), 'document-context.json')), context.manifest);
+      const text = [first ? 'You are a native CLI session managed by a Desktop owner. Never call Desktop callbacks or worker-result receipts. Return evidence; the owner decides business completion. Read project AGENTS.md and relevant Action Skills as needed.' : '', 'Current effective contract for this run (supersedes earlier task contracts, not platform or system constraints):', `Goal: ${contract.goal}`, `Boundaries: ${contract.boundaries}`, `Acceptance: ${contract.acceptance}`, context.text, stageInstruction(run.stage), `Current authorized instruction: ${instruction}`].filter(Boolean).join('\n');
       const reply = await rpc.request('turn/start', { threadId: sessionId, input: [{ type: 'text', text }], model: profile.model, effort: profile.effort ?? 'medium', approvalPolicy: 'never', sandboxPolicy: { type: 'dangerFullAccess' } });
       activeTurnId ??= reply.turn.id; dispatching = false; persistEndpoint('running');
       if (reply.turn.status !== 'inProgress') await finish(reply.turn);

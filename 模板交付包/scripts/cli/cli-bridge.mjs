@@ -17,12 +17,14 @@ import { readClaudeProfile, checkClaudeCapability } from './claude-profile.mjs';
 import { runVisibleCli } from './visible-cli-runner.mjs';
 import { openClaudeWindow } from './claude-client.mjs';
 import { WorkbenchTransactionStore } from '../runtime/workbench-transaction.mjs';
+import { resolveCodexExecutable } from './codex-executable.mjs';
+import { startWindowsManager, receiveWindowsManager } from './manager-launch.mjs';
 
 function checkNativeCapability(profile) {
   return (profile.provider === 'claude' ? checkClaudeCapability : profile.provider === 'zcode' ? checkZcodeCapability : checkInteractiveCapability)(profile);
 }
 
-export function readProfile(file, configuration = {}) {
+export function readProfile(file, configuration = {}, { liveEndpoint = null } = {}) {
   if (!path.isAbsolute(file)) throw new Error('CLI profile absolute path required');
   const profile = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (!configuration || typeof configuration !== 'object' || Array.isArray(configuration) || Object.keys(configuration).some(key => !['model', 'effort'].includes(key))) throw new Error('CLI configuration only accepts model and effort');
@@ -48,9 +50,12 @@ export function readProfile(file, configuration = {}) {
   };
   // Reject Desktop credential reuse before stat, including a cold host with no home yet.
   if (path.isAbsolute(profile.codexHome ?? '') && lexical(profile.codexHome) === lexical(home)) throw new Error('CLI profile must not reuse Desktop authentication home');
-  if (profile.schemaVersion !== 1 || !path.isAbsolute(profile.runner?.command ?? '') || !fs.statSync(profile.runner.command).isFile() || !Array.isArray(profile.runner.args) || profile.runner.args.some(a => typeof a !== 'string' || /(?:api[_-]?key|auth|provider|--last|--config|--ephemeral)/i.test(a)) || !path.isAbsolute(profile.codexHome ?? '') || !fs.statSync(profile.codexHome).isDirectory() || typeof profile.model !== 'string' || !profile.model.trim()) throw new Error('invalid CLI profile');
+  if (profile.schemaVersion !== 1 || !path.isAbsolute(profile.runner?.command ?? '') || !Array.isArray(profile.runner.args) || profile.runner.args.some(a => typeof a !== 'string' || /(?:api[_-]?key|auth|provider|--last|--config|--ephemeral)/i.test(a)) || !path.isAbsolute(profile.codexHome ?? '') || !fs.statSync(profile.codexHome).isDirectory() || typeof profile.model !== 'string' || !profile.model.trim()) throw new Error('invalid CLI profile');
   const normalized = file => { const physical = fs.realpathSync(file); return process.platform === 'win32' ? physical.toLowerCase() : physical; };
   if (fs.existsSync(home) && normalized(profile.codexHome) === normalized(home)) throw new Error('CLI profile must not reuse Desktop authentication home');
+  const resolved = resolveCodexExecutable(profile, { liveEndpoint });
+  profile.runner.command = resolved.command;
+  if (!resolved.pinned && !fs.statSync(profile.runner.command).isFile()) throw new Error('invalid CLI profile');
   return profile;
 }
 function validateBinding(binding, context, store) {
@@ -216,6 +221,12 @@ async function startManager(store, binding, run, profile, prompt, context) {
   const claim = store.checkedPath(path.join(store.runDir(run, run.runNumber), 'manager-claim.json'));
   let fd; try { fd = fs.openSync(claim, 'wx', 0o600); } catch (error) { if (error.code === 'EEXIST') return { ...run, status: store.read(run).status }; throw error; }
   try { fs.writeFileSync(fd, JSON.stringify({ requestId: run.requestId, caller: currentProcessIdentity(), claimedAt: new Date().toISOString() })); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  if (process.platform === 'win32') {
+    const message = await startWindowsManager(fileURLToPath(import.meta.url), { binding, run, profile, prompt, controlRoot: context.controlRoot, hostSpec: context.hostSpec ?? null }, identity => {
+      atomicJson(store.checkedPath(path.join(store.runDir(run, run.runNumber), 'manager-process.json')), identity);
+    });
+    return { ...run, sessionId: message.sessionId ?? run.sessionId, status: 'running', stateLocator: store.locator(run), ...(message.attachCommand ? { attachCommand: message.attachCommand } : {}) };
+  }
   return new Promise((resolve, reject) => {
     const child = fork(fileURLToPath(import.meta.url), ['--manager'], { detached: true, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], execArgv: [] });
     const timer = setTimeout(() => { child.disconnect(); child.unref(); reject(new Error('CLI manager startup unconfirmed; inspect this run before recovery')); }, 15000);
@@ -242,18 +253,63 @@ export async function launchCliRequest(request, context) {
   if (request.action === 'cli.transfer') return transferOwners(request, context, store);
   if (input.ownerThreadId !== context.ownerThreadId) throw new Error('CLI owner identity mismatch');
   if (request.action === 'cli.start') {
-    const { prompt, configuration = {}, ...supplied } = input;
+    const { prompt, stage, configuration = {}, ...supplied } = input;
     if (supplied.ownerTurnId !== context.ownerTurnId) throw new Error('CLI source turn identity mismatch');
     const profile = readProfile(supplied.profilePath, configuration); validateBinding(supplied, context, store);
     if (profile.mode === 'interactive') checkNativeCapability(profile);
     const binding = store.create(supplied);
-    const run = store.beginRun(binding, { requestId: request.requestId, prompt, expectedRunNumber: 0, expectedSessionId: null, ownerTurnId: context.ownerTurnId, profile, configuration: { model: profile.model, effort: profile.effort ?? null } });
+    const run = store.beginRun(binding, { requestId: request.requestId, prompt, stage, expectedRunNumber: 0, expectedSessionId: null, ownerTurnId: context.ownerTurnId, profile, configuration: { model: profile.model, effort: profile.effort ?? null } });
     return startManager(store, binding, run, profile, prompt, context);
   }
   const binding = store.read(input); validateBinding(binding, context, store);
   if (request.action === 'cli.status') return binding;
   if (request.action === 'cli.result') return store.readResult(input, input.runNumber);
-  if (request.action === 'cli.review') return store.recordReview(input);
+  if (request.action === 'cli.queue') {
+    const allowed = new Set(['projectId', 'taskId', 'ownerThreadId', 'prompt', 'stage', 'expectedRunNumber', 'expectedSessionId', 'replacesRequestId', 'contract', 'authorizationLocator']);
+    if (Object.keys(input).some(key => !allowed.has(key))) throw new Error('CLI queued continuation contains unsupported fields');
+    const { projectId, taskId, ownerThreadId, ...next } = input;
+    const queued = store.queueContinuation(input, { ...next, requestId: request.requestId, ownerTurnId: context.ownerTurnId });
+    // Either operation can win the race: a saved continue review also consumes
+    // a later queue, without replaying cancelled or superseded instructions.
+    if (['pending', 'consumed'].includes(queued.status) && fs.existsSync(path.join(store.runDir(input, queued.expectedRunNumber), 'result.json'))) {
+      const review = store.readReview(input, queued.expectedRunNumber);
+      if (review?.decision === 'continue') {
+        const outcome = await launchCliRequest({ schemaVersion: 1, requestId: request.requestId, action: 'cli.review', input: review }, context);
+        const saved = store.read(input).continuations.find(item => item.requestId === queued.requestId);
+        return { ...saved, ...(outcome.continuation ? { continuation: outcome.continuation } : {}) };
+      }
+    }
+    return queued;
+  }
+  if (request.action === 'cli.cancel-next') return store.cancelContinuation(input, { requestId: input.continuationId, reason: input.reason });
+  if (request.action === 'cli.review') {
+    let next = store.readContinuation(input, input.runNumber);
+    let review;
+    if (next?.status === 'consumed' && binding.runNumber >= next.targetRunNumber) {
+      review = store.readReview(input, input.runNumber);
+      if (digest(review) !== digest(input)) throw new Error('CLI review replay conflict');
+    } else review = store.recordReview(input);
+    // Do not dispatch from the pre-review snapshot: another process may have
+    // saved or replaced the next instruction while the review was committing.
+    next = store.readContinuation(input, input.runNumber);
+    const current = store.read(input);
+    if (review.decision !== 'continue' || !next || !['pending', 'consumed'].includes(next.status)) return review;
+    if (next.status === 'consumed' && (current.runNumber !== next.targetRunNumber || current.status !== 'starting')) {
+      const run = store.readJson(path.join(store.runDir(input, next.targetRunNumber), 'run.json'));
+      return { ...review, continuation: { ...run, status: current.runNumber === next.targetRunNumber ? current.status : 'already-consumed', stateLocator: store.locator(input) } };
+    }
+    // This is the owner's existing continue decision, not a second approval or
+    // a completion callback. Persisted next instructions survive failed launches.
+    const launchContext = context.resolveLaunchContext ? { ...context, ...await context.resolveLaunchContext() } : context;
+    if (!launchContext.ownerTurnId) throw new Error('CLI queued continuation requires current source turn; saved instruction retained');
+    const continuation = await launchCliRequest({ schemaVersion: 1, requestId: next.requestId, action: 'cli.resume', input: {
+      projectId: input.projectId, taskId: input.taskId, ownerThreadId: input.ownerThreadId,
+      prompt: next.prompt, stage: next.stage, expectedRunNumber: next.expectedRunNumber,
+      expectedSessionId: next.expectedSessionId, continuationId: next.requestId,
+      ...(next.contract ? { contract: next.contract, authorizationLocator: next.authorizationLocator } : {}),
+    } }, launchContext);
+    return { ...review, continuation };
+  }
   if (request.action === 'cli.open') {
     const endpoint = readInteractiveEndpoint(store, binding);
     if (!endpoint) throw new Error('Native view is not running; use explicit same-session resume');
@@ -265,13 +321,16 @@ export async function launchCliRequest(request, context) {
     return result ?? { status: 'already-detached' };
   }
   if (request.action === 'cli.resume') {
-    if (input.configuration !== undefined) readProfile(binding.profilePath, input.configuration);
+    const endpoint = readInteractiveEndpoint(store, binding);
+    if (input.configuration !== undefined) readProfile(binding.profilePath, input.configuration, { liveEndpoint: endpoint });
     const configuration = { ...(binding.configuration ?? {}), ...(input.configuration ?? {}) };
-    const profile = readProfile(binding.profilePath, configuration);
-    const endpoint = profile.mode === 'interactive' ? readInteractiveEndpoint(store, binding) : null;
-    if (profile.mode === 'interactive') checkNativeCapability(profile);
+    const profile = readProfile(binding.profilePath, configuration, { liveEndpoint: endpoint });
+    // A live Codex server already passed capability negotiation. Re-probing its
+    // removed executable or selecting a replacement must not interrupt the session.
+    if (profile.mode === 'interactive' && (!endpoint || profile.provider)) checkNativeCapability(profile);
     if (endpoint && endpoint.profileSha256 !== digest(profile)) throw new Error('Live native profile changed; detach idle view before changing model');
-    const run = store.beginRun(input, { requestId: request.requestId, prompt: input.prompt, expectedRunNumber: input.expectedRunNumber, expectedSessionId: input.expectedSessionId, ownerTurnId: context.ownerTurnId, profile, configuration: { model: profile.model, effort: profile.effort ?? null }, initialSessionRecovery: input.initialSessionRecovery });
+    if (input.continuationId && endpoint && (endpoint.status !== 'idle' || endpoint.activeTurnId)) throw new Error('CLI native session not yet idle; saved continuation retained');
+    const run = store.beginRun(input, { requestId: request.requestId, prompt: input.prompt, stage: input.stage, continuationId: input.continuationId, expectedRunNumber: input.expectedRunNumber, expectedSessionId: input.expectedSessionId, ownerTurnId: context.ownerTurnId, profile, configuration: { model: profile.model, effort: profile.effort ?? null }, initialSessionRecovery: input.initialSessionRecovery, contract: input.contract, authorizationLocator: input.authorizationLocator });
     if (endpoint) {
       const current = store.read(binding);
       if (current.status !== 'starting') return { ...run, status: current.status, stateLocator: store.locator(run) };
@@ -303,44 +362,55 @@ export async function launchCliRequest(request, context) {
   }
   throw new Error('unsupported CLI action');
 }
-if (process.argv[2] === '--manager' && process.send) {
-  let received = false;
-  process.once('disconnect', () => { if (!received) process.exitCode = 1; });
-  process.once('message', async payload => {
-    received = true;
+async function executeManager(payload, send) {
     const store = new CliTaskStore({ controlRoot: payload.controlRoot });
     try {
       const identity = payload.managerIdentity;
-      if (identity?.pid !== process.pid || identity.startedAt !== processStart(process.pid)) throw new Error('CLI manager inherited process proof mismatch');
+      if (identity?.pid !== process.pid || (process.argv[2] !== '--manager-pipe' && identity.startedAt !== processStart(process.pid))) throw new Error('CLI manager inherited process proof mismatch');
       const abort = new AbortController();
       const host = payload.hostSpec ? createDesktopHost(payload.hostSpec) : null;
       // Attach the observer before CLI start; the promise is consumed after result persistence.
       const sourceEnd = host ? host.waitForSourceTurnEnd({ ownerThreadId: payload.run.ownerThreadId, ownerTurnId: payload.run.ownerTurnId, signal: abort.signal }) : null;
       sourceEnd?.catch(() => {});
-      store.setProcess(payload.run, identity);
       try {
+        store.setProcess(payload.run, identity);
         if (payload.profile.mode === 'interactive') {
           const runner = payload.profile.provider === 'claude' ? runVisibleCli : payload.profile.provider === 'zcode' ? runZcodeCli : runInteractiveCli;
-          await runner({ ...payload, store, host, ...(payload.profile.provider === 'claude' ? { openWindow: openClaudeWindow } : {}), ready: (result, error) => { if (process.connected) process.send(error ? { type: 'rejected', error: error.message } : { type: 'accepted', ...result }); } });
+          await runner({ ...payload, store, host, ...(payload.profile.provider === 'claude' ? { openWindow: openClaudeWindow } : {}), ready: (result, error) => send(error ? { type: 'rejected', error: error.message } : { type: 'accepted', ...result }) });
         } else {
-          process.send({ type: 'accepted' });
+          send({ type: 'accepted' });
           await runNativeCli({ ...payload, store, onTerminal: host ? () => notifyWhenReady({ store, identity: payload.run, runNumber: payload.run.runNumber, host, sourceEnd }) : undefined });
         }
       } finally { abort.abort(); }
-    } catch (error) { if (process.connected) process.send({ type: 'rejected', error: error.message }); process.exitCode = 1; }
-  });
+    } catch (error) { send({ type: 'rejected', error: error.message }); process.exitCode = 1; }
+}
+if (process.argv[2] === '--manager-pipe') {
+  try {
+    const { payload, send } = await receiveWindowsManager(process.argv[3], process.argv[4]);
+    await executeManager(payload, send);
+  } catch { process.exitCode = 1; }
+} else if (process.argv[2] === '--manager' && process.send) {
+  let received = false;
+  process.once('disconnect', () => { if (!received) process.exitCode = 1; });
+  process.once('message', async payload => { received = true; await executeManager(payload, message => { if (process.connected) process.send(message); }); });
 } else if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const index = process.argv.indexOf('--request');
     if (index < 0) throw new Error('--request must name a JSON file');
     const request = JSON.parse(fs.readFileSync(process.argv[index + 1], 'utf8'));
     let source = { ownerThreadId: validIdentifier(process.env.CODEX_THREAD_ID) }, host;
-    // Local recovery and inspection do not depend on the message transport that may have failed.
-    if (['cli.start', 'cli.resume'].includes(request.action)) {
+    // Resolve launch transport only when saved work will actually dispatch, not
+    // from a preflight queue snapshot that can be stale by the time review lands.
+    if (['cli.start', 'cli.resume', 'cli.queue'].includes(request.action)) {
       host = createDesktopHost(); source = host.currentSource();
-      if (!(await host.checkCapability()).available) throw new Error('Desktop original-owner notification capability unavailable');
+      if (request.action !== 'cli.queue' && !(await host.checkCapability()).available) throw new Error('Desktop original-owner notification capability unavailable');
     }
     const context = { controlRoot: path.resolve(fileURLToPath(new URL('../../', import.meta.url))), executionRoot: process.cwd(), ownerThreadId: source.ownerThreadId, ownerTurnId: source.ownerTurnId, hostSpec: host?.descriptor };
+    context.resolveLaunchContext = async () => {
+      const launchHost = createDesktopHost(), launchSource = launchHost.currentSource();
+      if (!(await launchHost.checkCapability()).available) throw new Error('Desktop original-owner notification capability unavailable; saved continuation retained');
+      return { ownerThreadId: launchSource.ownerThreadId, ownerTurnId: launchSource.ownerTurnId, hostSpec: launchHost.descriptor };
+    };
     if (request.action === 'cli.start') {
       if (request.input.ownerThreadId && request.input.ownerThreadId !== source.ownerThreadId) throw new Error('CLI source identity mismatch');
       if (request.input.ownerTurnId && request.input.ownerTurnId !== source.ownerTurnId) throw new Error('CLI source turn mismatch');

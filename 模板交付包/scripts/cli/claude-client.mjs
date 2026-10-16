@@ -58,6 +58,14 @@ export function sendClaudePrompt(transport, prompt) {
   });
 }
 
+// Correlate a native terminal notification with a task observed in this run's Stop.
+// Older native hooks omit source: this is not authentication of arbitrary prompt text.
+function backgroundCompletion(input) {
+  if (input.source != null && input.source !== 'system') return null;
+  const match = /^<task-notification>\s*<task-id>([A-Za-z0-9_-]+)<\/task-id>\s*(?:<tool-use-id>[^<>]+<\/tool-use-id>\s*)?(?:<task-type>[^<>]+<\/task-type>\s*)?(?:<output-file>[^<>]+<\/output-file>\s*)?<status>(completed|failed|killed|stopped)<\/status>\s*<summary>[^<>]+<\/summary>\s*(?:<note>[^<>]+<\/note>\s*)?<\/task-notification>$/.exec(input.prompt.trim());
+  return match?.[1] ?? null;
+}
+
 // One live native session, one foreground instruction. Hooks carry evidence, not acceptance.
 export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming = false, deliver = sendClaudePrompt, terminate }) {
   let registered = false, transport, current = null, stopped = false, ended = false;
@@ -99,9 +107,15 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
       } else if (input.hook_event_name === 'UserPromptSubmit') {
         if (!registered || ended || typeof input.prompt !== 'string' || !input.prompt.trim()) throw new Error('Unregistered Claude input');
         if (current) {
+          const taskId = current.seen && !stopped && backgroundCompletion(input);
+          if (taskId && current.background?.has(taskId) && !current.delivered?.has(taskId)) {
+            (current.delivered ??= new Set()).add(taskId);
+            return {}; // Continue the original native run; only a later Stop reports a result.
+          }
           if (current.seen || input.prompt !== current.prompt) return { decision: 'block', reason: 'The current managed instruction is still running.' };
           current.seen = true;
         } else {
+          if (input.prompt.trim().startsWith('<task-notification>')) return { decision: 'block', reason: 'No managed instruction is awaiting this background notification.' };
           const job = await post('/manual', { sessionId, prompt: input.prompt });
           current = { runNumber: job.runNumber, prompt: input.prompt, seen: true }; stopped = false;
         }
@@ -109,6 +123,7 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
         if (!current) return {};
         if (!current.seen) throw new Error('Claude completion lacks prompt-start evidence');
         // A response may merely be waiting for background work; do not announce finality then.
+        current.background = new Set((input.background_tasks ?? []).filter(task => task && typeof task.id === 'string' && ['running', 'pending'].includes(task.status)).map(task => task.id));
         if (input.background_tasks?.length || input.session_crons?.length) return {};
         const text = typeof input.last_assistant_message === 'string' ? input.last_assistant_message : '';
         await report(text.trim() ? 'completed' : 'failed', text, text.trim() ? null : 'Claude ended without an answer');
