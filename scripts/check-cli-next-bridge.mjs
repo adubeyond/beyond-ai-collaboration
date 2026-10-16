@@ -49,7 +49,10 @@ const runNumber=Number(path.basename(path.dirname(final)));
 const session=args.includes('resume')?args[args.indexOf('resume')+1]:'same-native-session';
 console.log(JSON.stringify({type:'thread.started',thread_id:session}));
 let prompt='';process.stdin.on('data',chunk=>prompt+=chunk);process.stdin.on('end',()=>{
-  fs.writeFileSync(path.join(process.cwd(),'native-'+runNumber+'.json'),JSON.stringify({args,prompt,session,runNumber,pid:process.pid}));
+  const capture=path.join(process.cwd(),'native-'+runNumber+'.json');
+  fs.writeFileSync(capture+'.tmp',JSON.stringify({args,prompt,session,runNumber,pid:process.pid}));
+  fs.renameSync(capture+'.tmp',capture);
+  console.log(JSON.stringify({type:'fixture.input.ready',runNumber}));
   const timer=setInterval(()=>{
     if(!fs.existsSync(path.join(${JSON.stringify(root)},'release-'+runNumber))&&!fs.existsSync(path.join(${JSON.stringify(root)},'release-all')))return;
     clearInterval(timer);fs.writeFileSync(final,'stable fixture result '+runNumber);
@@ -150,7 +153,17 @@ process.on('beforeExit', () => report({phase: 'beforeExit', resources: process.g
   }
   const capture = number => {
     const file = path.join(executionRoot, 'native-' + number + '.json');
-    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+    const events = path.join(store.runDir(binding, number), 'events.jsonl');
+    // A native capture alone precedes the manager's session registration. The
+    // next event is logged only after thread.started/bindSession has returned.
+    // This fixture barrier tests replay after startup, not incidental lock timing.
+    if (!fs.existsSync(file) || !fs.existsSync(events)) return null;
+    const rows = fs.readFileSync(events, 'utf8').split('\n').slice(0, -1).filter(Boolean).map(line => JSON.parse(line));
+    if (!rows.some(row => row.type === 'fixture.input.ready' && row.runNumber === number)) return null;
+    const state = store.read(binding);
+    assert.equal(state.sessionId, 'same-native-session');
+    assert.ok(state.runNumber >= number);
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
   };
   const captures = () => fs.readdirSync(executionRoot).filter(name => /^native-\d+\.json$/.test(name)).map(name => JSON.parse(fs.readFileSync(path.join(executionRoot, name), 'utf8')));
   const callbackRows = () => fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
@@ -171,7 +184,12 @@ process.on('beforeExit', () => report({phase: 'beforeExit', resources: process.g
     await until(() => capture(1));
     return first;
   }
-  async function finish(number) { release(number); return until(() => result(number)); }
+  async function finish(number) {
+    release(number);
+    const value = await until(() => result(number));
+    assert.equal(value.status, 'completed', 'fixture manager must finish successfully: ' + JSON.stringify(value));
+    return value;
+  }
   t.after(async () => {
     fs.writeFileSync(path.join(root, 'release-all'), 'release');
     if (notifications) {
