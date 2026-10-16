@@ -250,6 +250,10 @@ function validateText(path, text) {
       checkedText = checkedText.replace(/^const cliManagerLifetimeFingerprints = \[[\s\S]*?^\];$/m,
         section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 4
           ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      // One reviewed process-identity repair: only its two public source pins.
+      checkedText = checkedText.replace(/^const windowsProcessIdentityFingerprints = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 2
+          ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
     }
     if (label === "疑似秘密赋值" && fixtureTokens.has(rel)) {
       checkedText = checkedText.replace(/\btoken\s*[:=]\s*'([^'\n]+)'/g,

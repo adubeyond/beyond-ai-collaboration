@@ -168,6 +168,13 @@ const cliManagerLifetimeFingerprints = [
     before: '3e35aedc35d3f90e5929c47a38e26f81954afb56128e25729fe0c1f7eeb04b30',
     after: '3cbab8bd3d25f15bb5149c0cdbdf7e7c95f7a92e545765834efefc2322a76db8' },
 ];
+// Authorized 4.0.1 Windows process identity repair: the same creation-time
+// proof bypasses a reproduced cmdlet stall. Keep the original freeze intact.
+const windowsProcessIdentityFingerprints = [
+  { path: product + 'scripts/cli/process-identity.mjs',
+    before: '649bd6e7106ea3f27f7bb99f35ff8d9d215d383aba4373363d1b7ff52cdff10a',
+    after: 'ff56b97783e0386d29906b799532164ef4761b3efa43970a00ed7141322a98e6' },
+];
 function normalizeClaudeCompatibility(file, text) {
   for (const change of claudeCompatibilityEdits.filter(item => item.path === file)) {
     if (text.split(change.after).length !== 2) return null;
@@ -176,6 +183,11 @@ function normalizeClaudeCompatibility(file, text) {
   return text;
 }
 function matchesFrozenFingerprint(item, currentHash) {
+  const processIdentity = windowsProcessIdentityFingerprints.find(change => change.path === item.path);
+  if (processIdentity) {
+    if (currentHash !== processIdentity.after) return false;
+    currentHash = processIdentity.before;
+  }
   const manager = cliManagerLifetimeFingerprints.find(change => change.path === item.path);
   if (manager) {
     if (currentHash !== manager.after) return false;
@@ -591,6 +603,32 @@ test('independent manager launch pins only bridge and guide without changing not
     assert.ok(frozenFailures(candidate => candidate === file ? read(file) + '\nchanged' : read(file)).includes(file));
   }
   for (const item of fixture.portions) assert.ok(frozenFailures(file => file === item.path ? read(file).replace(item.start, item.start + ' changed') : read(file)).includes(item.path + ': ' + item.start));
+});
+
+test('Windows process identity repair pins one exact file and rejects rollback or extra edits', () => {
+  assert.deepEqual(windowsProcessIdentityFingerprints.map(item => item.path), [product + 'scripts/cli/process-identity.mjs']);
+  const change = windowsProcessIdentityFingerprints[0];
+  assert.deepEqual(Object.keys(change).sort(), ['after', 'before', 'path']);
+  const original = fixture.files.find(item => item.path === change.path);
+  assert.ok(original);
+  assert.equal(change.before, original.sha256, 'the original frozen baseline is not refreshed');
+  const current = read(change.path);
+  assert.equal(sha256(current), change.after);
+  assert.equal(matchesFrozenFingerprint(original, change.after), true);
+  assert.equal(matchesFrozenFingerprint(original, change.before), false, 'the old cmdlet implementation must not pass');
+  const rollback = current.replace([
+    '    // Query the same Process.StartTime directly. The Get-Process cmdlet path can',
+    '    // stall in a minimal host even when the underlying .NET query is available.',
+    "    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `[System.Diagnostics.Process]::GetProcessById(${pid}).StartTime.ToUniversalTime().Ticks`], { encoding: 'utf8', windowsHide: true });",
+  ].join('\n'), "    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks`], { encoding: 'utf8', windowsHide: true });");
+  assert.equal(sha256(rollback), change.before, 'rollback counterexample is the exact prior file');
+  for (const text of [rollback, current + '\n// unrelated identity change\n', current.slice(1)]) {
+    assert.ok(frozenFailures(file => file === change.path ? text : read(file)).includes(change.path));
+  }
+  assert.ok(frozenFailures(file => {
+    if (file === change.path) throw Error('missing');
+    return read(file);
+  }).includes(change.path + ': missing or unreadable'));
 });
 
 test('ZCode compatibility exception admits only reviewed contents, not rollback or extra protocol edits', () => {
