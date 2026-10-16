@@ -5,7 +5,9 @@ let current;
 export function processStart(pid) {
   if (!Number.isSafeInteger(pid) || pid < 1) throw new Error('invalid process PID');
   if (process.platform === 'win32') {
-    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks`], { encoding: 'utf8', windowsHide: true });
+    // Query the same Process.StartTime directly. The Get-Process cmdlet path can
+    // stall in a minimal host even when the underlying .NET query is available.
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `[System.Diagnostics.Process]::GetProcessById(${pid}).StartTime.ToUniversalTime().Ticks`], { encoding: 'utf8', windowsHide: true });
     if (result.status !== 0 || !/^\d+$/.test(result.stdout.trim())) throw new Error('process start identity unavailable');
     return result.stdout.trim();
   }

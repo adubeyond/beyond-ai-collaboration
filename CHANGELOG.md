@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Connect all three CLI routes to current requirements, design and applicable Skills; refresh context on continuation.
 - Resolve an available Codex executable instead of depending on a retired installation path; preserve the executable bound to active processes.
 - Launch new Windows managers independently of the caller's close-on-exit Job and retain original sessions/results for reconnection.
+- Read the same Windows process creation timestamp directly through .NET to avoid a reproduced Get-Process cmdlet stall without weakening process ownership checks.
 - Include the three new product scripts in complete packages and the seven additional regressions in public Windows/Ubuntu CI.
 
 ### Boundaries

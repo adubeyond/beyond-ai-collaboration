@@ -7,7 +7,20 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CliTaskStore, atomicJson, sha256File } from '../模板交付包/scripts/cli/cli-task-store.mjs';
 import { readProfile } from '../模板交付包/scripts/cli/cli-bridge.mjs';
-import { processIsGone } from '../模板交付包/scripts/cli/process-identity.mjs';
+import { processIsGone, processStart } from '../模板交付包/scripts/cli/process-identity.mjs';
+
+test('Windows process start proof stays stable and distinguishes PID reuse', { skip: process.platform !== 'win32' }, () => {
+  const startedAt = processStart(process.pid);
+  assert.match(startedAt, /^[1-9]\d*$/);
+  assert.equal(processStart(process.pid), startedAt);
+  assert.equal(processIsGone({ pid: process.pid, startedAt }), false);
+  assert.equal(processIsGone({ pid: process.pid, startedAt: String(BigInt(startedAt) + 1n) }), true);
+});
+
+test('Windows process start proof rejects invalid or absent PIDs', { skip: process.platform !== 'win32' }, () => {
+  for (const pid of [0, -1, 1.5, NaN]) assert.throws(() => processStart(pid), /invalid process PID/);
+  assert.throws(() => processStart(2147483647), /process start identity unavailable/);
+});
 
 const bridgeUrl = new URL('../模板交付包/scripts/cli/cli-bridge.mjs', import.meta.url).href;
 const launcherUrl = new URL('../模板交付包/scripts/cli/manager-launch.mjs', import.meta.url).href;

@@ -128,8 +128,7 @@ if(q.method==='tools/call'){
       fs.copyFileSync(fileURLToPath(new URL('../模板交付包/scripts/runtime/' + file, import.meta.url)), path.join(scripts, 'runtime', file));
     }
     // Trace only this fixture's subprocess boundaries. No argv, environment or
-    // subprocess output is logged. For the identity query only, record whether
-    // PowerShell entered the command, completed the .NET equivalent, and returned.
+    // subprocess output is logged; keep the real commands and deadlines intact.
     fs.writeFileSync(entryProbe, `
 const cp = require('node:child_process'), path = require('node:path');
 const original = cp.spawnSync, started = Date.now();
@@ -138,16 +137,6 @@ report({phase: 'started'});
 cp.spawnSync = function(command, ...args) {
   const at = Date.now(), executable = path.basename(String(command));
   report({phase: 'subprocess-start', executable});
-  if (executable.toLowerCase() === 'powershell.exe' && Array.isArray(args[0])) {
-    const index = args[0].indexOf('-Command') + 1, script = args[0][index];
-    const pid = typeof script === 'string' && script.match(/^\\(Get-Process -Id (\\d+) -ErrorAction Stop\\)/)?.[1];
-    if (index > 0 && pid) {
-      const marker = path.join(__dirname, 'ps-phase-' + process.pid + '.txt').replaceAll("'", "''");
-      const mark = value => "[System.IO.File]::WriteAllText('" + marker + "','" + value + "'); ";
-      args[0] = [...args[0]];
-      args[0][index] = mark('entered') + '[void]([System.Diagnostics.Process]::GetProcessById(' + pid + ').StartTime.ToUniversalTime().Ticks); ' + mark('dotnet-query-complete') + script + '; ' + mark('command-finished');
-    }
-  }
   try { const result = original.call(this, command, ...args); report({phase: 'subprocess-end', executable, durationMs: Date.now() - at, status: result.status, error: result.error?.code}); return result; }
   catch (error) { report({phase: 'subprocess-throw', executable, durationMs: Date.now() - at, error: error.code}); throw error; }
 };
@@ -168,12 +157,11 @@ process.on('beforeExit', () => report({phase: 'beforeExit', resources: process.g
       child.stdout.on('data', chunk => { stdout += chunk; });
       child.stderr.on('data', chunk => { stderr += chunk; });
       child.once('error', error => { clearTimeout(timer); reject(error); });
-      child.once('close', code => { clearTimeout(timer); resolve({ code, stdout, stderr, expired, childPid: child.pid }); });
+      child.once('close', code => { clearTimeout(timer); resolve({ code, stdout, stderr, expired }); });
     });
     const observed = {
       action, requestId, code: outcome.code, expired: outcome.expired,
       responseWritten: outcome.stdout.trim().startsWith('{'), trace: outcome.stderr.trim(),
-      powershellPhase: fs.existsSync(path.join(root, 'ps-phase-' + outcome.childPid + '.txt')) ? fs.readFileSync(path.join(root, 'ps-phase-' + outcome.childPid + '.txt'), 'utf8') : null,
       queueSaved: fs.existsSync(store.locator(binding)) && store.read(binding).continuations?.some(item => item.requestId === requestId),
       lockPresent: fs.existsSync(path.join(store.taskDir(binding), '.lock')),
     };
