@@ -85,6 +85,96 @@ const zcodeCompatibilityFingerprints = [
     before: '0195dcf24e942d20cc7dfe20182cc882e1f91a1d53ba651852aabbded5cbac59',
     after: '1b9c6c8f8e66d980f650b4831313b6673b1b96838fea89f4a85ffc9fa4b1db86' },
 ];
+// Authorized 2026-10-16 CLI contract/background-command repairs. These exact
+// contents chain to v4.0.0; the original fixture and other frozen files stay intact.
+const cliContractTurnCompletionFingerprints = [
+  { path: cli,
+    before: 'f649c326dbd354cfd316e82495130d0707d96b99cde2fc02454d0f9f99f52fe9',
+    after: '68bf7af9b07c35da6e60d1ab7f2fc1efde7dac3d6bb20d592fbd1d37a5316a1d' },
+  { path: product + 'scripts/cli/claude-client.mjs',
+    before: 'c2c57dd6a10ed1d9b343114e1f885d5186cb66416e995919952d341fe79bb66b',
+    after: '11b889c69562eab7d3fba2bf1521ac8d94e847b022c797b167d6a237421fa32a' },
+  { path: product + 'scripts/cli/cli-bridge.mjs',
+    before: '926f60ae449203194a25baca943f823511bdeadbe90e8e9ea740df0c402a6c35',
+    after: '04dfb2af62b15a6532f960ed0b820bade36c6a2484f7d5ae375f8508a0f77991' },
+  { path: product + 'scripts/cli/cli-task-store.mjs',
+    before: 'a5ded774c6805b295fc86acc5b8348dd3a2ceb802273d59d143ccc1e69e1000f',
+    after: 'fb2f0646092983106cc38de955e1d4654c75ab2d82f7aff7e3f45254c3b3f4f8' },
+  { path: product + 'scripts/cli/interactive-cli-runner.mjs',
+    before: 'e6f49e8b4d7efce4fd781e249e0bc5e9bb949d5c38cd7b358e3f4bb6899d88e0',
+    after: 'fdab2cfe052b82162d29a5df9fdb5e89d409f1a16dacc57e4e291d644a576c42' },
+  { path: product + 'scripts/cli/native-cli-runner.mjs',
+    before: '4d1da06de84d65bb8a14441a4312b24ba503807f44cb22ed05958498deb0f2d3',
+    after: '44ee001321a7ffcd67d41a88c359b1f8e37ecdc8eacfc02bc04cbd706ad1ee04' },
+  { path: product + 'scripts/cli/visible-cli-runner.mjs',
+    before: '73896a0d56cb22dfdd66a564cc4464588edde5de1b6c7b824245bea30c3a929a',
+    after: '36a8fb5175a5c5e47c4a9f86896c2b0491eda5dd8abd93a28cbab9db22255feb' },
+];
+// Authorized 2026-10-16 stage and queued same-session continuation. Map only
+// these six reviewed contents back through the prior seven-file repair chain.
+const cliStageContinuationFingerprints = [
+  { path: cli,
+    before: '68bf7af9b07c35da6e60d1ab7f2fc1efde7dac3d6bb20d592fbd1d37a5316a1d',
+    after: '2a37a1b36d4930ce3dac4617f68c70677511308e8fb24c971fafab540894cf9b' },
+  { path: product + 'scripts/cli/cli-bridge.mjs',
+    before: '04dfb2af62b15a6532f960ed0b820bade36c6a2484f7d5ae375f8508a0f77991',
+    after: '8c6b5aff293daa86e95fcfeae0109e960dc61b6e12798a4212920b4ea93ac9eb' },
+  { path: product + 'scripts/cli/cli-task-store.mjs',
+    before: 'fb2f0646092983106cc38de955e1d4654c75ab2d82f7aff7e3f45254c3b3f4f8',
+    after: '4dbb0a14d681ee7db3eb951e344e52c0df76e27f5aa7ee9fbb23cd92a8e8a770' },
+  { path: product + 'scripts/cli/interactive-cli-runner.mjs',
+    before: 'fdab2cfe052b82162d29a5df9fdb5e89d409f1a16dacc57e4e291d644a576c42',
+    after: 'b8a2dae94590536ad8e701b12be383fe0d1329b7c06958844c16eb8f00e748db' },
+  { path: product + 'scripts/cli/native-cli-runner.mjs',
+    before: '44ee001321a7ffcd67d41a88c359b1f8e37ecdc8eacfc02bc04cbd706ad1ee04',
+    after: 'c507ab37daa034fa39c89465c0f0acceb21e07b745f6fbd5827077344a81ca77' },
+  { path: product + 'scripts/cli/visible-cli-runner.mjs',
+    before: '36a8fb5175a5c5e47c4a9f86896c2b0491eda5dd8abd93a28cbab9db22255feb',
+    after: 'c111a1c09c08f1bbcae9ea6895246d9ad96db575b3b3ee5bced0b2377b9737d3' },
+];
+// Authorized document loading only: these four existing files remain pinned;
+// callback transport, model policy and prior client repairs are not exempted.
+const cliDocumentContextFingerprints = [
+  { path: cli,
+    before: '2a37a1b36d4930ce3dac4617f68c70677511308e8fb24c971fafab540894cf9b',
+    after: '2abc5b2ea2e0dd21f2c225fe2a0fb0ca2603527d60eedf805dd5c10ddf6f3b78' },
+  { path: product + 'scripts/cli/interactive-cli-runner.mjs',
+    before: 'b8a2dae94590536ad8e701b12be383fe0d1329b7c06958844c16eb8f00e748db',
+    after: 'adcb9e693fa127bd2fd62621474ee8d1ef227b00871e6d02ab882476892c8c74' },
+  { path: product + 'scripts/cli/native-cli-runner.mjs',
+    before: 'c507ab37daa034fa39c89465c0f0acceb21e07b745f6fbd5827077344a81ca77',
+    after: 'df778c3b023a87b30bb40ac05717db2bced79ed34fd0b2895fd23ed99d0d8b71' },
+  { path: product + 'scripts/cli/visible-cli-runner.mjs',
+    before: 'c111a1c09c08f1bbcae9ea6895246d9ad96db575b3b3ee5bced0b2377b9737d3',
+    after: '14f57f9d0e4ea4b0297e3cb90fa95697f48f2c9ea30b50cc8178a297e8221609' },
+];
+// Authorized executable discovery only. Existing protocol and callback files
+// keep their prior pins; only the profile bridge and its guide change here.
+const codexExecutableFingerprints = [
+  { path: cli,
+    before: '2abc5b2ea2e0dd21f2c225fe2a0fb0ca2603527d60eedf805dd5c10ddf6f3b78',
+    after: '6cbf07bf9218c17c217fad9b26037bd3253745b5796605f65caa93db5f3660c6' },
+  { path: product + 'scripts/cli/cli-bridge.mjs',
+    before: '8c6b5aff293daa86e95fcfeae0109e960dc61b6e12798a4212920b4ea93ac9eb',
+    after: '3e35aedc35d3f90e5929c47a38e26f81954afb56128e25729fe0c1f7eeb04b30' },
+];
+// Only manager launch/lifetime and its operating guide are authorized here.
+// Desktop/CLI callback implementations and model selection retain their pins.
+const cliManagerLifetimeFingerprints = [
+  { path: cli,
+    before: '6cbf07bf9218c17c217fad9b26037bd3253745b5796605f65caa93db5f3660c6',
+    after: '37f3e65d658d5f5cde328a04cc2645eb4bae5f5bed1af7aacc0ca91d33cb46ed' },
+  { path: product + 'scripts/cli/cli-bridge.mjs',
+    before: '3e35aedc35d3f90e5929c47a38e26f81954afb56128e25729fe0c1f7eeb04b30',
+    after: '3cbab8bd3d25f15bb5149c0cdbdf7e7c95f7a92e545765834efefc2322a76db8' },
+];
+// Authorized 4.0.1 Windows process identity repair: the same creation-time
+// proof bypasses a reproduced cmdlet stall. Keep the original freeze intact.
+const windowsProcessIdentityFingerprints = [
+  { path: product + 'scripts/cli/process-identity.mjs',
+    before: '649bd6e7106ea3f27f7bb99f35ff8d9d215d383aba4373363d1b7ff52cdff10a',
+    after: 'ff56b97783e0386d29906b799532164ef4761b3efa43970a00ed7141322a98e6' },
+];
 function normalizeClaudeCompatibility(file, text) {
   for (const change of claudeCompatibilityEdits.filter(item => item.path === file)) {
     if (text.split(change.after).length !== 2) return null;
@@ -93,6 +183,36 @@ function normalizeClaudeCompatibility(file, text) {
   return text;
 }
 function matchesFrozenFingerprint(item, currentHash) {
+  const processIdentity = windowsProcessIdentityFingerprints.find(change => change.path === item.path);
+  if (processIdentity) {
+    if (currentHash !== processIdentity.after) return false;
+    currentHash = processIdentity.before;
+  }
+  const manager = cliManagerLifetimeFingerprints.find(change => change.path === item.path);
+  if (manager) {
+    if (currentHash !== manager.after) return false;
+    currentHash = manager.before;
+  }
+  const executable = codexExecutableFingerprints.find(change => change.path === item.path);
+  if (executable) {
+    if (currentHash !== executable.after) return false;
+    currentHash = executable.before;
+  }
+  const documents = cliDocumentContextFingerprints.find(change => change.path === item.path);
+  if (documents) {
+    if (currentHash !== documents.after) return false;
+    currentHash = documents.before;
+  }
+  const stageContinuation = cliStageContinuationFingerprints.find(change => change.path === item.path);
+  if (stageContinuation) {
+    if (currentHash !== stageContinuation.after) return false;
+    currentHash = stageContinuation.before;
+  }
+  const continuation = cliContractTurnCompletionFingerprints.find(change => change.path === item.path);
+  if (continuation) {
+    if (currentHash !== continuation.after) return false;
+    currentHash = continuation.before;
+  }
   const approved = [...assistTransferFingerprints, ...claudeCompatibilityTestFingerprints].find(change => change.path === item.path);
   const compatibility = zcodeCompatibilityFingerprints.find(change => change.path === item.path);
   if (compatibility) return (!approved || item.sha256 === approved.before)
@@ -324,7 +444,8 @@ test('protected source is frozen except the precise authorized receipt and CLI r
     assert.match(item.sha256, /^[a-f0-9]{64}$/);
   }
   for (const directory of fixture.directories) {
-    assert.deepEqual(filesBelow(directory), fixture.files.filter(item => item.path.startsWith(directory + '/')).map(item => item.path).sort(),
+    const additions = directory === product + 'scripts/cli' ? ['cli-context', 'codex-executable', 'manager-launch'].map(name => product + 'scripts/cli/' + name + '.mjs') : [];
+    assert.deepEqual(filesBelow(directory), [...fixture.files.filter(item => item.path.startsWith(directory + '/')).map(item => item.path), ...additions].sort(),
       'frozen directory membership changed: ' + directory);
   }
   assert.deepEqual(frozenFailures(), [], 'frozen source changed; do not refresh this fixture to silence a regression');
@@ -365,6 +486,149 @@ test('receipt exception rejects removal, changed retry budget and unrelated rece
   ]) {
     assert.ok(frozenFailures(file => file === receiptFile ? mutate(read(file)) : read(file)).includes(receiptFile));
   }
+});
+
+test('CLI continuation repair pins exactly seven reviewed files and rejects rollback or extra edits', () => {
+  assert.deepEqual(cliContractTurnCompletionFingerprints.map(item => item.path).sort(), [cli,
+    ...['claude-client', 'cli-bridge', 'cli-task-store', 'interactive-cli-runner', 'native-cli-runner', 'visible-cli-runner'].map(name => product + 'scripts/cli/' + name + '.mjs'),
+  ].sort());
+  for (const change of cliContractTurnCompletionFingerprints) {
+    assert.deepEqual(Object.keys(change).sort(), ['after', 'before', 'path']);
+    const original = fixture.files.find(item => item.path === change.path);
+    assert.ok(original);
+    const prior = [...zcodeCompatibilityFingerprints, ...assistTransferFingerprints, ...claudeCompatibilityTestFingerprints].find(item => item.path === change.path);
+    assert.equal(change.before, prior?.after ?? original.sha256);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false, 'rollback must not pass');
+    assert.equal(matchesFrozenFingerprint(original, sha256(normalizeClaudeCompatibility(change.path, read(change.path)))), true);
+    for (const mutate of [text => text + '\nextra content', text => text.slice(1)]) {
+      assert.ok(frozenFailures(file => file === change.path ? mutate(read(file)) : read(file)).includes(change.path));
+    }
+    assert.ok(frozenFailures(file => {
+      if (file === change.path) throw Error('missing');
+      return read(file);
+    }).includes(change.path + ': missing or unreadable'));
+  }
+});
+
+test('CLI stage continuation pins exactly six reviewed files and rejects rollback or extra edits', () => {
+  assert.deepEqual(cliStageContinuationFingerprints.map(item => item.path).sort(), [cli,
+    ...['cli-bridge', 'cli-task-store', 'interactive-cli-runner', 'native-cli-runner', 'visible-cli-runner'].map(name => product + 'scripts/cli/' + name + '.mjs'),
+  ].sort());
+  for (const change of cliStageContinuationFingerprints) {
+    assert.deepEqual(Object.keys(change).sort(), ['after', 'before', 'path']);
+    const original = fixture.files.find(item => item.path === change.path);
+    const prior = cliContractTurnCompletionFingerprints.find(item => item.path === change.path);
+    assert.ok(original && prior, change.path);
+    assert.equal(change.before, prior.after, 'the previous seven-file pins remain the immediate baseline');
+    assert.match(change.after, /^[a-f0-9]{64}$/);
+    const documents = cliDocumentContextFingerprints.find(item => item.path === change.path);
+    const executable = codexExecutableFingerprints.find(item => item.path === change.path);
+    const manager = cliManagerLifetimeFingerprints.find(item => item.path === change.path);
+    assert.equal(sha256(normalizeClaudeCompatibility(change.path, read(change.path))), manager?.after ?? executable?.after ?? documents?.after ?? change.after);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false, 'rollback to the preceding repair must not pass');
+    assert.equal(matchesFrozenFingerprint(original, manager?.after ?? executable?.after ?? documents?.after ?? change.after), true);
+    for (const mutate of [text => text + '\nextra content', text => text.slice(1)]) {
+      assert.ok(frozenFailures(file => file === change.path ? mutate(read(file)) : read(file)).includes(change.path));
+    }
+  }
+});
+
+test('stage continuation does not exempt callbacks, Claude client, Skills or model policy', () => {
+  for (const file of [
+    product + 'scripts/cli/cli-notify.mjs',
+    product + 'scripts/cli/claude-client.mjs',
+    product + 'skills/identity-worker/SKILL.md',
+    product + 'skills/identity-pm/references/lifecycle-and-closeout.md',
+  ]) {
+    assert.ok(fixture.files.some(item => item.path === file), file);
+    assert.ok(!cliStageContinuationFingerprints.some(item => item.path === file));
+    assert.ok(frozenFailures(candidate => candidate === file ? read(candidate) + '\nextra content' : read(candidate)).includes(file));
+  }
+  for (const item of fixture.portions) {
+    assert.ok(!cliStageContinuationFingerprints.some(change => change.path === item.path));
+    assert.ok(frozenFailures(file => file === item.path ? read(file).replace(item.start, item.start + ' changed') : read(file)).includes(item.path + ': ' + item.start));
+  }
+});
+
+test('document loading pins only three runners and their guide, keeping earlier repairs frozen', () => {
+  assert.deepEqual(cliDocumentContextFingerprints.map(item => item.path).sort(), [cli,
+    ...['interactive-cli-runner', 'native-cli-runner', 'visible-cli-runner'].map(name => product + 'scripts/cli/' + name + '.mjs'),
+  ].sort());
+  for (const change of cliDocumentContextFingerprints) {
+    const previous = cliStageContinuationFingerprints.find(item => item.path === change.path);
+    const original = fixture.files.find(item => item.path === change.path);
+    assert.equal(change.before, previous.after);
+    const executable = codexExecutableFingerprints.find(item => item.path === change.path);
+    const manager = cliManagerLifetimeFingerprints.find(item => item.path === change.path);
+    assert.equal(sha256(normalizeClaudeCompatibility(change.path, read(change.path))), manager?.after ?? executable?.after ?? change.after);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false);
+    assert.equal(matchesFrozenFingerprint(original, manager?.after ?? executable?.after ?? change.after), true);
+    assert.ok(frozenFailures(file => file === change.path ? read(file) + '\nchanged' : read(file)).includes(change.path));
+  }
+  for (const name of ['cli-notify', 'desktop-host', 'claude-client', 'cli-task-store', 'cli-bridge']) {
+    const file = product + 'scripts/cli/' + name + '.mjs';
+    assert.ok(!cliDocumentContextFingerprints.some(item => item.path === file));
+    assert.ok(frozenFailures(candidate => candidate === file ? read(file) + '\nchanged' : read(file)).includes(file));
+  }
+});
+
+test('Codex executable repair pins only the bridge and guide, preserving the prior freeze chain', () => {
+  assert.deepEqual(codexExecutableFingerprints.map(item => item.path).sort(), [cli, product + 'scripts/cli/cli-bridge.mjs'].sort());
+  for (const change of codexExecutableFingerprints) {
+    assert.deepEqual(Object.keys(change).sort(), ['after', 'before', 'path']);
+    const original = fixture.files.find(item => item.path === change.path);
+    const previous = [...cliDocumentContextFingerprints, ...cliStageContinuationFingerprints].find(item => item.path === change.path);
+    assert.equal(change.before, previous.after);
+    const manager = cliManagerLifetimeFingerprints.find(item => item.path === change.path);
+    assert.equal(sha256(normalizeClaudeCompatibility(change.path, read(change.path))), manager?.after ?? change.after);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false);
+    assert.equal(matchesFrozenFingerprint(original, manager?.after ?? change.after), true);
+    assert.ok(frozenFailures(file => file === change.path ? read(file) + '\nchanged' : read(file)).includes(change.path));
+  }
+});
+
+test('independent manager launch pins only bridge and guide without changing notification or model policy', () => {
+  assert.deepEqual(cliManagerLifetimeFingerprints.map(item => item.path).sort(), [cli, product + 'scripts/cli/cli-bridge.mjs'].sort());
+  for (const change of cliManagerLifetimeFingerprints) {
+    const original = fixture.files.find(item => item.path === change.path);
+    assert.equal(change.before, codexExecutableFingerprints.find(item => item.path === change.path).after);
+    assert.equal(sha256(normalizeClaudeCompatibility(change.path, read(change.path))), change.after);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false);
+    assert.equal(matchesFrozenFingerprint(original, change.after), true);
+    assert.ok(frozenFailures(file => file === change.path ? read(file) + '\nchanged' : read(file)).includes(change.path));
+  }
+  for (const name of ['cli-notify', 'desktop-host', 'cli-task-store', 'claude-client']) {
+    const file = product + 'scripts/cli/' + name + '.mjs';
+    assert.ok(!cliManagerLifetimeFingerprints.some(item => item.path === file));
+    assert.ok(frozenFailures(candidate => candidate === file ? read(file) + '\nchanged' : read(file)).includes(file));
+  }
+  for (const item of fixture.portions) assert.ok(frozenFailures(file => file === item.path ? read(file).replace(item.start, item.start + ' changed') : read(file)).includes(item.path + ': ' + item.start));
+});
+
+test('Windows process identity repair pins one exact file and rejects rollback or extra edits', () => {
+  assert.deepEqual(windowsProcessIdentityFingerprints.map(item => item.path), [product + 'scripts/cli/process-identity.mjs']);
+  const change = windowsProcessIdentityFingerprints[0];
+  assert.deepEqual(Object.keys(change).sort(), ['after', 'before', 'path']);
+  const original = fixture.files.find(item => item.path === change.path);
+  assert.ok(original);
+  assert.equal(change.before, original.sha256, 'the original frozen baseline is not refreshed');
+  const current = read(change.path);
+  assert.equal(sha256(current), change.after);
+  assert.equal(matchesFrozenFingerprint(original, change.after), true);
+  assert.equal(matchesFrozenFingerprint(original, change.before), false, 'the old cmdlet implementation must not pass');
+  const rollback = current.replace([
+    '    // Query the same Process.StartTime directly. The Get-Process cmdlet path can',
+    '    // stall in a minimal host even when the underlying .NET query is available.',
+    "    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `[System.Diagnostics.Process]::GetProcessById(${pid}).StartTime.ToUniversalTime().Ticks`], { encoding: 'utf8', windowsHide: true });",
+  ].join('\n'), "    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks`], { encoding: 'utf8', windowsHide: true });");
+  assert.equal(sha256(rollback), change.before, 'rollback counterexample is the exact prior file');
+  for (const text of [rollback, current + '\n// unrelated identity change\n', current.slice(1)]) {
+    assert.ok(frozenFailures(file => file === change.path ? text : read(file)).includes(change.path));
+  }
+  assert.ok(frozenFailures(file => {
+    if (file === change.path) throw Error('missing');
+    return read(file);
+  }).includes(change.path + ': missing or unreadable'));
 });
 
 test('ZCode compatibility exception admits only reviewed contents, not rollback or extra protocol edits', () => {

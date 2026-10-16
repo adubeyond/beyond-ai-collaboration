@@ -4,8 +4,9 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { atomicJson, digest, sha256File, validIdentifier } from './cli-task-store.mjs';
 import { processStart, processIsGone } from './process-identity.mjs';
-import { redact } from './native-cli-runner.mjs';
+import { redact, stageInstruction } from './native-cli-runner.mjs';
 import { notifyWhenReady } from './cli-notify.mjs';
+import { buildCliContext } from './cli-context.mjs';
 
 export async function runVisibleCli({ binding, run: firstRun, profile, prompt, store, managerIdentity, host, ready = () => {}, openWindow }) {
   const directory = store.runDir(firstRun, firstRun.runNumber);
@@ -61,7 +62,10 @@ export async function runVisibleCli({ binding, run: firstRun, profile, prompt, s
     endLifetime();
   }
   function instruction(text) {
-    return ['You are a native CLI helper for one Desktop owner. Do not send Desktop messages or worker-result receipts. Return evidence; the owner decides goal completion.', `Goal: ${binding.contract.goal}`, `Boundaries: ${binding.contract.boundaries}`, `Acceptance: ${binding.contract.acceptance}`, `Read the relevant project/Action Skill entries as needed: ${JSON.stringify([...binding.contract.factEntries, ...binding.contract.skillEntries])}`, `Current authorized instruction: ${text}`].join('\n');
+    const contract = run.effectiveContract ?? binding.contract;
+    const context = buildCliContext({ binding, run, controlRoot: store.controlRoot });
+    atomicJson(store.checkedPath(path.join(store.runDir(run, run.runNumber), 'document-context.json')), context.manifest);
+    return ['You are a native CLI helper for one Desktop owner. Do not send Desktop messages or worker-result receipts. Return evidence; the owner decides goal completion.', 'Current effective contract for this run (supersedes earlier task contracts, not platform or system constraints):', `Goal: ${contract.goal}`, `Boundaries: ${contract.boundaries}`, `Acceptance: ${contract.acceptance}`, context.text, stageInstruction(run.stage), `Current authorized instruction: ${text}`].filter(Boolean).join('\n');
   }
   function goalActive() {
     if (binding.taskMode !== 'formal') return true;

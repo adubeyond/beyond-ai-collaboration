@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { atomicJson, digest } from './cli-task-store.mjs';
 import { processStart } from './process-identity.mjs';
+import { buildCliContext } from './cli-context.mjs';
 export { processStart } from './process-identity.mjs';
 export function redact(text) {
   return String(text).replace(/(Bearer\s+)[^\s"']+/gi, '$1[REDACTED]')
@@ -16,16 +17,26 @@ export function cliEnvironment(home) {
   delete env.NODE_TEST_CONTEXT;
   env.CODEX_HOME = home; return env;
 }
+export function stageInstruction(stage) {
+  if (!stage) return '';
+  return [`Current round deliverable: ${stage.goal}`, `Current round acceptance: ${stage.acceptance}`,
+    'The full goal above remains in force. This stage limits this round, not the overall goal or its authorization. Complete this stage, report its evidence and remaining work toward the full goal, then end this round. Do not expand into later stages or claim the full goal is complete merely because this stage is done.'].join('\n');
+}
 export async function runNativeCli({ binding, run, profile, prompt, store, onTerminal }) {
   const directory = store.runDir(run, run.runNumber), eventsPath = store.checkedPath(path.join(directory, 'events.jsonl'));
   const stderrPath = store.checkedPath(path.join(directory, 'stderr.log')), finalPath = store.checkedPath(path.join(directory, 'final.txt'));
   const args = [...profile.runner.args, 'exec', ...(run.sessionId ? ['resume', run.sessionId] : []), '--skip-git-repo-check', '--json', '--output-last-message', finalPath, '--model', profile.model, '-c', 'approval_policy="never"', '-c', 'sandbox_mode="danger-full-access"', ...(profile.effort ? ['-c', `model_reasoning_effort="${profile.effort}"`] : []), '-'];
+  const contract = run.effectiveContract ?? binding.contract;
+  const context = buildCliContext({ binding, run, controlRoot: store.controlRoot });
+  atomicJson(store.checkedPath(path.join(directory, 'document-context.json')), context.manifest);
   const instruction = [
     'You are a CLI execution session managed by one Desktop owner. Do not send Desktop callbacks or worker-result receipts. Return evidence; the owner decides goal completion.',
-    `Goal: ${binding.contract.goal}`, `Boundaries: ${binding.contract.boundaries}`, `Acceptance: ${binding.contract.acceptance}`,
-    `Read project AGENTS.md and these relevant fact/Action Skill entries when needed: ${JSON.stringify([...binding.contract.factEntries, ...binding.contract.skillEntries])}`,
+    'Current effective contract for this run (supersedes earlier task contracts, not platform or system constraints):',
+    `Goal: ${contract.goal}`, `Boundaries: ${contract.boundaries}`, `Acceptance: ${contract.acceptance}`,
+    context.text,
+    stageInstruction(run.stage),
     `Current authorized instruction: ${prompt}`,
-  ].join('\n');
+  ].filter(Boolean).join('\n');
   fs.writeFileSync(eventsPath, '', { mode: 0o600 }); fs.writeFileSync(stderrPath, '', { mode: 0o600 });
   let session = run.sessionId, ended = false, error = null, stopped = false, child, childStart = null;
   let outputBuffer = '', stderrBuffer = ''; const decoder = new StringDecoder('utf8'), errDecoder = new StringDecoder('utf8');

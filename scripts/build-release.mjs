@@ -17,8 +17,16 @@ const productTree = git('rev-parse', 'HEAD:模板交付包');
 const product = path.join(root, '模板交付包');
 const version = JSON.parse(fs.readFileSync(path.join(product, 'beyond-release.json'), 'utf8')).releaseVersion;
 assert.match(version, /^\d+\.\d+\.\d+$/);
-const outputRoot = path.resolve(process.argv[2] ?? path.join(root, 'dist'));
-const filename = 'BEYOND-' + version + '.zip';
+const args = process.argv.slice(2);
+assert.ok(args.length <= 1 || (args.length === 3 && args[1] === '--candidate'), 'Usage: build-release.mjs [output-directory] [--candidate ID]');
+assert.ok(!args[0]?.startsWith('--'), 'Output directory must precede candidate options');
+const candidateId = args.length === 3 ? args[2] : null;
+if (candidateId !== null) assert.match(candidateId, /^[A-Z][A-Z0-9-]{0,63}$/, 'Invalid candidate ID');
+const outputRoot = path.resolve(args[0] ?? path.join(root, 'dist'));
+const buildId = 'BEYOND-' + version + (candidateId ? '-' + candidateId : '');
+const releaseStatus = candidateId ? 'candidate-not-published' : 'built-for-stable-release';
+const documentStem = 'v' + version + (candidateId ? '-' + candidateId.toLowerCase() : '');
+const filename = buildId + '.zip';
 const output = path.join(outputRoot, filename);
 for (const suffix of ['', '.sha256', '.verification.json']) assert.ok(!fs.existsSync(output + suffix), 'Refuse overwrite: ' + output + suffix);
 const Zip = createRequire(import.meta.url)(process.env.BEYOND_JSZIP_PATH || 'jszip');
@@ -37,20 +45,20 @@ for (const file of tracked) {
 }
 for (const [target, source] of [
   ['LICENSE', 'LICENSE'],
-  ['INSTALL.md', 'docs/releases/v' + version + '-install.md'],
-  ['RELEASE-NOTES.md', 'docs/releases/v' + version + '.md'],
-  ['TEST-RESULTS.md', 'docs/releases/v' + version + '-validation.md'],
+  ['INSTALL.md', 'docs/releases/' + documentStem + '-install.md'],
+  ['RELEASE-NOTES.md', 'docs/releases/' + documentStem + '.md'],
+  ['TEST-RESULTS.md', 'docs/releases/' + documentStem + '-validation.md'],
 ]) {
   let bytes = fs.readFileSync(path.join(root, source));
   if (target === 'RELEASE-NOTES.md') {
-    const sourceLink = '(v' + version + '-validation.md)';
+    const sourceLink = '(' + documentStem + '-validation.md)';
     assert.ok(bytes.toString('utf8').includes(sourceLink), 'Release validation link missing');
   }
   if (target.endsWith('.md')) {
     bytes = Buffer.from(bytes.toString('utf8')
-      .replaceAll('(v' + version + '-validation.md)', '(TEST-RESULTS.md)')
-      .replaceAll('(v' + version + '-install.md)', '(INSTALL.md)')
-      .replaceAll('(v' + version + '.md)', '(RELEASE-NOTES.md)')
+      .replaceAll('(' + documentStem + '-validation.md)', '(TEST-RESULTS.md)')
+      .replaceAll('(' + documentStem + '-install.md)', '(INSTALL.md)')
+      .replaceAll('(' + documentStem + '.md)', '(RELEASE-NOTES.md)')
       .replaceAll('(../../模板交付包/', '(beyond-control/'));
   }
   payload.set(target, bytes);
@@ -72,8 +80,8 @@ const manifest = json({
 });
 payload.set('content-manifest.sha256.json', manifest);
 payload.set('release-manifest.json', json({
-  schemaVersion: 1, releaseVersion: version, buildId: 'BEYOND-' + version,
-  releaseStatus: 'built-for-stable-release', sourceCommit: commit, sourceProductTree: productTree,
+  schemaVersion: 1, releaseVersion: version, buildId,
+  releaseStatus, sourceCommit: commit, sourceProductTree: productTree,
   sourceIncludesUncommittedChanges: false, productRoot: 'beyond-control',
   productFileCount: products.length, expectedFileCount: payload.size + 1,
   contentManifest: 'content-manifest.sha256.json', contentManifestSha256: sha(manifest),
@@ -115,7 +123,7 @@ extractedIntegrityExit = check.status;
 fs.mkdirSync(outputRoot, { recursive: true });
 fs.writeFileSync(output, packed, { flag: 'wx' });
 fs.writeFileSync(output + '.sha256', sha(packed) + '  ' + filename + '\n', { flag: 'wx' });
-const result = { sourceCommit: commit, sourceProductTree: productTree, releaseVersion: version,
+const result = { sourceCommit: commit, sourceProductTree: productTree, releaseVersion: version, buildId, releaseStatus,
   zip: output, sha256: sha(packed), bytes: packed.length, productFiles: products.length,
   totalFiles: payload.size, manifestVerified: true, extractedIntegrityExit,
   extractedRoot: null, temporaryExtractionRemoved: true, installedIntoLiveProject: false };

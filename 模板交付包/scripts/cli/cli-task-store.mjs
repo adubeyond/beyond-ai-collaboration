@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { currentProcessIdentity, processIsGone, initialRecoveryWindowIsGone } from './process-identity.mjs';
 
 export const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -29,6 +30,16 @@ function validNonEmpty(value, label) {
 function validTime(value) {
   if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) throw new Error('invalid time');
   return value;
+}
+function validContract(contract) {
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract)) throw new Error('CLI contract is required');
+  for (const key of ['goal', 'boundaries', 'acceptance']) if (typeof contract[key] !== 'string' || !contract[key].trim()) throw new Error('CLI contract is required');
+  for (const key of ['factEntries', 'skillEntries']) if (!Array.isArray(contract[key]) || contract[key].some(x => typeof x !== 'string')) throw new Error('invalid contract entries');
+}
+function validStage(stage) {
+  if (!stage || typeof stage !== 'object' || Array.isArray(stage) || Object.keys(stage).some(key => !['goal', 'acceptance'].includes(key))) throw new Error('CLI stage requires goal and acceptance only');
+  validNonEmpty(stage.goal, 'CLI stage goal'); validNonEmpty(stage.acceptance, 'CLI stage acceptance');
+  return { goal: stage.goal, acceptance: stage.acceptance };
 }
 export function atomicJson(file, value) {
   const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
@@ -99,8 +110,7 @@ export class CliTaskStore {
   create(binding) {
     validIdentifier(binding.ownerTurnId);
     if (!['formal', 'assist'].includes(binding.taskMode) || !path.isAbsolute(binding.executionRoot) || !path.isAbsolute(binding.profilePath)) throw new Error('invalid CLI binding');
-    for (const key of ['goal', 'boundaries', 'acceptance']) if (typeof binding.contract?.[key] !== 'string' || !binding.contract[key].trim()) throw new Error('CLI contract is required');
-    for (const key of ['factEntries', 'skillEntries']) if (!Array.isArray(binding.contract[key]) || binding.contract[key].some(x => typeof x !== 'string')) throw new Error('invalid contract entries');
+    validContract(binding.contract);
     return this.withLock(binding, () => {
       const file = this.locator(binding);
       if (fs.existsSync(file)) {
@@ -108,7 +118,7 @@ export class CliTaskStore {
         for (const [key, value] of Object.entries(binding)) if (key !== 'ownerTurnId' && digest(stored[key]) !== digest(value)) throw new Error('CLI binding conflict');
         return stored;
       }
-      const state = { schemaVersion: 1, ...clone(binding), sessionId: null, runNumber: 0, status: 'starting', currentResultPath: null, managerPid: null, processIdentity: null, updatedAt: now() };
+      const state = { schemaVersion: 1, ...clone(binding), effectiveContract: clone(binding.contract), sessionId: null, runNumber: 0, status: 'starting', currentResultPath: null, managerPid: null, processIdentity: null, updatedAt: now() };
       atomicJson(file, state); return state;
     });
   }
@@ -118,7 +128,7 @@ export class CliTaskStore {
     if (state.currentResultPath && state.currentResultPath !== path.join(this.runDir(identity, state.runNumber), 'result.json')) throw new Error('CLI result path mismatch');
     return state;
   }
-  #verifyInitialSessionRecovery(identity, state, recovery, prompt, profile) {
+  #verifyInitialSessionRecovery(identity, state, recovery, prompt, profile, stage) {
     if (!recovery || typeof recovery !== 'object' || Array.isArray(recovery)
       || Object.keys(recovery).some(key => !['stateSha256', 'resultSha256', 'reason'].includes(key))
       || !/^[a-f0-9]{64}$/.test(recovery.stateSha256 ?? '') || !/^[a-f0-9]{64}$/.test(recovery.resultSha256 ?? '')
@@ -132,7 +142,7 @@ export class CliTaskStore {
     sameIdentity(previous, identity); sameIdentity(result, identity);
     const originalRequest = this.readJson(path.join(this.taskDir(identity), 'requests', `${validIdentifier(previous.requestId)}.json`));
     const originalFingerprint = digest({ requestId: previous.requestId, prompt: input.prompt, expectedRunNumber: 0, expectedSessionId: null,
-      ...(previous.profile ? { profile: previous.profile } : {}), ...(state.configuration ? { configuration: state.configuration } : {}) });
+      ...(previous.profile ? { profile: previous.profile } : {}), ...(state.configuration ? { configuration: state.configuration } : {}), ...(previous.stage !== undefined ? { stage: previous.stage } : {}) });
     if (digest(originalRequest.run) !== digest(previous) || input.fingerprint !== originalRequest.fingerprint
       || originalFingerprint !== originalRequest.fingerprint) throw new Error('CLI initial session recovery original request evidence changed');
     if (previous.runNumber !== 1 || previous.sessionId !== null || result.sessionId !== null
@@ -146,6 +156,7 @@ export class CliTaskStore {
     if (previous.profile?.provider !== 'claude' || previous.profile.mode !== 'interactive'
       || digest(profile) !== digest(previous.profile)) throw new Error('CLI initial session recovery profile changed or unsupported');
     if (prompt !== input.prompt) throw new Error('CLI initial session recovery prompt changed');
+    if (!isDeepStrictEqual(stage, previous.stage)) throw new Error('CLI initial session recovery stage changed');
     // SessionStart is saved before registration; only registration can dispatch a business prompt.
     if (fs.existsSync(this.checkedPath(path.join(directory, 'claude-session-start.json')))
       || (fs.existsSync(this.checkedPath(path.join(directory, 'events.jsonl')))
@@ -166,14 +177,84 @@ export class CliTaskStore {
     }
     return { ...clone(recovery), previousRunNumber: 1, reviewSha256: digest(review), launchId: endpoint.launchId };
   }
-  beginRun(identity, { requestId, prompt, expectedRunNumber, expectedSessionId, ownerTurnId, profile, configuration, initialSessionRecovery, faultAt = null }) {
+  queueContinuation(identity, { requestId, prompt, stage, expectedRunNumber, expectedSessionId, ownerTurnId, replacesRequestId, contract, authorizationLocator, ...unsupported }) {
+    if (Object.keys(unsupported).length) throw new Error('unsupported CLI continuation fields');
+    validIdentifier(requestId); validIdentifier(ownerTurnId); validIdentifier(expectedSessionId);
+    validNonEmpty(prompt, 'CLI prompt'); stage = validStage(stage);
+    if (!Number.isSafeInteger(expectedRunNumber) || expectedRunNumber < 1) throw new Error('invalid continuation run number');
+    if (replacesRequestId !== undefined) validIdentifier(replacesRequestId);
+    return this.withLock(identity, () => {
+      this.assertTransferSettled(identity);
+      const state = this.read(identity), items = state.continuations ?? [];
+      const updatesContract = authorizationLocator !== undefined || (contract !== undefined && !isDeepStrictEqual(contract, state.contract));
+      if (updatesContract) { validContract(contract); validNonEmpty(authorizationLocator, 'CLI contract authorization locator'); }
+      const payload = { ...Object.fromEntries(['projectId', 'taskId', 'ownerThreadId'].map(key => [key, identity[key]])), requestId, prompt, stage, expectedRunNumber, expectedSessionId, ownerTurnId, ...(replacesRequestId !== undefined ? { replacesRequestId } : {}), ...(updatesContract ? { contract: clone(contract), authorizationLocator } : {}) };
+      const previous = items.find(item => item.requestId === requestId);
+      if (previous) {
+        // Desktop turn context can change on retry; retain the first origin as
+        // provenance without treating it as a change to the owner's request.
+        const replayPayload = { ...payload, ownerTurnId: previous.ownerTurnId };
+        if (!isDeepStrictEqual(Object.fromEntries(Object.keys(replayPayload).map(key => [key, previous[key]])), replayPayload) || previous.replacesRequestId !== replacesRequestId || previous.authorizationLocator !== payload.authorizationLocator) throw new Error('CLI continuation request conflict');
+        return clone(previous);
+      }
+      if (state.runNumber !== expectedRunNumber) throw new Error('CLI stale run conflict');
+      if (state.sessionId !== expectedSessionId) throw new Error('CLI session mismatch');
+      if (terminal.has(state.status) && ['accept', 'close'].includes(this.readReview(identity, state.runNumber)?.decision)) throw new Error('CLI final review forbids continuation');
+      if (fs.existsSync(this.checkedPath(path.join(this.taskDir(identity), 'requests', `${requestId}.json`)))) throw new Error('CLI continuation request conflicts with an existing run');
+      const pending = items.find(item => item.status === 'pending');
+      if (pending ? replacesRequestId !== pending.requestId : replacesRequestId !== undefined) throw new Error('CLI continuation replacement requires the pending request ID');
+      if (pending) this.#assertContinuationNotDispatched(identity, pending);
+      const queuedAt = now(), item = { ...payload, status: 'pending', queuedAt };
+      const continuations = items.map(value => value === pending ? { ...value, status: 'superseded', supersededBy: requestId, supersededAt: queuedAt } : value);
+      continuations.push(item);
+      atomicJson(this.locator(identity), { ...state, continuations, updatedAt: queuedAt });
+      return clone(item);
+    });
+  }
+  readContinuation(identity, runNumber) {
+    if (!Number.isSafeInteger(runNumber) || runNumber < 1) throw new Error('invalid continuation run number');
+    const state = this.read(identity);
+    const item = (state.continuations ?? []).findLast(value => value.expectedRunNumber === runNumber);
+    return clone(item && ['pending', 'consumed'].includes(item.status) ? item : null);
+  }
+  #assertContinuationNotDispatched(identity, item) {
+    // A durable beginRun intent must finish its exact replay before the slot can change.
+    if (fs.existsSync(this.checkedPath(path.join(this.taskDir(identity), 'requests', `${item.requestId}.json`)))) throw new Error('CLI continuation dispatch intent exists; replay the same continuation');
+  }
+  cancelContinuation(identity, { requestId, reason }) {
+    validIdentifier(requestId); validNonEmpty(reason, 'CLI continuation cancellation reason');
+    return this.withLock(identity, () => {
+      this.assertTransferSettled(identity);
+      const state = this.read(identity), item = (state.continuations ?? []).find(value => value.requestId === requestId);
+      if (!item) throw new Error('CLI continuation not found');
+      sameIdentity(item, identity);
+      if (item.status === 'cancelled' && item.reason === reason) return clone(item);
+      if (item.status !== 'pending') throw new Error('CLI continuation is not pending');
+      this.#assertContinuationNotDispatched(identity, item);
+      const cancelled = { ...item, status: 'cancelled', reason, cancelledAt: now() };
+      atomicJson(this.locator(identity), { ...state, continuations: state.continuations.map(value => value === item ? cancelled : value), updatedAt: cancelled.cancelledAt });
+      return clone(cancelled);
+    });
+  }
+  beginRun(identity, { requestId, prompt, expectedRunNumber, expectedSessionId, ownerTurnId, profile, configuration, initialSessionRecovery, contract, authorizationLocator, stage, continuationId, faultAt = null }) {
     validIdentifier(requestId);
     if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('CLI prompt required');
     if (ownerTurnId !== undefined) validIdentifier(ownerTurnId);
+    if (stage !== undefined) stage = validStage(stage);
+    if (continuationId !== undefined) validIdentifier(continuationId);
     return this.withLock(identity, () => {
       this.assertTransferSettled(identity);
       const state = this.read(identity), requestFile = this.checkedPath(path.join(this.taskDir(identity), 'requests', `${requestId}.json`));
-      const fingerprint = digest({ requestId, prompt, expectedRunNumber, expectedSessionId, ...(profile ? { profile } : {}), ...(configuration ? { configuration } : {}), ...(initialSessionRecovery !== undefined ? { initialSessionRecovery } : {}) });
+      // Legacy callers spread the initial binding into resume. Without explicit
+      // authorization that identical field is metadata, never a rollback of current scope.
+      const updatesContract = authorizationLocator !== undefined || (contract !== undefined && !isDeepStrictEqual(contract, state.contract));
+      if (updatesContract) {
+        validContract(contract);
+        validNonEmpty(authorizationLocator, 'CLI contract authorization locator');
+        if (ownerTurnId === undefined) throw new Error('CLI contract update owner turn required');
+        if (initialSessionRecovery !== undefined) throw new Error('CLI contract update cannot accompany initial session recovery');
+      }
+      const fingerprint = digest({ requestId, prompt, expectedRunNumber, expectedSessionId, ...(profile ? { profile } : {}), ...(configuration ? { configuration } : {}), ...(initialSessionRecovery !== undefined ? { initialSessionRecovery } : {}), ...(updatesContract ? { contract, authorizationLocator } : {}), ...(stage !== undefined ? { stage } : {}), ...(continuationId !== undefined ? { continuationId } : {}) });
       let run;
       if (fs.existsSync(requestFile)) {
         const previous = this.readJson(requestFile);
@@ -184,16 +265,41 @@ export class CliTaskStore {
       if (expectedSessionId !== state.sessionId) throw new Error('CLI session mismatch');
       if (expectedRunNumber !== state.runNumber) throw new Error('CLI stale run conflict');
       if (state.runNumber && !terminal.has(state.status)) throw new Error('CLI active run conflict');
+      const pending = (state.continuations ?? []).find(item => item.status === 'pending');
+      if (continuationId !== undefined) {
+        if (!pending || pending.requestId !== continuationId || requestId !== continuationId || pending.expectedRunNumber !== expectedRunNumber || pending.expectedSessionId !== expectedSessionId || pending.prompt !== prompt || !isDeepStrictEqual(pending.stage, stage)) throw new Error('CLI continuation intent mismatch');
+        if (!isDeepStrictEqual(pending.contract, updatesContract ? contract : undefined) || pending.authorizationLocator !== (updatesContract ? authorizationLocator : undefined)) throw new Error('CLI continuation contract intent mismatch');
+        sameIdentity(pending, identity);
+      } else if (pending) throw new Error('CLI pending continuation must be consumed or explicitly cancelled');
+      if (updatesContract && !state.runNumber) throw new Error('CLI contract update requires same-session resume');
+      const endpointFile = this.checkedPath(path.join(this.taskDir(identity), 'interactive.json'));
+      if (updatesContract && fs.existsSync(endpointFile)) {
+        const endpoint = this.readJson(endpointFile); sameIdentity(endpoint, identity);
+        if (!['idle', 'closed'].includes(endpoint.status) || endpoint.activeTurnId) {
+          // Recovery preserves the old endpoint. Match cold-resume liveness checks:
+          // stale running/turn markers are harmless only after both saved processes exit.
+          const exited = endpoint.manager && endpoint.server && processIsGone(endpoint.manager) && processIsGone(endpoint.server);
+          if (!exited) throw new Error('CLI contract update requires an idle native session');
+        }
+      }
       const recovery = initialSessionRecovery !== undefined
-        ? this.#verifyInitialSessionRecovery(identity, state, initialSessionRecovery, prompt, profile) : null;
+        ? this.#verifyInitialSessionRecovery(identity, state, initialSessionRecovery, prompt, profile, stage) : null;
+      let review;
       if (state.runNumber && !recovery) {
         if (!state.sessionId) throw new Error('CLI session missing; explicit recovery required');
-        if (this.readReview(identity, state.runNumber)?.decision !== 'continue') throw new Error('CLI continuation review required');
+        review = this.readReview(identity, state.runNumber);
+        if (review?.decision !== 'continue') throw new Error('CLI continuation review required');
+        if (updatesContract && (review.runNumber !== state.runNumber || review.resultSha256 !== sha256File(state.currentResultPath))) throw new Error('CLI contract update result fingerprint mismatch');
       }
+      // The start contract and prior runs remain history; only an explicit owner-authorized
+      // continuation replaces the effective scope. Every run pins the contract it dispatched.
+      const effectiveContract = clone(updatesContract ? contract : state.effectiveContract ?? state.contract);
+      const contractUpdate = updatesContract ? { authorizationLocator, previousRunNumber: state.runNumber, previousContractSha256: digest(state.effectiveContract ?? state.contract), reviewSha256: digest(review) } : null;
       const number = state.runNumber + 1, dir = this.checkedPath(this.runDir(identity, number), { createDirectory: true });
-      run ??= { ...Object.fromEntries(['projectId', 'taskId', 'ownerThreadId'].map(k => [k, identity[k]])), runNumber: number, requestId, sessionId: state.sessionId, ownerTurnId: ownerTurnId ?? state.ownerTurnId, status: 'starting', resultPath: path.join(dir, 'result.json'), ...(profile ? { profile: clone(profile) } : {}), ...(recovery ? { initialSessionRecovery: recovery } : {}) };
+      run ??= { ...Object.fromEntries(['projectId', 'taskId', 'ownerThreadId'].map(k => [k, identity[k]])), runNumber: number, requestId, sessionId: state.sessionId, ownerTurnId: ownerTurnId ?? state.ownerTurnId, status: 'starting', resultPath: path.join(dir, 'result.json'), effectiveContract, ...(contractUpdate ? { contractUpdate } : {}), ...(profile ? { profile: clone(profile) } : {}), ...(recovery ? { initialSessionRecovery: recovery } : {}), ...(stage !== undefined ? { stage: clone(stage) } : {}), ...(continuationId !== undefined ? { continuationId } : {}) };
       if (run.runNumber !== number || run.sessionId !== state.sessionId) throw new Error('CLI replay intent mismatch');
       if (recovery && digest(run.initialSessionRecovery) !== digest(recovery)) throw new Error('CLI initial session recovery evidence changed');
+      if (updatesContract && (digest(run.effectiveContract) !== digest(effectiveContract) || digest(run.contractUpdate) !== digest(contractUpdate))) throw new Error('CLI contract update evidence changed');
       const immutable = (file, value) => { if (fs.existsSync(file)) { if (digest(this.readJson(file)) !== digest(value)) throw new Error('CLI run intent conflict'); } else atomicJson(file, value); };
       this.checkedPath(path.dirname(requestFile), { createDirectory: true });
       immutable(requestFile, { fingerprint, run });
@@ -202,7 +308,8 @@ export class CliTaskStore {
       if (faultAt === 'afterRun') throw new Error('injected fault afterRun');
       immutable(path.join(dir, 'input.json'), { prompt, fingerprint });
       if (faultAt === 'afterInput') throw new Error('injected fault afterInput');
-      atomicJson(this.locator(identity), { ...state, ...(configuration ? { configuration: clone(configuration) } : {}), runNumber: number, status: 'starting', ownerTurnId: run.ownerTurnId, currentResultPath: null, managerPid: null, processIdentity: null, updatedAt: now() });
+      const updatedAt = now();
+      atomicJson(this.locator(identity), { ...state, effectiveContract: clone(run.effectiveContract ?? state.contract), ...(configuration ? { configuration: clone(configuration) } : {}), ...(continuationId !== undefined ? { continuations: state.continuations.map(item => item === pending ? { ...item, status: 'consumed', targetRunNumber: number, consumedAt: updatedAt } : item) } : {}), runNumber: number, status: 'starting', ownerTurnId: run.ownerTurnId, currentResultPath: null, managerPid: null, processIdentity: null, updatedAt });
       return run;
     });
   }
@@ -252,6 +359,11 @@ export class CliTaskStore {
       const file = path.join(this.runDir(identity, state.runNumber), 'stop.json'); this.checkedPath(file);
       const value = { requestId: validIdentifier(requestId), reason: String(reason), processIdentity: state.processIdentity, runNumber: state.runNumber, sessionId: state.sessionId, requestedAt: now() };
       if (fs.existsSync(file)) throw new Error('CLI stop already requested');
+      // Cancel before publishing stop intent, so a crash never leaves that intent
+      // visible with an older queued instruction still eligible for automatic resume.
+      if ((state.continuations ?? []).some(item => item.status === 'pending' && item.expectedRunNumber === state.runNumber)) {
+        atomicJson(this.locator(identity), { ...state, continuations: state.continuations.map(item => item.status === 'pending' && item.expectedRunNumber === state.runNumber ? { ...item, status: 'cancelled', reason: `CLI stop requested: ${reason}`, cancelledAt: value.requestedAt, stopRequestId: requestId } : item), updatedAt: value.requestedAt });
+      }
       atomicJson(file, value); return { status: 'stop-requested', runNumber: state.runNumber };
     });
   }
@@ -330,14 +442,21 @@ export class CliTaskStore {
       this.checkedPath(path.dirname(file), { createDirectory: true });
       if (fs.existsSync(file)) {
         const previous = this.readJson(file);
-        if (digest(previous) === digest(review)) return clone(review);
+        if (digest(previous) === digest(review)) { this.#cancelReviewedContinuations(state, review); return clone(review); }
         if (previous.decision !== 'pause' || review.decision !== 'continue' || review.supersedesReviewSha256 !== sha256File(file) || !review.authorizationLocator) throw new Error('CLI review conflict');
         if (fs.existsSync(continuation)) { if (digest(this.readJson(continuation)) !== digest(review)) throw new Error('CLI review conflict'); }
         else atomicJson(continuation, review);
         return clone(review);
       }
-      atomicJson(file, review); return clone(review);
+      atomicJson(file, review); this.#cancelReviewedContinuations(state, review); return clone(review);
     });
+  }
+  #cancelReviewedContinuations(state, review) {
+    if (!['accept', 'close'].includes(review.decision) || !(state.continuations ?? []).some(item => item.status === 'pending' && item.expectedRunNumber === review.runNumber)) return;
+    // Review is immutable first. Repeating it repairs a crash before this state write.
+    const cancelledAt = now();
+    const continuations = state.continuations.map(item => item.status === 'pending' && item.expectedRunNumber === review.runNumber ? { ...item, status: 'cancelled', reason: `CLI ${review.decision} review`, reviewSha256: digest(review), cancelledAt } : item);
+    atomicJson(this.locator(state), { ...state, continuations, updatedAt: cancelledAt });
   }
   claimNotification(identity, number) {
     return this.withLock(identity, () => {
@@ -398,6 +517,7 @@ export class CliTaskStore {
     throw new Error('CLI transfer recovery caller mismatch or previous transfer caller still active');
   }
   #verifyStableTransferState(input, state) {
+    if ((state.continuations ?? []).some(item => item.status === 'pending')) throw new Error('CLI pending continuation must be cancelled before owner transfer');
     if (state.taskMode !== (input.taskMode ?? 'formal')) throw new Error('CLI transfer task mode mismatch');
     if (state.status !== 'completed' || state.managerPid !== null || state.processIdentity) throw new Error('CLI transfer requires a completed stable run');
     if (state.sessionId !== input.expectedSessionId || state.runNumber !== input.expectedRunNumber) throw new Error('CLI transfer session or run mismatch');

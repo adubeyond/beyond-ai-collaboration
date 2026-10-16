@@ -13,13 +13,17 @@ import { zcodeArguments } from '../模板交付包/scripts/cli/zcode-client.mjs'
 import { callInteractive, readInteractiveEndpoint } from '../模板交付包/scripts/cli/interactive-client.mjs';
 
 async function until(check) { const end = Date.now() + 15000; while (!check()) { if (Date.now() > end) throw new Error('ZCode fixture timed out'); await new Promise(r => setTimeout(r, 10)); } }
-function fixture(t, effort, onEvent = () => {}) {
+function fixture(t, effort, onEvent = () => {}, stage, { documents = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-zcode-unit-'));
   const profile = { schemaVersion: 1, provider: 'zcode', mode: 'interactive', ui: 'window', model: 'test-model', ...(effort ? { effort } : {}), runner: { command: process.execPath, args: [] }, packageRoot: root };
   const profilePath = path.join(root, 'profile.json'); atomicJson(profilePath, profile);
   const binding = { projectId: 'local-test', taskId: 'zcode-goal', ownerThreadId: 'owner', ownerTurnId: 'foreground-one', taskMode: 'assist', executionRoot: root, profilePath, contract: { goal: 'review then fix', boundaries: 'fixture only', acceptance: 'tests pass', factEntries: [], skillEntries: [] } };
+  const contextFiles = documents ? ['requirements', 'design'].map(name => {
+    const file = path.join(root, name + '.md'); fs.writeFileSync(file, `${name}: currentR1\n`); return file;
+  }) : [];
+  if (documents) binding.contract.factEntries = contextFiles;
   const store = new CliTaskStore({ controlRoot: root }); store.create(binding);
-  const run = store.beginRun(binding, { requestId: 'start', prompt: 'review', expectedRunNumber: 0, expectedSessionId: null });
+  const run = store.beginRun(binding, { requestId: 'start', prompt: 'review', stage, expectedRunNumber: 0, expectedSessionId: null });
   const managerIdentity = { ...currentProcessIdentity(), token: crypto.randomUUID() }; store.setProcess(run, managerIdentity);
   let releaseForeground, resolveSubmit, rejectSubmit, hook, closePromise, attachError, hookReady;
   const foreground = new Promise(resolve => { releaseForeground = resolve; }), calls = [], callbacks = [], notices = [];
@@ -44,9 +48,49 @@ function fixture(t, effort, onEvent = () => {}) {
   async function started() { await ready; await hookReady; assert.ifError(attachError); await until(() => calls.length === 1); }
   function review(decision = 'continue') { const state = store.read(binding), resultPath = path.join(store.runDir(binding, state.runNumber), 'result.json'); return store.recordReview({ projectId: binding.projectId, taskId: binding.taskId, ownerThreadId: 'owner', runNumber: state.runNumber, resultSha256: sha256File(resultPath), decision, evidenceLocator: 'file:fixture-proof', conclusion: 'independent fixture verification', reviewedAt: new Date().toISOString() }); }
   async function request(route, body) { const ep = endpoint(); return fetch(ep.controlUrl + route, { method: 'POST', headers: { authorization: 'Bearer ' + fs.readFileSync(ep.tokenPath, 'utf8'), 'content-type': 'application/json' }, body: JSON.stringify(body) }); }
-  return { root, profile, binding, store, run, app, calls, callbacks, notices, ready, started, lifetime, finish, unwind: () => resolveSubmit(), reject: error => rejectSubmit(error), releaseForeground, endpoint, review, request };
+  return { root, profile, binding, store, run, contextFiles, app, calls, callbacks, notices, ready, started, lifetime, finish, unwind: () => resolveSubmit(), reject: error => rejectSubmit(error), releaseForeground, endpoint, review, request };
 }
 
+test('ZCode submit receives current document bodies on both rounds without replacing the session', { timeout: 25000 }, async t => {
+  const stage = { goal: 'Check the current sources', acceptance: 'Evidence matches the approved sources' };
+  const f = fixture(t, undefined, undefined, stage, { documents: true }); await f.started();
+  const manifestPath = number => path.join(f.store.runDir(f.binding, number), 'document-context.json');
+  const verify = (number, marker) => {
+    const text = f.calls[number - 1];
+    const sources = text.split('\n').flatMap(line => { try { const value = JSON.parse(line); return value.content ? [value] : []; } catch { return []; } });
+    const manifest = f.store.readJson(manifestPath(number));
+    for (const file of f.contextFiles) {
+      assert.equal(sources.find(item => item.path === file)?.content, fs.readFileSync(file, 'utf8'));
+      assert.equal(manifest.entries.find(item => item.path === file)?.sha256, sha256File(file));
+    }
+    assert.ok(text.includes(marker));
+    assert.ok(text.includes(`Goal: ${f.binding.contract.goal}`));
+    assert.ok(text.includes(`Current round deliverable: ${stage.goal}`));
+    return text;
+  };
+  verify(1, 'currentR1');
+  const firstManifest = fs.readFileSync(manifestPath(1), 'utf8');
+  f.finish('read first revision'); await until(() => f.store.read(f.binding).status === 'completed'); f.review();
+  for (const file of f.contextFiles) fs.writeFileSync(file, `${path.basename(file, '.md')}: currentR2\n`);
+  const next = f.store.beginRun(f.binding, { requestId: 'current-documents-2', prompt: 'read current source again', stage, expectedRunNumber: 1, expectedSessionId: 'sess_same' });
+  await callInteractive(f.store, f.binding, 'resume', { run: next, profile: f.profile, prompt: 'read current source again' });
+  await until(() => f.calls.length === 2);
+  assert.doesNotMatch(verify(2, 'currentR2'), /currentR1/);
+  assert.equal(fs.readFileSync(manifestPath(1), 'utf8'), firstManifest);
+  assert.equal(f.store.read(f.binding).sessionId, 'sess_same');
+  assert.deepEqual(f.store.read(f.binding).effectiveContract, f.binding.contract);
+  f.finish('read current revision'); await until(() => f.store.read(f.binding).status === 'completed');
+});
+test('ZCode receives the full goal and a bounded stage, not a replacement goal', { timeout: 25000 }, async t => {
+  const stage = { goal: 'verify the current data source', acceptance: 'source evidence and unresolved questions' };
+  const f = fixture(t, undefined, undefined, stage); await f.started();
+  assert.ok(f.calls[0].includes(`Goal: ${f.binding.contract.goal}`));
+  assert.ok(f.calls[0].includes(`Current round deliverable: ${stage.goal}`));
+  assert.ok(f.calls[0].includes(`Current round acceptance: ${stage.acceptance}`));
+  f.finish('stage only'); await until(() => f.store.read(f.binding).status === 'completed');
+  assert.equal(f.store.readReview(f.binding, 1), null);
+  assert.deepEqual(f.store.read(f.binding).effectiveContract, f.binding.contract);
+});
 test('native renderer exception retains the original model denial without credentials', { timeout: 25000 }, async t => {
   const f = fixture(t, undefined, () => { throw new Error("Cannot read properties of undefined (reading 'reduce')"); });
   await f.started();

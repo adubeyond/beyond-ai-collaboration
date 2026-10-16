@@ -6,6 +6,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-10-16
+
+### Fixed
+
+- Preserve the full CLI goal while scoping each round's deliverable and saving new requirements for review and continuation in the original session.
+- Connect all three CLI routes to current requirements, design and applicable Skills; refresh context on continuation.
+- Resolve an available Codex executable instead of depending on a retired installation path; preserve the executable bound to active processes.
+- Launch new Windows managers independently of the caller's close-on-exit Job and retain original sessions/results for reconnection.
+- Read the same Windows process creation timestamp directly through .NET to avoid a reproduced Get-Process cmdlet stall without weakening process ownership checks.
+- Include the three new product scripts in complete packages and the seven additional regressions in public Windows/Ubuntu CI.
+
+### Boundaries
+
+- Keep Desktop callbacks, notifications, task states, six Skills, model policy and existing CLI fixes unchanged.
+- Do not ship private gateway/profile configuration, migrate live sessions or install into any project. Gemini upstream failures, a separate npm Codex continuation timeout and lifecycle-test boundaries remain documented.
+- See [release notes](docs/releases/v4.0.1.md), [validation](docs/releases/v4.0.1-validation.md) and [installation](docs/releases/v4.0.1-install.md).
+
 ## [4.0.0] - 2026-10-15
 
 - 发行主版本与清单 schema 分离：允许 4.0.0，保留原 schemaVersion=3；同步双语安装入口并增加正反例回归。

@@ -28,6 +28,17 @@ export async function until(condition, timeout = 8000) {
   const end = Date.now() + timeout;
   for (;;) { const value = condition(); if (value) return value; if (Date.now() > end) throw new Error('fixture condition timed out'); await new Promise(r => setTimeout(r, 15)); }
 }
+async function committedResult(f, run) {
+  return until(() => {
+    if (!fs.existsSync(run.resultPath)) return false;
+    const state = f.store.read(run);
+    // result.json is written inside finishRun, before the task update and lock
+    // release. This fixture must observe the complete commit before reviewing.
+    return state.currentResultPath === run.resultPath
+      && ['completed', 'failed', 'stopped', 'unknown'].includes(state.status)
+      && !fs.existsSync(path.join(f.store.taskDir(run), '.lock'));
+  });
+}
 test('launch-returns-before-terminal and thread-start-persists-before-exit', async t => {
   const { launchCliRequest } = await bridge(); const f = fixture(t, 'gate');
   const run = await launchCliRequest({ schemaVersion: 1, requestId: 'launch-first', action: 'cli.start', input: { ...f.binding, prompt: 'write first' } }, f.context);
@@ -36,16 +47,16 @@ test('launch-returns-before-terminal and thread-start-persists-before-exit', asy
   assert.equal(f.store.read(f.binding).sessionId, 'cli-session');
   assert.equal(fs.existsSync(run.resultPath), false);
   fs.writeFileSync(f.gate, 'go');
-  await until(() => fs.existsSync(run.resultPath));
+  await committedResult(f, run);
   assert.equal(f.store.readResult(f.binding, 1).status, 'completed');
 });
 test('resume-uses-exact-session and second round really reads first artifact', async t => {
   const { launchCliRequest } = await bridge(); const f = fixture(t);
   const first = await launchCliRequest({ schemaVersion: 1, requestId: 'first', action: 'cli.start', input: { ...f.binding, prompt: 'first round' } }, f.context);
-  await until(() => fs.existsSync(first.resultPath));
+  await committedResult(f, first);
   f.store.recordReview({ ...f.binding, runNumber: 1, resultSha256: sha256File(first.resultPath), decision: 'continue', evidenceLocator: 'file:first.txt', conclusion: 'append second', reviewedAt: new Date().toISOString() });
   const second = await launchCliRequest({ schemaVersion: 1, requestId: 'second', action: 'cli.resume', input: { projectId: f.binding.projectId, taskId: f.binding.taskId, ownerThreadId: f.binding.ownerThreadId, prompt: 'append second', expectedRunNumber: 1, expectedSessionId: 'cli-session' } }, f.context);
-  await until(() => fs.existsSync(second.resultPath));
+  await committedResult(f, second);
   const args = JSON.parse(fs.readFileSync(path.join(f.executionRoot, 'args.json'))).args;
   assert.deepEqual(args.slice(0, 3), ['exec', 'resume', 'cli-session']);
   assert.equal(args.includes('--skip-git-repo-check'), true);
@@ -57,7 +68,7 @@ test('per-task model and effort persist across same-session resume without chang
   const { launchCliRequest } = await bridge(); const f = fixture(t);
   const original = fs.readFileSync(f.profilePath, 'utf8');
   const first = await launchCliRequest({ schemaVersion: 1, requestId: 'config-one', action: 'cli.start', input: { ...f.binding, prompt: 'first', configuration: { model: 'economy-model', effort: 'high' } } }, f.context);
-  await until(() => fs.existsSync(first.resultPath));
+  await committedResult(f, first);
   assert.equal(fs.readFileSync(f.profilePath, 'utf8'), original);
   assert.deepEqual(f.store.readResult(f.binding, 1).configuration, { provider: 'codex', model: 'economy-model', effort: 'high' });
   const savedFirst = f.store.readJson(path.join(f.store.runDir(f.binding, 1), 'run.json'));
@@ -65,7 +76,7 @@ test('per-task model and effort persist across same-session resume without chang
   for (const [number, configuration, model, effort] of [[2, { model: 'stronger-model', effort: 'xhigh' }, 'stronger-model', 'xhigh'], [3, undefined, 'stronger-model', 'xhigh'], [4, { effort: null }, 'stronger-model', null]]) {
     f.store.recordReview({ ...f.binding, runNumber: number - 1, resultSha256: sha256File(path.join(f.store.runDir(f.binding, number - 1), 'result.json')), decision: 'continue', evidenceLocator: 'file:first.txt', conclusion: 'next part of same goal', reviewedAt: new Date().toISOString() });
     const next = await launchCliRequest({ schemaVersion: 1, requestId: 'config-' + number, action: 'cli.resume', input: { projectId: f.binding.projectId, taskId: f.binding.taskId, ownerThreadId: f.binding.ownerThreadId, prompt: 'continue', expectedRunNumber: number - 1, expectedSessionId: 'cli-session', ...(configuration ? { configuration } : {}) } }, f.context);
-    await until(() => fs.existsSync(next.resultPath));
+    await committedResult(f, next);
     const args = JSON.parse(fs.readFileSync(path.join(f.executionRoot, 'args.json'))).args;
     assert.deepEqual(args.slice(0, 3), ['exec', 'resume', 'cli-session']);
     assert.equal(args[args.indexOf('--model') + 1], model);
@@ -78,7 +89,7 @@ test('per-task model and effort persist across same-session resume without chang
   assert.deepEqual(f.store.readJson(path.join(f.store.runDir(f.binding, 1), 'run.json')), savedFirst);
   const other = { ...f.binding, taskId: 'other-goal' };
   const otherRun = await launchCliRequest({ schemaVersion: 1, requestId: 'other', action: 'cli.start', input: { ...other, prompt: 'independent' } }, f.context);
-  await until(() => fs.existsSync(otherRun.resultPath));
+  await committedResult(f, otherRun);
   assert.equal(f.store.readResult(other, 1).configuration.model, f.profile.model);
 });
 
@@ -95,10 +106,10 @@ test('task-selected configuration survives shared default changes and rejects in
   const resume = { schemaVersion: 1, requestId: 'next', action: 'cli.resume', input: { projectId: f.binding.projectId, taskId: f.binding.taskId, ownerThreadId: f.binding.ownerThreadId, prompt: 'continue', expectedRunNumber: 1, expectedSessionId: 'cli-session' } };
   await assert.rejects(() => launchCliRequest({ ...resume, input: { ...resume.input, configuration: { model: 'different', effort: 'high' } } }, f.context), /active run/);
   assert.equal(f.store.read(f.binding).runNumber, 1);
-  fs.writeFileSync(f.gate, 'go'); await until(() => fs.existsSync(first.resultPath));
+  fs.writeFileSync(f.gate, 'go'); await committedResult(f, first);
   f.store.recordReview({ ...f.binding, runNumber: 1, resultSha256: sha256File(first.resultPath), decision: 'continue', evidenceLocator: 'file:first.txt', conclusion: 'continue original configuration', reviewedAt: new Date().toISOString() });
   fs.writeFileSync(f.profilePath, JSON.stringify({ ...f.profile, model: 'new-global-default', effort: 'ultra' }));
-  const second = await launchCliRequest(resume, f.context); await until(() => fs.existsSync(second.resultPath));
+  const second = await launchCliRequest(resume, f.context); await committedResult(f, second);
   assert.deepEqual(f.store.readResult(f.binding, 2).configuration, { provider: 'codex', model: f.profile.model, effort: null });
 });
 test('spawn-failure-retained with null session and exactly one terminal callback', async t => {
@@ -133,5 +144,5 @@ test('stop-only-owned-process rejects wrong fingerprint without stopping the CLI
   const state = f.store.read(f.binding);
   const answer = await launchCliRequest({ schemaVersion: 1, requestId: 'stop-right', action: 'cli.stop', input: { ...f.binding, stateSha256: digest(state), expectedSessionId: state.sessionId, reason: 'user stopped' } }, f.context);
   assert.equal(answer.status, 'stop-requested');
-  await until(() => fs.existsSync(first.resultPath)); assert.equal(f.store.readResult(f.binding, 1).status, 'stopped');
+  await committedResult(f, first); assert.equal(f.store.readResult(f.binding, 1).status, 'stopped');
 });

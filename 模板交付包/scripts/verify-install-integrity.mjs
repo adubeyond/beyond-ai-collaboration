@@ -48,7 +48,7 @@ const expectedControlRuntimeFiles = [
   "scripts/runtime/workbench-transaction.mjs",
 ];
 const expectedCliProductFiles = [
-  "scripts/cli/cli-task-store.mjs", "scripts/cli/native-cli-runner.mjs",
+  "scripts/cli/cli-task-store.mjs", "scripts/cli/native-cli-runner.mjs", "scripts/cli/cli-context.mjs", "scripts/cli/codex-executable.mjs", "scripts/cli/manager-launch.mjs",
   "scripts/cli/cli-bridge.mjs", "scripts/cli/desktop-host.mjs", "scripts/cli/cli-notify.mjs",
   "scripts/cli/process-identity.mjs",
   "scripts/cli/app-server-rpc.mjs", "scripts/cli/interactive-client.mjs", "scripts/cli/interactive-cli-runner.mjs",
