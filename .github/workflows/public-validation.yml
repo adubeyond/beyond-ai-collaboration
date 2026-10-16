@@ -27,6 +27,9 @@ jobs:
           package-manager-cache: false
       - name: Validate public repository content
         run: node scripts/check-public-content.mjs --strict-candidate
+      - name: Validate isolated Windows CLI entry before the full suite
+        if: runner.os == 'Windows'
+        run: node --test --test-name-pattern "CLI entry review discovers" scripts/check-cli-next-bridge.mjs
       - name: Validate project identity
         run: node --test scripts/check-m3-project-identity.mjs
       - name: Validate project execution routing
