@@ -28,13 +28,13 @@ function isolatedHostEnvironment(source = process.env, platform = process.platfo
   return env;
 }
 test('isolated desktop environment preserves OS startup inputs without credentials or live routing', () => {
-  const source = { SystemRoot: 'C:\\Windows', APPDATA: 'C:\\Fake\\Roaming', LOCALAPPDATA: 'C:\\Fake\\Local',
+  const source = { SystemRoot: 'fixture-system', APPDATA: 'fixture-roaming', LOCALAPPDATA: 'fixture-local',
     PATH: 'fake-path', TEMP: 'fake-temp', PSModulePath: 'untrusted-pwsh-module',
     OPENAI_API_KEY: 'fake-key', ANTHROPIC_API_KEY: 'fake-key', GH_TOKEN: 'fake-token', NODE_OPTIONS: 'fake-preload',
     CODEX_HOME: 'live-home', CODEX_THREAD_ID: 'live-owner', CODEX_APP_TOOLS_PIPE_PATH: 'live-pipe' };
   const env = isolatedHostEnvironment(source, 'win32');
   assert.deepEqual(Object.keys(env).sort(), ['SystemRoot', 'APPDATA', 'LOCALAPPDATA', 'PATH', 'TEMP', 'PSModulePath'].sort());
-  assert.equal(env.PSModulePath, 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules');
+  assert.equal(env.PSModulePath, path.win32.join(source.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'Modules'));
   for (const key of ['SystemRoot', 'APPDATA', 'LOCALAPPDATA', 'PATH', 'TEMP']) assert.equal(env[key], source[key]);
   const routed = { ...env, CODEX_HOME: 'fixture-home', CODEX_THREAD_ID: 'fixture-owner', CODEX_APP_TOOLS_PIPE_PATH: 'fixture-pipe' };
   assert.equal(routed.CODEX_HOME, 'fixture-home'); assert.equal(routed.CODEX_THREAD_ID, 'fixture-owner'); assert.equal(routed.CODEX_APP_TOOLS_PIPE_PATH, 'fixture-pipe');
