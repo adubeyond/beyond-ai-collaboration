@@ -137,21 +137,7 @@ report({phase: 'started'});
 cp.spawnSync = function(command, ...args) {
   const at = Date.now(), executable = path.basename(String(command));
   report({phase: 'subprocess-start', executable});
-  let diagnosticLauncher = false;
-  if (executable.toLowerCase() === 'powershell.exe' && args[0]?.includes('-EncodedCommand')) {
-    const position = args[0].indexOf('-EncodedCommand') + 1;
-    const source = Buffer.from(args[0][position], 'base64').toString('utf16le');
-    if (source.includes('BeyondIndependentProcess')) {
-      const starts = ['$env:PSModulePath =', 'Add-Type ', '$spec =', '$startup =', '$startup.EnvironmentVariables =', '$created =', '$createdProcess =', '$owner =', '$started =', '[ordered]@'];
-      let count = 0;
-      const marked = source.split('\\n').map(line => starts.some(prefix => line.startsWith(prefix))
-        ? "[Console]::Error.WriteLine('fixture-launch-step-" + (++count) + "');\\n" + line : line).join('\\n');
-      args[0] = [...args[0]]; args[0][position] = Buffer.from(marked, 'utf16le').toString('base64');
-      diagnosticLauncher = true;
-    }
-  }
-  try { const result = original.call(this, command, ...args); report({phase: 'subprocess-end', executable, durationMs: Date.now() - at, status: result.status, error: result.error?.code,
-    launcherPhases: diagnosticLauncher ? String(result.stderr).match(/fixture-launch-step-[0-9]+/g) : undefined}); return result; }
+  try { const result = original.call(this, command, ...args); report({phase: 'subprocess-end', executable, durationMs: Date.now() - at, status: result.status, error: result.error?.code}); return result; }
   catch (error) { report({phase: 'subprocess-throw', executable, durationMs: Date.now() - at, error: error.code}); throw error; }
 };
 require('node:module').syncBuiltinESMExports();

@@ -20,7 +20,8 @@ export function launchIndependentNode(entry, args = []) {
   const command = [process.execPath, entry, ...args].map(windowsArgument).join(' ');
   const encoded = Buffer.from(JSON.stringify({ executable: process.execPath, command, cwd: process.cwd() }), 'utf8').toString('base64');
   const script = `$ErrorActionPreference = 'Stop'
-$env:PSModulePath = Join-Path $PSHOME 'Modules'
+# Set the module path before invoking any module-dependent cmdlet.
+$env:PSModulePath = [System.IO.Path]::Combine($PSHOME, 'Modules')
 Add-Type -TypeDefinition @'
 using System;
 using System.Diagnostics;
@@ -132,7 +133,7 @@ export function receiveWindowsManager(address, nonce, { timeoutMs = 30000 } = {}
     readMessages(socket, payload => {
       if (received) return;
       const proof = payload.managerIdentity;
-      const actual = spawnSync(windowsPowerShell(), ['-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${process.pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks`], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+      const actual = spawnSync(windowsPowerShell(), ['-NoProfile', '-NonInteractive', '-Command', `[System.Diagnostics.Process]::GetProcessById(${process.pid}).StartTime.ToUniversalTime().Ticks`], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
       if (proof?.pid !== process.pid || actual.status !== 0 || actual.stdout.trim() !== proof.startedAt) throw new Error('CLI manager bootstrap process proof mismatch');
       received = true; clearTimeout(timer);
       // After dispatch this pipe is only a readiness receipt, never a lifeline.
