@@ -13,7 +13,7 @@ import { connectAppServer } from '../模板交付包/scripts/cli/app-server-rpc.
 import { readProfile, launchCliRequest } from '../模板交付包/scripts/cli/cli-bridge.mjs';
 
 async function until(check) { const end = Date.now() + 10000; while (!check()) { if (Date.now() > end) throw new Error('Fixture timed out'); await new Promise(resolve => setTimeout(resolve, 20)); } }
-function fixture(t, stage, { documents = false, retireCommandAfterSpawn = false } = {}) {
+function fixture(t, stage, { documents = false, retireCommandAfterSpawn = false, refreshTransport } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-native-unit-')); fs.mkdirSync(path.join(root, 'home'));
   const script = path.join(root, 'fake.cjs'), launchesFile = path.join(root, 'launches.jsonl');
   const desktopCommand = () => process.platform === 'win32' && process.env.LOCALAPPDATA
@@ -35,6 +35,7 @@ function fixture(t, stage, { documents = false, retireCommandAfterSpawn = false 
   let sendNotification, foreground = 'foreground-one', foregroundDone = false, releaseForeground;
   const pendingForeground = new Promise(resolve => { releaseForeground = () => { foregroundDone = true; resolve(); }; });
   const host = { currentSource: () => ({ ownerThreadId: 'owner', ownerTurnId: foreground }), waitForSourceTurnEnd: async () => { if (!foregroundDone) await pendingForeground; }, checkCapability: async () => ({ available: true }), send: async value => { callbacks.push(value); return { status: 'delivered' }; } };
+  if (refreshTransport) host.refreshTransport = refreshTransport;
   let n = 0;
   const connect = async (_url, _token, options) => {
     // Simulate an uninstalled executable after its process starts, without touching an installed binary.
@@ -234,6 +235,40 @@ test('changed live profile and second active dispatch are rejected without start
   f.finish('turn-1'); await until(() => fs.existsSync(f.run.resultPath)); f.releaseForeground(); await until(() => f.callbacks.length === 1);
   await assert.rejects(() => callInteractive(f.store, f.binding, 'resume', { run: f.run, profile: { ...f.profile, model: 'changed' }, prompt: 'changed' }), /profile changed/);
   assert.equal(f.requests.filter(x => x.method === 'turn/start').length, 1);
+});
+
+test('native transport refresh rejects invalid input, concurrent resumes and dispatch after caller disconnect', async t => {
+  let release, entered = false;
+  const gate = new Promise(resolve => { release = resolve; });
+  const f = fixture(t, undefined, { refreshTransport: async (snapshot, saved) => {
+    if (snapshot?.ownerThreadId !== 'owner') throw new Error('Desktop transport refresh identity mismatch');
+    assert.equal(saved.ownerTurnId, 'foreground-two'); assert.equal(saved.sessionId, 'same-session');
+    entered = true; await gate;
+  } });
+  await f.ready; f.finish('turn-1'); await until(() => fs.existsSync(f.run.resultPath));
+  f.releaseForeground(); await until(() => f.callbacks.length === 1);
+  f.store.recordReview({ ...f.binding, runNumber: 1, resultSha256: sha256File(f.run.resultPath), decision: 'continue', evidenceLocator: 'fixture:refresh', conclusion: 'continue same session', reviewedAt: new Date().toISOString() });
+  const next = f.store.beginRun(f.binding, { requestId: 'refresh', prompt: 'next', expectedRunNumber: 1, expectedSessionId: 'same-session', ownerTurnId: 'foreground-two' });
+  const request = { run: next, profile: f.profile, prompt: 'next', desktopTransport: { ownerThreadId: 'owner' } };
+  await assert.rejects(() => callInteractive(f.store, f.binding, 'resume', { ...request, desktopTransport: { ownerThreadId: 'another-owner' } }), /identity mismatch/);
+  assert.equal(f.requests.filter(x => x.method === 'turn/start').length, 1);
+  const endpoint = readInteractiveEndpoint(f.store, f.binding), abort = new AbortController();
+  const pending = fetch(new URL('resume', endpoint.controlUrl), { method: 'POST', headers: { authorization: `Bearer ${fs.readFileSync(endpoint.tokenPath, 'utf8')}`, 'content-type': 'application/json' }, body: JSON.stringify(request), signal: abort.signal });
+  try {
+    await until(() => entered);
+    await assert.rejects(() => callInteractive(f.store, f.binding, 'resume', request), /active|duplicate/);
+    assert.equal(f.requests.filter(x => x.method === 'turn/start').length, 1);
+    abort.abort(); await assert.rejects(pending, /abort/i);
+    await new Promise(resolve => setTimeout(resolve, 50));
+  } finally { release(); }
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert.equal(f.requests.filter(x => x.method === 'turn/start').length, 1);
+  assert.equal(f.store.read(f.binding).status, 'starting');
+  await callInteractive(f.store, f.binding, 'resume', request);
+  assert.equal(f.requests.filter(x => x.method === 'thread/start').length, 1);
+  assert.equal(f.requests.filter(x => x.method === 'turn/start').length, 2);
+  f.finish('turn-2'); await until(() => fs.existsSync(next.resultPath));
+  assert.equal(f.store.read(f.binding).sessionId, 'same-session');
 });
 
 test('warm public resume retains the live program after its executable disappears, without probing or respawning', { timeout: 25000 }, async t => {

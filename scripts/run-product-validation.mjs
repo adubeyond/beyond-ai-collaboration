@@ -61,7 +61,7 @@ function atomicWrite(target, bytes, immutable = false) {
 
 export function productCommands(sourceRoot) {
   const runtime = ['check-m3-project-identity', 'check-project-runtime-routing', 'check-worker-result-receipts', 'check-receipt-write-concurrency', 'check-receipt-list-concurrency', 'check-accept-receipt-cache-expiry', 'check-m3-workbench-transaction', 'check-workbench-upgrade-migration', 'check-shared-recovery-workbench', 'check-native-worker-return',
-    'check-cli-task-store', 'check-cli-contract', 'check-cli-context', 'check-codex-executable', 'check-cli-manager', 'check-cli-host-lifetime', 'check-cli-next-store', 'check-cli-next-bridge', 'check-cli-launcher', 'check-cli-notification', 'check-cli-workbench', 'check-cli-routing', 'check-cli-recovery', 'check-cli-goal-loop', 'check-cli-interactive', 'check-cli-zcode', 'check-zcode-capabilities', 'check-cli-claude', 'check-cli-transfer'].map(n => 'scripts/' + n + '.mjs');
+    'check-cli-task-store', 'check-cli-contract', 'check-cli-context', 'check-codex-executable', 'check-cli-manager', 'check-cli-host-lifetime', 'check-cli-next-store', 'check-cli-next-bridge', 'check-cli-launcher', 'check-cli-notification', 'check-cli-reconnect', 'check-cli-workbench', 'check-cli-routing', 'check-cli-recovery', 'check-cli-goal-loop', 'check-cli-interactive', 'check-cli-zcode', 'check-zcode-capabilities', 'check-cli-claude', 'check-cli-transfer'].map(n => 'scripts/' + n + '.mjs');
   return [
     { name: 'artifact-lifecycle', args: ['--test', '--test-concurrency=1', 'scripts/check-temporary-workspace.mjs', 'scripts/check-validation-cleanup.mjs'] },
     { name: 'backup-deduplication', args: ['scripts/check-backup-dedup-regressions.mjs'] },

@@ -171,10 +171,10 @@ export function createDesktopHost({ env = process.env, pluginRoot, sourceRecordP
       } catch (error) { close(error); }
     });
   }
-  async function withMcp(callback) {
-    if (!environment.CODEX_APP_TOOLS_PIPE_PATH) throw new Error('Desktop inherited message transport unavailable');
+  async function withMcp(callback, transportEnvironment = environment) {
+    if (!transportEnvironment.CODEX_APP_TOOLS_PIPE_PATH) throw new Error('Desktop inherited message transport unavailable');
     const entry = discoverPlugin(plugins);
-    const child = spawn(entry.command, entry.args, { cwd: entry.cwd, env: { ...environment, ...entry.env }, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(entry.command, entry.args, { cwd: entry.cwd, env: { ...transportEnvironment, ...entry.env }, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     const pending = new Map(); let next = 1, buffer = ''; const decoder = new StringDecoder('utf8');
     function rejectAll(error) { for (const p of pending.values()) p.reject(error); pending.clear(); }
     child.on('error', rejectAll); child.on('exit', code => rejectAll(new Error(`Desktop MCP exited ${code}`)));
@@ -205,6 +205,34 @@ export function createDesktopHost({ env = process.env, pluginRoot, sourceRecordP
     currentSource() {
       const facts = sourceFacts(source, owner);
       return { ownerThreadId: owner, ownerTurnId: facts.ownerTurnId, sourceRecordPath: facts.sourceRecordPath };
+    },
+    transportSnapshot() {
+      const pipePath = environment.CODEX_APP_TOOLS_PIPE_PATH;
+      if (typeof pipePath !== 'string' || !pipePath.trim() || /[\r\n\0]/.test(pipePath)) throw new Error('Desktop inherited message transport unavailable');
+      // Only the current owner's inherited pipe crosses the authenticated local
+      // resume channel. Never persist or forward the caller's full environment.
+      return { ...host.currentSource(), pipePath };
+    },
+    async refreshTransport(snapshot, expected) {
+      if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)
+        || Object.keys(snapshot).some(key => !['ownerThreadId', 'ownerTurnId', 'sourceRecordPath', 'pipePath'].includes(key))
+        || snapshot.ownerThreadId !== owner || expected?.ownerThreadId !== owner
+        || typeof snapshot.pipePath !== 'string' || !snapshot.pipePath.trim() || /[\r\n\0]/.test(snapshot.pipePath)) throw new Error('Desktop transport refresh identity mismatch');
+      const checkSource = () => {
+        const current = host.currentSource();
+        // A rejected launch can be retried by the same owner in a later turn.
+        // The saved run's original ownerTurnId stays immutable; transport must
+        // match the current source turn, not that historical dispatch intent.
+        if (snapshot.sourceRecordPath !== current.sourceRecordPath || snapshot.ownerTurnId !== current.ownerTurnId) throw new Error('Desktop transport refresh source is stale or mismatched');
+      };
+      checkSource();
+      const candidate = { ...environment, CODEX_APP_TOOLS_PIPE_PATH: snapshot.pipePath };
+      const available = await withMcp(async request => validMessageTool((await request('tools/list', {})).tools?.find(tool => tool.name === 'send_message_to_thread')), candidate);
+      if (!available) throw new Error('Desktop transport refresh capability unavailable');
+      // A different foreground turn may start while capability is negotiated.
+      // Reject that stale request without replacing the manager's working pipe.
+      checkSource();
+      environment.CODEX_APP_TOOLS_PIPE_PATH = snapshot.pipePath;
     },
     async checkCapability() {
       try { sourceFacts(source, owner); const available = await withMcp(async request => validMessageTool((await request('tools/list', {})).tools?.find(tool => tool.name === 'send_message_to_thread'))); return { available, reason: available ? null : 'Desktop message tool schema unsupported' }; }

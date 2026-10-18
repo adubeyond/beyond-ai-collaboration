@@ -17,6 +17,8 @@ const paths = {
   product: join(docs, "模板", "产品设计与契约基线模板.md"),
   architecture: join(docs, "模板", "技术架构与核心代码逻辑模板.md"),
   testing: join(docs, "模板", "测试与验收基线模板.md"),
+  stage: join(docs, "模板", "阶段方案与关键决策模板.md"),
+  handoff: join(docs, "模板", "智能体交接包模板.md"),
   task: join(docs, "模板", "任务卡模板.md"),
   designSkill: join(product, "skills", "task-design", "SKILL.md"),
   design: join(product, "skills", "task-design", "references", "complex-design-document-and-implementation.md"),
@@ -100,7 +102,7 @@ function requireLink(files, source, target, code) {
 function validateEngineeringRoutes(files) {
   requireLink(files, paths.entry, paths.guide, "entry-guide");
   requireLink(files, paths.facts, paths.guide, "facts-guide");
-  for (const target of [paths.product, paths.architecture, paths.testing]) {
+  for (const target of [paths.product, paths.architecture, paths.testing, paths.stage]) {
     requireLink(files, paths.guide, target, "engineering-owner");
     for (const start of [paths.root, paths.entry, paths.facts]) {
       assert.ok(hasRoute(files, start, target), `unreachable: ${label(start)} -> ${label(target)}`);
@@ -170,6 +172,34 @@ function validateScope(files) {
   assert.match(rule, /(?:不|不得|不可).{0,15}(?:追加|扩|无限)/, "scope-no-expansion");
 }
 
+function validateDesignScope(files) {
+  const rule = prose(paragraph(files, paths.design, /^实施切片/));
+  assert.match(rule, /任务(?:仅|只)(?:承接|覆盖)本次(?:获准|批准|授权)范围/,
+    "design-approved-scope");
+  // Check this consumer's prohibition, not an unrelated negative elsewhere in
+  // the paragraph or a matching safeguard in the PM/stage documents.
+  assert.match(rule, /(?:不(?:因整体目标更大而)?|不得|不能|不可|不应)(?:自行|擅自)?(?:扩项|扩大(?:任务)?范围|追加未获准工作)/,
+    "design-no-expansion");
+}
+
+function validateStageMaterials(files) {
+  validateDesignScope(files);
+  const stage = paragraph(files, paths.stage, /^本表表达/);
+  assert.match(stage, /不能证明.*列表查询和详情阅读/, "stage-not-full-delivery");
+  assert.match(stage, /已纳入.*批准范围.*继续交付/, "stage-approved-continuation");
+  assert.match(stage, /尚未获准.*不擅自追加/, "stage-no-expansion");
+  const update = paragraph(files, paths.stage, /^实施反馈改变方案/);
+  assert.match(update, /更新原阶段范围及完成标志.*旧限制.*不再适用的部分/, "stage-replace-local-limit");
+  assert.match(update, /其余仍有效或尚未实施的设计保留/, "stage-retain-design");
+  const reading = paragraph(files, paths.guide, /^具体任务从/);
+  assert.match(reading, /必要正文.*沿原路径补读相关部分/, "reading-not-inline-only");
+  assert.match(reading, /不全量灌入/, "reading-not-full-dump");
+  const correction = paragraph(files, paths.guide, /^在已有授权内修正/);
+  assert.match(correction, /原来会被读到的位置.*不只在文末追加/, "update-not-append-only");
+  assert.match(correction, /文件存在不证明接口已实现或业务已验收/, "update-evidence-boundary");
+  assert.match(correction, /局部替代.*仍有效的阶段设计保留/, "update-not-whole-archive");
+}
+
 test("真实文档入口可达工程正文；任务卡不能取代工程所有者", () => {
   validateEngineeringRoutes(snapshot);
   requireLink(snapshot, paths.pm, paths.dispatch, "pm-dispatch");
@@ -195,6 +225,39 @@ test("任务与工程正文分别归属，复用原文，保留有效设计并�
   validateReuse(snapshot);
   validateRetention(snapshot);
   validateScope(snapshot);
+});
+
+test("阶段目标、实际读入与局部纠旧有明确连接，普通续做不强制交接", () => {
+  validateStageMaterials(snapshot);
+  assert.match(read(snapshot, paths.handoff), /同一 Worker连续执行不使用本模板/);
+  assert.match(read(snapshot, paths.handoff), /当前正文路径、章节\/修订.*摘要不等于已读正文/);
+  assert.match(read(snapshot, paths.design), /不因此强制新增原型、UI角色或任务/);
+});
+
+test("负例：阶段缩水、擅自扩项、只读摘要或追加纠正均不能冒充接通", () => {
+  for (const [path, subject, replacement] of [
+    [paths.stage, /^本表表达/, "本表表达工程依赖；基础工程完成就证明列表查询和详情阅读完成。"],
+    [paths.stage, /^本表表达/, paragraph(snapshot, paths.stage, /^本表表达/).replace("尚未获准则保留为后续范围，不擅自追加", "尚未获准也立即追加")],
+    [paths.stage, /^实施反馈改变方案/, "实施反馈改变方案时，只在文末追加，旧限制永远保留为当前条件。"],
+    [paths.guide, /^具体任务从/, "具体任务从摘要获取全部资料，未传入的正文不用读取。"],
+    [paths.guide, /^在已有授权内修正/, "在已有授权内修正时，文件存在就证明业务已验收，整份旧设计归档。"],
+  ]) assert.throws(() => validateStageMaterials(replaceParagraph(snapshot, path, subject, replacement)), /stage-|reading-|update-/);
+});
+
+test("反向负例：设计正文删除或反转防扩项约束，其他消费者不能兜底", () => {
+  const safeguard = "不因整体目标更大而自行扩项";
+  for (const replacement of ["", "应立即追加整体目标中所有未获准工作"]) {
+    const broken = changed(snapshot, paths.design, text => text.replace(safeguard, replacement));
+    validateScope(broken); // PM still has its own correct prohibition.
+    assert.throws(() => validateDesignScope(broken), /design-no-expansion/);
+  }
+});
+
+test("设计防扩项等义改写仍通过，不要求照抄原句", () => {
+  const equivalent = changed(snapshot, paths.design, text => text
+    .replace("任务仅承接本次获准范围", "任务只覆盖本次授权范围")
+    .replace("不因整体目标更大而自行扩项", "不得擅自扩大范围"));
+  validateStageMaterials(equivalent);
 });
 
 test("负例：把正式链接改成代码路径，不算接通阅读路径", () => {

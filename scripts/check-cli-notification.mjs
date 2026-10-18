@@ -72,6 +72,40 @@ function actor(t, f, options = {}) {
   const instance = { child, result, ready }; f.actors.push(instance); return instance;
 }
 
+function attentionEvidence(f) {
+  f.store.setProcess(f.run, { pid: process.pid, startedAt: 'isolated-notification-fixture', token: crypto.randomUUID() });
+  f.store.bindSession(f.run, 'native-session');
+  const file = path.join(f.store.runDir(f.run, 1), 'attention.json');
+  fs.writeFileSync(file, JSON.stringify({ ownerThreadId: f.ownerThreadId, requestId: f.run.requestId, sessionId: 'native-session', code: 'permission-classifier-unavailable', count: 3 }));
+  return file;
+}
+
+test('nonterminal attention uses real host foreground protection, once-only claim and separate final marker', async t => {
+  const { createDesktopHost, notifyOnAttention, notifyWhenReady } = await modules(); const f = fixture(t);
+  attentionEvidence(f); f.end(); event(f, 'task_started', 'new-foreground');
+  const host = createDesktopHost(f);
+  const waiting = notifyOnAttention({ store: f.store, run: f.run, host });
+  await delay(200); assert.equal(fs.existsSync(f.calls), false);
+  assert.equal((await notifyOnAttention({ store: f.store, run: f.run, host })).status, 'suppressed');
+  event(f, 'task_complete', 'new-foreground'); assert.equal((await waiting).status, 'delivered');
+  assert.equal(fs.existsSync(f.run.resultPath), false);
+  f.finish(); assert.equal((await notifyWhenReady({ store: f.store, identity: f.binding, runNumber: 1, host })).status, 'delivered');
+  const messages = fs.readFileSync(f.calls, 'utf8').trim().split('\n').map(line => JSON.parse(line).arguments);
+  assert.equal(messages.length, 2); assert.equal(messages[0].threadId, f.ownerThreadId);
+  assert.match(messages[0].prompt, /CLI_ATTENTION_REQUIRED/); assert.match(messages[1].prompt, /CLI_RESULT_READY/);
+});
+
+test('real host rechecks recovery after entering send queue and does not send obsolete attention', async t => {
+  const { createDesktopHost, notifyOnAttention } = await modules(); const f = fixture(t);
+  const evidenceFile = attentionEvidence(f); f.end(); event(f, 'task_started', 'new-foreground');
+  const waiting = notifyOnAttention({ store: f.store, run: f.run, host: createDesktopHost(f), sourceEnd: Promise.resolve() });
+  await delay(200);
+  const evidence = JSON.parse(fs.readFileSync(evidenceFile)); evidence.recoveredAt = new Date().toISOString(); fs.writeFileSync(evidenceFile, JSON.stringify(evidence));
+  event(f, 'task_complete', 'new-foreground');
+  assert.equal((await waiting).status, 'unavailable'); assert.equal(fs.existsSync(f.calls), false);
+  assert.equal(f.store.read(f.binding).status, 'running'); assert.equal(fs.existsSync(f.run.resultPath), false);
+});
+
 test('separate managers serialize same-owner delivery; no overlapping MCP calls', async t => {
   const f = fixture(t, 'valid', 'ok', 250); f.end();
   const senders = Array.from({ length: 3 }, () => actor(t, f));

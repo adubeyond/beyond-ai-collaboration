@@ -330,11 +330,13 @@ export async function launchCliRequest(request, context) {
     if (profile.mode === 'interactive' && (!endpoint || profile.provider)) checkNativeCapability(profile);
     if (endpoint && endpoint.profileSha256 !== digest(profile)) throw new Error('Live native profile changed; detach idle view before changing model');
     if (input.continuationId && endpoint && (endpoint.status !== 'idle' || endpoint.activeTurnId)) throw new Error('CLI native session not yet idle; saved continuation retained');
+    const desktopTransport = endpoint && context.hostSpec ? createDesktopHost(context.hostSpec).transportSnapshot() : null;
+    if (desktopTransport && (desktopTransport.ownerThreadId !== context.ownerThreadId || desktopTransport.ownerTurnId !== context.ownerTurnId)) throw new Error('CLI resume Desktop source identity mismatch');
     const run = store.beginRun(input, { requestId: request.requestId, prompt: input.prompt, stage: input.stage, continuationId: input.continuationId, expectedRunNumber: input.expectedRunNumber, expectedSessionId: input.expectedSessionId, ownerTurnId: context.ownerTurnId, profile, configuration: { model: profile.model, effort: profile.effort ?? null }, initialSessionRecovery: input.initialSessionRecovery, contract: input.contract, authorizationLocator: input.authorizationLocator });
     if (endpoint) {
       const current = store.read(binding);
       if (current.status !== 'starting') return { ...run, status: current.status, stateLocator: store.locator(run) };
-      return callInteractive(store, binding, 'resume', { run, profile, prompt: input.prompt });
+      return callInteractive(store, binding, 'resume', { run, profile, prompt: input.prompt, ...(desktopTransport ? { desktopTransport } : {}) });
     }
     return startManager(store, binding, run, profile, input.prompt, context);
   }

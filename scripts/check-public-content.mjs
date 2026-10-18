@@ -203,6 +203,7 @@ const fixtureTokens = new Map([
 const fixtureWindowsPaths = [
   ["Program Files", "runtime", "${executable}"], ["runtime", "unknown"], ["other", "node.exe"],
 ].map(parts => "C:" + "\\\\" + parts.join("\\\\"));
+const environmentPaddingLiteral = "';" + "C:" + "\\\\" + "fixture-padding-'";
 
 function validateText(path, text) {
   const rel = normalizeRelative(relative(repositoryRoot, path));
@@ -254,6 +255,18 @@ function validateText(path, text) {
       checkedText = checkedText.replace(/^const windowsProcessIdentityFingerprints = \[[\s\S]*?^\];$/m,
         section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 2
           ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      // Seven already-committed hotfix files and two exact regression additions.
+      // The freeze tests verify their provenance chain and full current contents.
+      checkedText = checkedText.replace(/^const retainedHotfixFingerprints = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 14
+          ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      checkedText = checkedText.replace(/^const retainedHotfixAdditions = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*sha256: )'[0-9a-f]{64}'/gm) ?? []).length === 2
+          ? section.replace(/^(\s*sha256: )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      // Seven reviewed reconnect/attention source files; only fourteen exact pin fields.
+      checkedText = checkedText.replace(/^const cliReconnectAttentionFingerprints = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 14
+          ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
     }
     if (label === "疑似秘密赋值" && fixtureTokens.has(rel)) {
       checkedText = checkedText.replace(/\btoken\s*[:=]\s*'([^'\n]+)'/g,
@@ -264,6 +277,9 @@ function validateText(path, text) {
         checkedText = checkedText.replaceAll("path: '" + fixture + "'", "path: '<test>'")
           .replaceAll("path: `" + fixture + "`", "path: '<test>'");
       }
+    }
+    if (label === "Windows 绝对路径" && rel === "模板交付包/scripts/cli/cli-environment.test.mjs") {
+      checkedText = checkedText.replaceAll(environmentPaddingLiteral, "'<synthetic-path-padding>'");
     }
     if (pattern.test(checkedText)) {
       errors.push(`${label}：${rel}`);
@@ -277,6 +293,63 @@ function validateText(path, text) {
     errors.push(`YAML 包含 Tab 缩进：${rel}`);
   }
 }
+
+// Exercise the real detector in memory before scanning files. Do not suppress
+// scan findings: each probe removes only the findings created by that probe.
+function validateDetectorRegressions() {
+  let count = 0;
+  function probe(rel, text, expectedLabels) {
+    const start = errors.length;
+    let findings;
+    try { validateText(join(repositoryRoot, rel), text); }
+    finally { findings = errors.splice(start); }
+    const labels = findings.map(finding => finding.split('：')[0]).sort();
+    if (JSON.stringify(labels) !== JSON.stringify([...expectedLabels].sort())) {
+      throw new Error('public detector regression: ' + rel + ' expected ' + expectedLabels + ', got ' + labels);
+    }
+    count += 1;
+  }
+  const file = '模板交付包/scripts/cli/cli-environment.test.mjs';
+  const windowsLabel = 'Windows 绝对路径';
+  const hashLabel = '疑似动态 SHA-256';
+  const secretLabel = '疑似秘密赋值';
+  const privatePath = 'C:' + '\\' + ['Users', 'fixture-person', 'private.txt'].join('\\');
+  const projectPath = 'E:' + '\\' + ['private-project', 'private.txt'].join('\\');
+  const syntheticHash = 'a'.repeat(64);
+  const syntheticSecret = 'token' + ": 'not-a-real-credential'";
+  probe(file, environmentPaddingLiteral, []);
+  probe('scripts/not-an-exempt-fixture.mjs', environmentPaddingLiteral, [windowsLabel]);
+  probe(file, environmentPaddingLiteral.replace('C:', 'D:'), [windowsLabel]);
+  probe(file, environmentPaddingLiteral.replace('padding-', 'padding-private-'), [windowsLabel]);
+  probe(file, environmentPaddingLiteral + '\n' + privatePath, [windowsLabel]);
+  probe(file, environmentPaddingLiteral + ' ' + projectPath, [windowsLabel]);
+  probe(file, environmentPaddingLiteral + '\n' + syntheticHash, [hashLabel]);
+  probe(file, environmentPaddingLiteral + '\n' + syntheticSecret, [secretLabel]);
+  const report = 'docs/releases/v4.0.1-hf-20261018-validation.md';
+  probe(report, 'Validation evidence is retained outside the public package.', []);
+  probe(report, syntheticHash, [hashLabel]);
+  probe(report, syntheticSecret, [secretLabel]);
+  probe(report, privatePath, [windowsLabel]);
+  const checker = 'scripts/check-design-confirmation.mjs';
+  const source = readFileSync(join(repositoryRoot, checker), 'utf8');
+  probe(checker, source, []);
+  probe(checker, source + '\n' + syntheticHash, [hashLabel]);
+  probe(checker, source + '\n' + syntheticSecret, [secretLabel]);
+  probe(checker, source + '\n' + privatePath, [windowsLabel]);
+  for (const block of ['retainedHotfixFingerprints', 'retainedHotfixAdditions', 'cliReconnectAttentionFingerprints']) {
+    const section = source.match(new RegExp('^const ' + block + ' = \\[[\\s\\S]*?^\\];$', 'm'))?.[0];
+    if (!section) throw new Error('missing public pin block: ' + block);
+    probe(checker, source.replace(section, section.replace(/[0-9a-f]{64}/, '<missing-pin>')), [hashLabel]);
+    probe(checker, source.replace(section, section.replace('\n];', "\n  other: '" + syntheticHash + "'\n];")), [hashLabel]);
+    probe('scripts/not-an-exempt-checker.mjs', section, [hashLabel]);
+    if (block === 'cliReconnectAttentionFingerprints') {
+      probe(checker, source.replace(section, section.replace('\n];', "\n  before: '" + syntheticHash + "'\n];")), [hashLabel]);
+      probe(checker, source.replace(section, section.replace(block, 'unreviewedSourceFingerprints')), [hashLabel]);
+    }
+  }
+  return count;
+}
+const detectorRegressionCount = validateDetectorRegressions();
 
 if (strictCandidate) {
   for (const entry of readdirSync(repositoryRoot, { withFileTypes: true })) {
@@ -1159,5 +1232,5 @@ if (errors.length > 0) {
   }
   process.exitCode = 1;
 } else {
-  console.log(`公开内容验证通过：${uniqueFiles.length} 个文件；strictCandidate=${strictCandidate}`);
+  console.log(`公开内容验证通过：${uniqueFiles.length} 个文件；strictCandidate=${strictCandidate}；检测器正反向用例=${detectorRegressionCount}`);
 }

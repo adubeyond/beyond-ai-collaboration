@@ -12,7 +12,7 @@ import { readClaudeProfile, claudeArguments } from './claude-profile.mjs';
 import { claudeHookEvents, readClaudeHookText } from './claude-hook.mjs';
 
 export function createClaudeControlTransport({ url, token, signal, diagnosticPath, fetchImpl = fetch }) {
-  const fixedRoutes = new Set(['/command', '/register', '/manual', '/event', '/ended']);
+  const fixedRoutes = new Set(['/command', '/register', '/manual', '/event', '/attention', '/ended']);
   const safe = value => redact(String(value).split(token).join('[REDACTED]')).replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, '[URL]');
   async function traced(method, route, action) {
     const started = performance.now();
@@ -66,12 +66,117 @@ function backgroundCompletion(input) {
   return match?.[1] ?? null;
 }
 
+// Observe only bytes appended after an accepted instruction, in its exact native
+// transcript. No timeout guesses, transcript discovery, permission changes or stops.
+export function watchClaudeFailures({ transcriptPath, sessionId, cwd, onSignal, diagnose = () => {} }) {
+  if (!path.isAbsolute(transcriptPath ?? '') || path.basename(transcriptPath) !== `${sessionId}.jsonl`) throw new Error('Claude attention transcript identity mismatch');
+  const stat = fs.lstatSync(transcriptPath);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Claude attention transcript is not a regular file');
+  const physical = fs.realpathSync(transcriptPath), root = fs.realpathSync(cwd);
+  let offset = stat.size, pending = Buffer.alloc(0), closed = false, watcher, delivery = Promise.resolve(), alerted = false;
+  let desired = null, inFlight = null, scheduled = false, alertedTool = null, attemptedTool = null;
+  const tools = new Map(), seen = new Set(), failures = new Map();
+  const diagnostic = event => { try { diagnose({ event }); } catch { /* Observing must never stop the native task. */ } };
+  function dispatch() {
+    if (scheduled || !desired || closed) return;
+    scheduled = true;
+    let attempted;
+    delivery = delivery.then(async () => {
+      attempted = desired;
+      if (!attempted || closed) return;
+      inFlight = attempted;
+      try {
+        // A lost HTTP response does not prove the manager missed the signal.
+        // A later recovery must also clear that possibly persisted evidence.
+        if (attempted.status === 'blocked') attemptedTool ??= attempted.tool;
+        await onSignal({ ...attempted, transcriptPath: physical });
+        if (attempted.status === 'blocked') { alerted = true; alertedTool = attempted.tool; }
+        if (desired === attempted || (attempted.status === 'blocked' && desired?.status === 'blocked')) desired = null;
+      } catch { diagnostic('attention-delivery-unavailable'); }
+      finally { inFlight = null; }
+    }).finally(() => {
+      scheduled = false;
+      // Only newer evidence/recovery warrants another attempt, not a retry timer.
+      if (desired && desired !== attempted) dispatch();
+    });
+  }
+  function record(line, endOffset) {
+    let row; try { row = JSON.parse(line); } catch { return; }
+    if (row.sessionId !== sessionId || row.isSidechain || typeof row.cwd !== 'string' || path.relative(root, path.resolve(row.cwd)) !== '') return;
+    const content = row.message?.content;
+    if (!Array.isArray(content)) return;
+    for (const block of content) {
+      if (row.type === 'assistant' && block.type === 'tool_use' && typeof block.id === 'string' && /^[\w.-]{1,128}$/.test(block.name ?? '')) {
+        tools.set(block.id, block.name); if (tools.size > 512) tools.delete(tools.keys().next().value);
+      }
+      if (row.type !== 'user' || block.type !== 'tool_result' || !tools.has(block.tool_use_id) || seen.has(block.tool_use_id)) continue;
+      const tool = tools.get(block.tool_use_id); tools.delete(block.tool_use_id);
+      seen.add(block.tool_use_id); if (seen.size > 1024) seen.delete(seen.values().next().value);
+      if (!block.is_error) {
+        if (failures.has(tool)) {
+          if (alertedTool === tool || attemptedTool === tool || (inFlight?.status === 'blocked' && inFlight.tool === tool)) desired = { status: 'recovered', code: 'permission-classifier-unavailable', tool };
+          else if (desired?.tool === tool) desired = null;
+        }
+        failures.delete(tool); continue;
+      }
+      // Permission denials are not PostToolUseFailure hooks. The native transcript
+      // distinguishes a real denial from unavailable classification; do not bypass either.
+      if (row.classifierBoundary !== true || row.toolDenialKind !== 'automode-unavailable'
+        || row.permissionDecision?.decision !== 'reject' || row.permissionDecision?.reasonType !== 'classifier') continue;
+      const prior = failures.get(tool) ?? { count: 0, firstOffset: endOffset };
+      prior.count++; failures.set(tool, prior);
+      if (prior.count >= 3 && !alerted && (!attemptedTool || attemptedTool === tool)) {
+        desired = { status: 'blocked', code: 'permission-classifier-unavailable', tool, count: prior.count, firstOffset: prior.firstOffset, lastOffset: endOffset };
+      }
+    }
+  }
+  function scan() {
+    if (closed) return;
+    const beforeOffset = offset;
+    let fd;
+    try {
+      const next = fs.lstatSync(transcriptPath);
+      if (!next.isFile() || next.isSymbolicLink() || fs.realpathSync(transcriptPath) !== physical || next.size < offset) throw new Error('Claude attention transcript changed');
+      fd = fs.openSync(transcriptPath, 'r');
+      while (offset < next.size) {
+        const bytes = Buffer.alloc(Math.min(65536, next.size - offset)), length = fs.readSync(fd, bytes, 0, bytes.length, offset);
+        if (!length) break;
+        offset += length; pending = Buffer.concat([pending, bytes.subarray(0, length)]);
+        let end;
+        while ((end = pending.indexOf(10)) >= 0) {
+          const line = pending.subarray(0, end).toString('utf8'), endOffset = offset - pending.length + end + 1;
+          pending = pending.subarray(end + 1); record(line, endOffset);
+        }
+        if (pending.length > 2 * 1024 * 1024) throw new Error('Claude attention record too large');
+      }
+      if (offset > beforeOffset) dispatch();
+    } catch { close(); diagnostic('attention-observer-unavailable'); }
+    finally { if (fd !== undefined) fs.closeSync(fd); }
+  }
+  function close() { closed = true; watcher?.close(); }
+  watcher = fs.watch(path.dirname(physical), (_event, file) => { if (!file || String(file) === path.basename(physical)) scan(); });
+  watcher.on('error', () => { close(); diagnostic('attention-observer-unavailable'); });
+  scan();
+  return { close, async flush() { scan(); for (;;) { const currentDelivery = delivery; await currentDelivery; if (currentDelivery === delivery) return; } } };
+}
+
 // One live native session, one foreground instruction. Hooks carry evidence, not acceptance.
-export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming = false, deliver = sendClaudePrompt, terminate, diagnose = () => {} }) {
-  let registered = false, transport, current = null, stopped = false, ended = false, rejectedSubmission = false;
+export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming = false, deliver = sendClaudePrompt, terminate, diagnose = () => {}, observeFailures = watchClaudeFailures }) {
+  let registered = false, transport, transcriptPath, observation, current = null, stopped = false, ended = false, rejectedSubmission = false;
   const sameSession = input => { if (input.session_id !== sessionId) throw new Error('Claude session identity changed'); };
+  const observerDiagnostic = record => { try { diagnose(record); } catch { /* Optional observation must not stop execution. */ } };
+  function observe(job, input) {
+    observation?.close(); observation = null;
+    const file = input.transcript_path ?? transcriptPath;
+    if (!file) { observerDiagnostic({ event: 'attention-transcript-unavailable', runNumber: job.runNumber }); return; }
+    try {
+      observation = observeFailures({ transcriptPath: file, sessionId, cwd, diagnose: observerDiagnostic,
+        onSignal: signal => current === job && !stopped && !ended ? post('/attention', { sessionId, runNumber: job.runNumber, ...signal }) : undefined });
+    } catch { observerDiagnostic({ event: 'attention-observer-unavailable', runNumber: job.runNumber }); }
+  }
   async function report(status, text = '', error = null) {
     if (!current) return;
+    observation?.close(); observation = null;
     const job = current; current = null;
     await post('/event', { sessionId, runNumber: job.runNumber, status, finalText: text, error });
   }
@@ -101,6 +206,7 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
         if (input.model !== model && !missingOnResume && !missingAfterCompaction) throw new Error(`Claude model identity mismatch: expected ${model}; received ${String(input.model)}`);
         if (!suppliedTransport?.pipe?.startsWith('\\\\.\\pipe\\') || !suppliedTransport.token) throw new Error('Claude local messaging pipe unavailable');
         transport = suppliedTransport;
+        transcriptPath = input.transcript_path ?? transcriptPath;
         if (!registered) { await post('/register', { sessionId, model, cwd, pid }); registered = true; }
       } else if (input.hook_event_name === 'PreModelSwitch') {
         return { decision: 'block', reason: 'Ask the owner to detach the idle view and resume this same session with its next-run model and effort.' };
@@ -130,11 +236,13 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
             return { decision: 'block', reason: 'Managed input differs from the approved instruction; this run failed before execution.' };
           }
           current.seen = true;
+          observe(current, input);
           diagnose({ event: 'managed-prompt-started', at: new Date().toISOString(), sessionId, runNumber: current.runNumber });
         } else {
           if (input.prompt.trim().startsWith('<task-notification>')) return { decision: 'block', reason: 'No managed instruction is awaiting this background notification.' };
           const job = await post('/manual', { sessionId, prompt: input.prompt });
           current = { runNumber: job.runNumber, prompt: input.prompt, seen: true }; stopped = false;
+          observe(current, input);
         }
       } else if (input.hook_event_name === 'Stop') {
         if (!current) return {};
@@ -146,7 +254,7 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
         await report(text.trim() ? 'completed' : 'failed', text, text.trim() ? null : 'Claude ended without an answer');
       } else if (input.hook_event_name === 'StopFailure') {
         if (current?.seen) await report('failed', '', 'Claude API turn failed');
-      } else if (input.hook_event_name === 'SessionEnd') { ended = true; }
+      } else if (input.hook_event_name === 'SessionEnd') { ended = true; observation?.close(); observation = null; }
       else throw new Error('Unsupported Claude hook');
       return {};
     },

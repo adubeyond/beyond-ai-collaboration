@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { atomicJson, digest, sha256File, validIdentifier } from './cli-task-store.mjs';
 import { processStart, processIsGone } from './process-identity.mjs';
 import { redact, stageInstruction } from './native-cli-runner.mjs';
-import { notifyWhenReady } from './cli-notify.mjs';
+import { notifyWhenReady, notifyOnAttention } from './cli-notify.mjs';
 import { buildCliContext } from './cli-context.mjs';
 
 export async function runVisibleCli({ binding, run: firstRun, profile, prompt, store, managerIdentity, host, ready = () => {}, openWindow }) {
@@ -128,11 +128,40 @@ export async function runVisibleCli({ binding, run: firstRun, profile, prompt, s
         const status = input.status === 'completed' && !input.finalText.trim() ? 'failed' : input.status;
         log({ event: 'turn-ended', runNumber: run.runNumber, status }); finish(status, input.finalText, input.error);
         if (detached) { answer(response, 200, result); await close(); return; }
+      } else if (request.url === '/attention') {
+        if (profile.provider !== 'claude' || !native || input.sessionId !== sessionId || input.runNumber !== run.runNumber) throw new Error('Native CLI attention identity mismatch');
+        if (!active || fs.existsSync(run.resultPath)) throw new Error('Native CLI attention run already ended');
+        if (input.code !== 'permission-classifier-unavailable' || !['blocked', 'recovered'].includes(input.status) || !/^[\w.-]{1,128}$/.test(input.tool ?? '')) throw new Error('Invalid Native CLI attention');
+        const evidencePath = store.checkedPath(path.join(store.runDir(run, run.runNumber), 'attention.json'));
+        if (input.status === 'recovered') {
+          if (fs.existsSync(evidencePath)) {
+            const previous = store.readJson(evidencePath);
+            if (previous.tool === input.tool && !previous.recoveredAt) atomicJson(evidencePath, { ...previous, recoveredAt: new Date().toISOString() });
+          }
+        } else {
+          if (!Number.isSafeInteger(input.count) || input.count < 3 || !Number.isSafeInteger(input.firstOffset) || input.firstOffset < 0
+            || !Number.isSafeInteger(input.lastOffset) || input.lastOffset < input.firstOffset
+            || !path.isAbsolute(input.transcriptPath ?? '') || path.basename(input.transcriptPath) !== `${sessionId}.jsonl`) throw new Error('Invalid Native CLI attention evidence');
+          if (!fs.existsSync(evidencePath)) {
+            atomicJson(evidencePath, { schemaVersion: 1, projectId: run.projectId, taskId: run.taskId, ownerThreadId: run.ownerThreadId,
+              runNumber: run.runNumber, requestId: run.requestId, sessionId, code: input.code, tool: input.tool, count: input.count,
+              transcriptPath: input.transcriptPath, firstOffset: input.firstOffset, lastOffset: input.lastOffset, observedAt: new Date().toISOString() });
+            if (host) {
+              const sourceEnd = (async () => { for (;;) { const source = host.currentSource(); await host.waitForSourceTurnEnd(source); if (host.currentSource().ownerTurnId === source.ownerTurnId) return; } })();
+              sourceEnd.catch(() => {});
+              const work = notifyOnAttention({ store, run, host, sourceEnd }).catch(error => log({ attentionError: safe(error.message) }));
+              notifications.add(work); work.finally(() => notifications.delete(work));
+            }
+          }
+        }
       } else if (request.url === '/resume') {
         if (active || !native || !goalActive()) throw new Error('Native CLI session is not idle/active');
         if (digest(input.profile) !== digest(profile)) throw new Error('Live Native CLI profile changed; detach before changing configuration');
         const saved = store.readJson(path.join(store.runDir(input.run, input.run.runNumber), 'run.json'));
         if (digest(saved) !== digest(input.run) || saved.sessionId !== sessionId || store.read(binding).runNumber !== saved.runNumber) throw new Error('Native CLI resume run mismatch');
+        if (host?.refreshTransport) await host.refreshTransport(input.desktopTransport, saved);
+        else if (input.desktopTransport) throw new Error('Desktop transport refresh unavailable');
+        if (response.destroyed) throw new Error('Native resume caller disconnected before dispatch; retry the same request');
         run = saved; store.setProcess(run, managerIdentity); store.setChildProcess(run, native); active = true; stopSent = false; persist('running');
         command({ action: 'submit', runNumber: run.runNumber, prompt: instruction(input.prompt) }); result = { ...run, status: 'running', stateLocator: store.locator(run) };
       } else if (request.url === '/manual') {
