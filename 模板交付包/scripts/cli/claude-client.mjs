@@ -9,7 +9,7 @@ import { CliTaskStore, atomicJson, digest } from './cli-task-store.mjs';
 import { processStart, processIsGone } from './process-identity.mjs';
 import { cliEnvironment, redact } from './native-cli-runner.mjs';
 import { readClaudeProfile, claudeArguments } from './claude-profile.mjs';
-import { claudeHookEvents } from './claude-hook.mjs';
+import { claudeHookEvents, readClaudeHookText } from './claude-hook.mjs';
 
 export function createClaudeControlTransport({ url, token, signal, diagnosticPath, fetchImpl = fetch }) {
   const fixedRoutes = new Set(['/command', '/register', '/manual', '/event', '/ended']);
@@ -67,8 +67,8 @@ function backgroundCompletion(input) {
 }
 
 // One live native session, one foreground instruction. Hooks carry evidence, not acceptance.
-export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming = false, deliver = sendClaudePrompt, terminate }) {
-  let registered = false, transport, current = null, stopped = false, ended = false;
+export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming = false, deliver = sendClaudePrompt, terminate, diagnose = () => {} }) {
+  let registered = false, transport, current = null, stopped = false, ended = false, rejectedSubmission = false;
   const sameSession = input => { if (input.session_id !== sessionId) throw new Error('Claude session identity changed'); };
   async function report(status, text = '', error = null) {
     if (!current) return;
@@ -80,9 +80,9 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
     async command(command) {
       if (command.action === 'submit') {
         if (!registered || current || ended) throw new Error('Claude native session is not idle');
-        current = { runNumber: command.runNumber, prompt: command.prompt, seen: false }; stopped = false;
+        const job = current = { runNumber: command.runNumber, prompt: command.prompt, seen: false }; stopped = false; rejectedSubmission = false;
         try { await deliver(transport, command.prompt); }
-        catch (error) { await report('unknown', '', error.message); terminate(); }
+        catch (error) { if (current === job) { await report('unknown', '', error.message); terminate(); } }
       } else if (command.action === 'stop') {
         if (!current || command.runNumber !== current.runNumber) throw new Error('Claude stop run mismatch');
         stopped = true; terminate(); // Completion is recorded only after this exact child exits.
@@ -106,14 +106,31 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
         return { decision: 'block', reason: 'Ask the owner to detach the idle view and resume this same session with its next-run model and effort.' };
       } else if (input.hook_event_name === 'UserPromptSubmit') {
         if (!registered || ended || typeof input.prompt !== 'string' || !input.prompt.trim()) throw new Error('Unregistered Claude input');
+        // Record comparison evidence, not business text or transport credentials.
+        diagnose({ event: 'user-prompt-check', at: new Date().toISOString(), sessionId,
+          runNumber: current?.runNumber ?? null, currentSeen: current?.seen ?? null,
+          expectedLength: current?.prompt.length ?? null, actualLength: input.prompt.length,
+          expectedSha256: current ? crypto.createHash('sha256').update(current.prompt).digest('hex') : null,
+          actualSha256: crypto.createHash('sha256').update(input.prompt).digest('hex'),
+          promptMatches: current ? input.prompt === current.prompt : null });
+        if (rejectedSubmission) return { decision: 'block', reason: 'Managed input was rejected; the owner must review and resume this session.' };
         if (current) {
           const taskId = current.seen && !stopped && backgroundCompletion(input);
           if (taskId && current.background?.has(taskId) && !current.delivered?.has(taskId)) {
             (current.delivered ??= new Set()).add(taskId);
             return {}; // Continue the original native run; only a later Stop reports a result.
           }
-          if (current.seen || input.prompt !== current.prompt) return { decision: 'block', reason: 'The current managed instruction is still running.' };
+          if (stopped) return { decision: 'block', reason: 'The current managed instruction is stopping.' };
+          if (current.seen) return { decision: 'block', reason: 'The current managed instruction is still running.' };
+          if (input.prompt !== current.prompt) {
+            // No work began. Finish the rejected run, but do not let a repeated hook
+            // enter /manual and create an unapproved round after report clears current.
+            rejectedSubmission = true;
+            await report('failed', '', 'Claude rejected the delivered instruction: prompt content mismatch before execution');
+            return { decision: 'block', reason: 'Managed input differs from the approved instruction; this run failed before execution.' };
+          }
           current.seen = true;
+          diagnose({ event: 'managed-prompt-started', at: new Date().toISOString(), sessionId, runNumber: current.runNumber });
         } else {
           if (input.prompt.trim().startsWith('<task-notification>')) return { decision: 'block', reason: 'No managed instruction is awaiting this background notification.' };
           const job = await post('/manual', { sessionId, prompt: input.prompt });
@@ -128,7 +145,7 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
         const text = typeof input.last_assistant_message === 'string' ? input.last_assistant_message : '';
         await report(text.trim() ? 'completed' : 'failed', text, text.trim() ? null : 'Claude ended without an answer');
       } else if (input.hook_event_name === 'StopFailure') {
-        await report('failed', '', 'Claude API turn failed');
+        if (current?.seen) await report('failed', '', 'Claude API turn failed');
       } else if (input.hook_event_name === 'SessionEnd') { ended = true; }
       else throw new Error('Unsupported Claude hook');
       return {};
@@ -187,7 +204,7 @@ export async function launchClaudeView(taskFile) {
     server = http.createServer((request, response) => {
       if (request.headers.origin || request.headers.authorization !== `Bearer ${hookToken}` || request.method !== 'POST' || request.url !== '/hook') { response.writeHead(403); response.end(); return; }
       const handle = async () => {
-        let text = ''; for await (const bytes of request) { text += bytes; if (Buffer.byteLength(text) > 4 * 1024 * 1024) throw new Error('Claude hook too large'); }
+        const text = await readClaudeHookText(request);
         const { input, transport } = JSON.parse(text);
         if (input.hook_event_name === 'SessionStart') atomicJson(store.checkedPath(path.join(directory, 'claude-session-start.json')), { sessionId: input.session_id, cwd: input.cwd, reportedModel: input.model ?? null, requestedModel: profile.model, requestedEffort: profile.effort ?? null, source: input.source ?? null });
         const result = await session.hook(input, transport);
@@ -215,7 +232,11 @@ export async function launchClaudeView(taskFile) {
     await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
     identity = { pid: child.pid, startedAt: processStart(child.pid), token: crypto.randomUUID() };
     store.setChildProcess(store.readJson(path.join(directory, 'run.json')), identity); // Proof survives a trust or registration failure.
-    session = createClaudeSession({ sessionId, model: profile.model, cwd: binding.executionRoot, pid: child.pid, post, terminate, resuming: Boolean(binding.sessionId) });
+    session = createClaudeSession({ sessionId, model: profile.model, cwd: binding.executionRoot, pid: child.pid, post, terminate, resuming: Boolean(binding.sessionId),
+      diagnose(record) {
+        const currentRun = store.read(binding).runNumber;
+        fs.appendFileSync(store.checkedPath(path.join(store.runDir(binding, currentRun), 'claude-input-checks.jsonl')), JSON.stringify(record) + '\n', { mode: 0o600 });
+      } });
     startup = setTimeout(() => fail(new Error('Claude did not register its native session; inspect the visible window')), 25000);
     code = await closed;
     if (pendingError) { const line = redact(pendingError); fs.appendFileSync(stderrPath, line); process.stderr.write(line); }

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "includeWorkbenchUpdates": true,
+  "provenance": "由2026-10-18共享CLI输入阻断恢复后工作台仍停留旧结论重建；非真实派单，无外部副作用。预期动作不提供给被测模型。",
+  "cases": [
+    {"id":"worker-restored-background","role":"Worker","request":"老板：刚才的问题修好后，原会话继续就行。","facts":"W1原任务仍未完成，唯一来源PM明确。此前已向PM报告共享CLI输入故障，PM项目摘要和W1进度仍写接入不可用。现在原会话真实投递及工具执行均有证据证明恢复；其他工程验收未完。原CLI已后台接管新一轮，通知只回W1且观察已建立；本turn即将结束。没有额外授权缺口或用户禁联要求。","expectedActions":["progress_callback:PM"],"expectedState":"进行中"},
+    {"id":"worker-ordinary-background","role":"Worker","request":"老板：交给原CLI继续跑，别陪跑。","facts":"W1原任务尚未完成；原CLI后台接管、受管状态及返回W1的通知观察均已建立。本轮只有普通本地构建进度，没有共享变化、PM待裁决或此前上报的阻断；本turn即将结束。","expectedActions":[],"expectedState":"进行中"},
+    {"id":"worker-partial-restoration","role":"Worker","request":"老板：修好能跑的部分后，让原会话继续。","facts":"W1已向来源PM报告共享服务A/B两路都不可用。当前只验证了A恢复，B仍失败；两路影响其他正式任务。原CLI已后台接管A后续验证，通知已建立，W1准备结束本turn；整体目标没完成。","expectedActions":["progress_callback:PM"],"expectedState":"进行中"},
+    {"id":"worker-patch-not-proven","role":"Worker","request":"老板：刚才的问题改好了没？","facts":"W1已上报共享接入不可用。本轮只有补丁和本地单测通过，没有原路径投递成功证据，尚未启动CLI。仍可在原授权内执行一项隔离实际输入验证，没有检查点或执行边界，任务未完成。","expectedActions":["continue_local:W1"],"expectedState":"进行中"},
+    {"id":"worker-repeated-restoration","role":"Worker","request":"老板：继续原任务。","facts":"共享接入恢复已在W1上一轮回报原PM，发送成功；当前无新变化，无新增证据或影响范围。本轮只是同一原CLI继续后台构建，接管和通知均已建立，即将结束本turn。","expectedActions":[],"expectedState":"进行中"},
+    {"id":"pm-restored-running-cli","role":"PM","request":"收到W1本轮进展，请处理，同时告诉老板现在卡在哪。","facts":"已按原入口核对：W1回合completed，final进行中，明确共享输入故障在原会话实际投递和工具执行后解除；主证据已核对。CLI新一轮后台仍在运行且原W1持有通知责任。工作台W1与项目摘要仍写该输入故障，未更新。工程尚缺契约生成，不可验收。无pending、无其他受影响任务，当前允许更新工作台。","expectedActions":["update:W1","update:PM"],"expectedState":"进行中"},
+    {"id":"pm-partial-restoration","role":"PM","request":"W1回报共享服务有进展，更新一下当前判断。","facts":"原项目摘要为A/B两路不可用。W1已结束回合的进行中final及主证据确认A恢复、B未恢复；W1原CLI正在后台继续A验证。W2负责B，仍在原回合诊断，其工作台进度准确。W1进度仍写A不可用。两项整体未完成，pending为空，当前允许更新工作台。","expectedActions":["update:W1","update:PM"],"expectedState":"进行中"},
+    {"id":"pm-two-recoveries","role":"PM","request":"老板：先说明现在能做什么、还差什么；同时两条进展回报已到。","facts":"W1/W2各自完成一个回合，进行中final均可读，分别证实同一共享接入故障在各自原会话解除，主证据均核对。两者均有原CLI后台运行和通知责任，无需续派；W1仍缺正式契约消费，W2仍缺契约导出。工作台两任务和项目摘要都停在接入不可用；无pending。","expectedActions":["update:W1","update:W2","update:PM"],"expectedState":"进行中"},
+    {"id":"pm-duplicate-fact","role":"PM","request":"又收到相同恢复摘要，请处理。","facts":"本次仍为W1已核对的同一个回合和同一个证据。工作台W1和项目摘要已经准确写明共享输入恢复、剩余契约验证，原CLI仍运行。没有新证据、范围改变或pending。","expectedActions":[],"expectedState":"进行中"},
+    {"id":"pm-readonly-boundary","role":"PM","request":"老板：本轮只解释，不改工作台，不发任何消息。","facts":"已核对W1回合完成，进行中final确认共享接入恢复，工作台仍写旧阻断。原CLI已正常后台续跑，任务未完成，pending为空。","expectedActions":[],"expectedState":"进行中"},
+    {"id":"pm-old-rejected-pause","role":"PM","request":"处理W1恢复进展，仍继续当前主线。","facts":"本轮进行中final与主证据已核对：原输入故障解除，原CLI仍后台执行，通知回W1，工程尚缺契约。工作台W1和项目摘要仍是旧阻断、业务状态进行中。pending中有此前已明确不采纳并保留的W1暂停回执；不是本轮终态。没有新暂停或完成，当前允许更新工作台。","expectedActions":["update:W1","update:PM"],"expectedState":"进行中"},
+    {"id":"worker-user-forbids-message","role":"Worker","request":"老板：本轮只向我说明恢复证据，不联系PM或其他对话。","facts":"W1已核对共享输入恢复；其原CLI后台接管和通知建立，整体工程仍未完成。此前向PM上报过阻断，PM仍保留旧结论；本turn结束。","expectedActions":[],"expectedState":"进行中"}
+  ]
+}

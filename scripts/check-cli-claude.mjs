@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
+import http from 'node:http';
 import crypto from 'node:crypto';
 import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
@@ -17,7 +18,7 @@ import { callInteractive } from '../模板交付包/scripts/cli/interactive-clie
 
 async function until(check) { const end = Date.now() + 12000; while (!check()) { if (Date.now() > end) throw new Error('Claude fixture timeout'); await new Promise(resolve => setTimeout(resolve, 10)); } }
 const transport = { pipe: '\\\\.\\pipe\\fixture-claude', token: crypto.randomUUID() };
-function fixture(t, stage, { documents = false } = {}) {
+function fixture(t, stage, { documents = false, corruptFirstPrompt = false, splitUnicodePosts = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-claude-unit-'));
   const profile = { schemaVersion: 1, provider: 'claude', mode: 'interactive', ui: 'window', model: 'test-model', permissionMode: 'dontAsk', runner: { command: process.execPath, args: [] } };
   const profilePath = path.join(root, 'profile.json'); atomicJson(profilePath, profile);
@@ -29,14 +30,38 @@ function fixture(t, stage, { documents = false } = {}) {
   const store = new CliTaskStore({ controlRoot: root }); store.create(binding);
   const run = store.beginRun(binding, { requestId: 'start', prompt: 'review', stage, expectedRunNumber: 0, expectedSessionId: null });
   const identity = { ...currentProcessIdentity(), token: crypto.randomUUID() }; store.setProcess(run, identity);
-  const sessionId = crypto.randomUUID(), calls = [], callbacks = [], abort = new AbortController();
+  const sessionId = crypto.randomUUID(), calls = [], submissions = [], postRoutes = [], fragmentedRoutes = [], callbacks = [], abort = new AbortController();
   let releaseForeground, native, attached, commands, closing, deliveryError;
   const foreground = new Promise(resolve => { releaseForeground = resolve; });
   const host = { currentSource: () => ({ ownerThreadId: 'owner', ownerTurnId: 'foreground' }), waitForSourceTurnEnd: () => foreground, checkCapability: async () => ({ available: true }), send: async value => { callbacks.push(value); return { status: 'delivered' }; } };
   const endpoint = () => store.readJson(path.join(store.taskDir(binding), 'interactive.json'));
   const hook = (event, extra = {}) => native.hook({ session_id: sessionId, hook_event_name: event, ...extra }, transport);
   async function post(route, data) {
-    const ep = endpoint(), response = await fetch(new URL(route, ep.controlUrl), { method: 'POST', headers: { authorization: 'Bearer ' + fs.readFileSync(ep.tokenPath, 'utf8'), 'content-type': 'application/json' }, body: JSON.stringify(data) });
+    postRoutes.push(route);
+    const ep = endpoint(), bodyText = JSON.stringify(data), url = new URL(route, ep.controlUrl);
+    const headers = { authorization: 'Bearer ' + fs.readFileSync(ep.tokenPath, 'utf8'), 'content-type': 'application/json' };
+    if (splitUnicodePosts && bodyText.includes('中文🙂')) {
+      fragmentedRoutes.push(route);
+      const bytes = Buffer.from(bodyText), start = bytes.indexOf(Buffer.from('中文🙂'));
+      // Force separate HTTP chunks inside both a three-byte character and a four-byte emoji.
+      const cuts = [start + 1, start + Buffer.byteLength('中文') + 2];
+      return new Promise((resolve, reject) => {
+        const request = http.request(url, { method: 'POST', headers }, response => {
+          let text = ''; response.setEncoding('utf8'); response.on('data', chunk => { text += chunk; });
+          response.once('error', reject); response.once('end', () => {
+            try { const body = JSON.parse(text); if (response.statusCode !== 200) throw new Error(body.error); resolve(body); }
+            catch (error) { reject(error); }
+          });
+        });
+        request.once('error', reject);
+        void (async () => {
+          request.write(bytes.subarray(0, cuts[0])); await new Promise(resolve => setTimeout(resolve, 25));
+          request.write(bytes.subarray(cuts[0], cuts[1])); await new Promise(resolve => setTimeout(resolve, 25));
+          request.end(bytes.subarray(cuts[1]));
+        })().catch(reject);
+      });
+    }
+    const response = await fetch(url, { method: 'POST', headers, body: bodyText });
     const body = await response.json(); if (!response.ok) throw new Error(body.error); return body;
   }
   function close() {
@@ -46,17 +71,95 @@ function fixture(t, stage, { documents = false } = {}) {
   const lifetime = runVisibleCli({ binding, run, profile, prompt: 'review', store, managerIdentity: identity, host, openWindow() {
     // The real launcher records child identity before SessionStart, including failed startup.
     store.setChildProcess(run, identity);
-    native = createClaudeSession({ sessionId, model: profile.model, cwd: root, pid: process.pid, post, terminate: () => { void close(); }, deliver: async (_pipe, prompt) => { calls.push(prompt); assert.deepEqual(await hook('UserPromptSubmit', { prompt }), {}); } });
+    native = createClaudeSession({ sessionId, model: profile.model, cwd: root, pid: process.pid, post, terminate: () => { void close(); }, deliver: async (_pipe, prompt) => {
+      calls.push(prompt);
+      const corrupted = corruptFirstPrompt && calls.length === 1;
+      const received = corrupted ? prompt + '\nUnexpected transport suffix' : prompt;
+      const result = await hook('UserPromptSubmit', { prompt: received });
+      if (corrupted) assert.equal(result.decision, 'block');
+      else assert.deepEqual(result, {});
+      submissions.push({ prompt: received, result });
+    } });
     attached = hook('SessionStart', { cwd: root, model: profile.model });
     commands = (async () => { await attached; while (!abort.signal.aborted) { const ep = endpoint(), response = await fetch(ep.controlUrl + 'command', { headers: { authorization: 'Bearer ' + fs.readFileSync(ep.tokenPath, 'utf8') }, signal: abort.signal }); if (!response.ok) break; await native.command(await response.json()); } })().catch(error => { if (!abort.signal.aborted) deliveryError = error; });
     return { windowPid: process.pid, transport: 'isolated-native-fixture' };
   } });
   t.after(async () => { releaseForeground(); await close(); await lifetime; await commands; fs.rmSync(root, { recursive: true, force: true }); });
-  async function start() { await attached; await until(() => calls.length === 1); assert.ifError(deliveryError); }
+  async function start() { await attached; await until(() => submissions.length === 1 || deliveryError); assert.ifError(deliveryError); }
   function review(decision = 'continue') { const state = store.read(binding); return store.recordReview({ ...binding, runNumber: state.runNumber, resultSha256: sha256File(path.join(store.runDir(binding, state.runNumber), 'result.json')), decision, evidenceLocator: 'file:fixture', conclusion: 'independent verification', reviewedAt: new Date().toISOString() }); }
   async function finish(text = 'answer', extra = {}) { await hook('Stop', { last_assistant_message: text, background_tasks: [], session_crons: [], ...extra }); }
-  return { root, binding, profile, store, run, contextFiles, sessionId, callbacks, calls, start, hook, finish, review, releaseForeground, close, lifetime, endpoint };
+  return { root, binding, profile, store, run, contextFiles, sessionId, callbacks, calls, submissions, postRoutes, fragmentedRoutes, post, start, hook, finish, review, releaseForeground, close, lifetime, endpoint };
 }
+
+test('rejected first Claude delivery persists one failure and resumes the same session after owner review', { timeout: 25000 }, async t => {
+  const f = fixture(t, undefined, { corruptFirstPrompt: true }); await f.start();
+  const failedBytes = fs.readFileSync(f.run.resultPath, 'utf8'), failed = JSON.parse(failedBytes);
+  assert.equal(failed.status, 'failed'); assert.equal(failed.finalText, '');
+  assert.equal(failed.sessionId, f.sessionId); assert.ok(failed.error);
+  assert.doesNotMatch(failedBytes, /Unexpected transport suffix/);
+  assert.equal(f.store.read(f.binding).status, 'failed'); assert.equal(f.store.read(f.binding).runNumber, 1);
+  assert.equal(f.endpoint().status, 'idle');
+  assert.equal(f.postRoutes.filter(route => route === '/event').length, 1);
+  assert.equal(f.callbacks.length, 0); f.releaseForeground(); await until(() => f.callbacks.length === 1);
+  assert.equal(f.callbacks[0].ownerThreadId, f.binding.ownerThreadId);
+  assert.match(f.callbacks[0].prompt, /runNumber=1\nstatus=failed/);
+
+  // Rejected-input replays must not become an unreviewed manual continuation.
+  for (const prompt of [f.submissions[0].prompt, f.submissions[0].prompt, f.calls[0], 'unapproved manual continuation']) {
+    assert.equal((await f.hook('UserPromptSubmit', { prompt })).decision, 'block');
+  }
+  await f.hook('StopFailure'); await f.finish('late result must not overwrite the rejection');
+  assert.equal(f.postRoutes.filter(route => route === '/manual').length, 0);
+  assert.equal(f.postRoutes.filter(route => route === '/event').length, 1);
+  assert.equal(f.store.read(f.binding).runNumber, 1); assert.equal(f.endpoint().status, 'idle');
+  assert.equal(fs.readFileSync(f.run.resultPath, 'utf8'), failedBytes); assert.equal(f.callbacks.length, 1);
+
+  f.review();
+  const next = f.store.beginRun(f.binding, { requestId: 'after-rejected-delivery', prompt: 'retry the approved work', expectedRunNumber: 1, expectedSessionId: f.sessionId });
+  await callInteractive(f.store, f.binding, 'resume', { run: next, profile: f.profile, prompt: 'retry the approved work' });
+  await until(() => f.submissions.length === 2);
+  assert.deepEqual(f.submissions[1].result, {}); assert.equal(f.store.read(f.binding).sessionId, f.sessionId);
+  assert.equal(f.endpoint().status, 'running'); assert.equal(f.store.read(f.binding).status, 'running');
+  assert.equal((await f.hook('UserPromptSubmit', { prompt: f.calls[1] })).decision, 'block');
+  assert.equal((await f.hook('UserPromptSubmit', { prompt: f.calls[1] })).decision, 'block');
+  assert.equal((await f.hook('UserPromptSubmit', { prompt: 'unrelated input while the resumed run is busy' })).decision, 'block');
+  assert.equal(fs.existsSync(next.resultPath), false); assert.equal(f.postRoutes.filter(route => route === '/event').length, 1);
+  await f.finish('recovered in the original session'); await until(() => f.callbacks.length === 2);
+  const completed = f.store.readResult(f.binding, 2);
+  assert.equal(completed.status, 'completed'); assert.equal(completed.finalText, 'recovered in the original session');
+  assert.equal(completed.sessionId, f.sessionId); assert.equal(f.store.read(f.binding).runNumber, 2);
+  assert.equal(f.store.read(f.binding).status, 'completed'); assert.equal(f.endpoint().status, 'idle');
+  assert.equal(fs.readFileSync(f.run.resultPath, 'utf8'), failedBytes);
+  assert.equal(f.postRoutes.filter(route => route === '/register').length, 1);
+  assert.equal(f.postRoutes.filter(route => route === '/manual').length, 0); assert.equal(f.calls.length, 2);
+  assert.equal(f.callbacks.filter(callback => /runNumber=1\n/.test(callback.prompt)).length, 1);
+  assert.match(f.callbacks[1].prompt, /runNumber=2\nstatus=completed/);
+  assert.deepEqual(f.store.readJson(f.binding.profilePath), f.profile);
+});
+
+test('Claude owner HTTP preserves split UTF-8 in manual input, resumed instruction and final answers', { timeout: 25000 }, async t => {
+  const f = fixture(t, undefined, { splitUnicodePosts: true }); await f.start();
+  const firstAnswer = '第一轮中文🙂结果'; await f.finish(firstAnswer);
+  assert.equal(f.store.readResult(f.binding, 1).finalText, firstAnswer);
+
+  const manualPrompt = '手动继续中文🙂原任务';
+  assert.deepEqual(await f.hook('UserPromptSubmit', { prompt: manualPrompt }), {});
+  assert.equal(f.store.readJson(path.join(f.store.runDir(f.binding, 2), 'input.json')).prompt, manualPrompt);
+  const secondAnswer = '第二轮中文🙂结果'; await f.finish(secondAnswer);
+  assert.equal(f.store.readResult(f.binding, 2).finalText, secondAnswer);
+
+  f.review();
+  const resumePrompt = '负责人续跑中文🙂原任务';
+  const next = f.store.beginRun(f.binding, { requestId: 'unicode-resume', prompt: resumePrompt, expectedRunNumber: 2, expectedSessionId: f.sessionId });
+  await f.post('/resume', { run: next, profile: f.profile, prompt: resumePrompt }); await until(() => f.submissions.length === 2);
+  assert.ok(f.calls[1].endsWith(`Current authorized instruction: ${resumePrompt}`));
+  assert.equal(f.store.readJson(path.join(f.store.runDir(f.binding, 3), 'input.json')).prompt, resumePrompt);
+  const thirdAnswer = '第三轮中文🙂结果'; await f.finish(thirdAnswer);
+  assert.equal(f.store.readResult(f.binding, 3).finalText, thirdAnswer);
+  assert.deepEqual(f.fragmentedRoutes, ['/event', '/manual', '/event', '/resume', '/event']);
+  assert.equal(f.store.read(f.binding).sessionId, f.sessionId); assert.equal(f.store.read(f.binding).status, 'completed');
+  assert.equal(f.endpoint().status, 'idle');
+});
 
 test('Claude delivery contains current document bodies on both rounds of its original session', { timeout: 25000 }, async t => {
   const stage = { goal: 'Check the current sources', acceptance: 'Evidence matches the approved sources' };

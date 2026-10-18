@@ -8,7 +8,10 @@ import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const fixture = JSON.parse(fs.readFileSync(path.join(root, 'scripts/fixtures/pm-progress-decisions.json'), 'utf8'));
+const fixtureIndex = process.argv.indexOf('--fixture');
+const fixtureName = fixtureIndex < 0 ? 'scripts/fixtures/pm-progress-decisions.json' : process.argv[fixtureIndex + 1];
+if (!fixtureName || fixtureName.startsWith('--')) throw Error('--fixture requires a fixture file');
+const fixture = JSON.parse(fs.readFileSync(path.resolve(root, fixtureName), 'utf8'));
 const product = '模板交付包/';
 const changedRules = ['skills/identity-pm/SKILL.md', 'skills/identity-pm/references/lifecycle-and-closeout.md',
   'skills/identity-pm/references/cross-task-coordination.md', 'skills/identity-worker/SKILL.md'];
@@ -22,6 +25,7 @@ const write = (file, data) => fs.writeFileSync(file, typeof data === 'string' ? 
 const sourceHome = process.env.CODEX_HOME ?? path.join(os.homedir(), '.codex');
 const cli = process.env.BEYOND_PROBE_CLI ?? path.join(process.env.APPDATA ?? '', 'npm/codex.ps1');
 const kinds = ['send', 'continue_local', 'accept', 'pause', 'ack', 'enqueue', 'progress_callback', 'terminal_callback', 'wait', 'create', 'close'];
+if (fixture.includeWorkbenchUpdates) kinds.push('update');
 const schema = {
   description: 'actions只记录本轮实际执行的副作用。wait仅表示调用阻塞等待工具，不包括结束回答后等待用户确认；后者在userReply说明。target统一填所属Worker的W编号（ack也如此），回源统一填PM，不填回执编号或角色别称。',
   type: 'object', additionalProperties: false, required: ['results'], properties: { results: {
@@ -38,7 +42,8 @@ const schema = {
 
 function decisionInput(rules) {
   const cases = fixture.cases.map(({ expectedActions, expectedState, ...input }) => input);
-  return `这是隔离决策测试，不是真实任务派发。不要调用业务工具或联系任务。以下是本轮唯一使用的产品规则全文：\n${Object.entries(rules).map(([f, t]) => `\n--- ${f} ---\n${t}`).join('\n')}\n\n分别处理下面每个独立场景，场景之间不共享状态。事实均由测试环境提供，已说明核对完成的内容可直接使用，不必虚构再次读取。不要解释规则，给出该角色本轮确实需要执行的有副作用动作及面向用户的回答。actions只记录发送任务消息、继续本地业务、验收/暂停/ack/enqueue、回源、等待、新建或关闭；普通读取不计入。没有必要动作就空数组，不为填表制造动作。Worker阶段结果未完成的businessState仍是进行中，continue_local指本轮继续做业务而非结束后自我续派。不同任务状态可用混合。发送动作purpose须说明具体剩余结果或已解除条件。reason简述判断，userReply用人话完整回答当前问题，不捏造尚未执行的成果。只返回符合下列schema的JSON。\n${JSON.stringify(schema)}\n${JSON.stringify(cases, null, 2)}`;
+  const updateInstruction = fixture.includeWorkbenchUpdates ? ' 本组另记录工作台更新为update：target为W编号时只更新该任务，target为PM时只更新项目摘要。一次事务含多个对象时逐对象列出，purpose写实际保留和替换的事实。' : '';
+  return `这是隔离决策测试，不是真实任务派发。不要调用业务工具或联系任务。以下是本轮唯一使用的产品规则全文：\n${Object.entries(rules).map(([f, t]) => `\n--- ${f} ---\n${t}`).join('\n')}\n\n分别处理下面每个独立场景，场景之间不共享状态。事实均由测试环境提供，已说明核对完成的内容可直接使用，不必虚构再次读取。不要解释规则，给出该角色本轮确实需要执行的有副作用动作及面向用户的回答。actions只记录发送任务消息、继续本地业务、验收/暂停/ack/enqueue、回源、等待、新建或关闭；普通读取不计入。${updateInstruction}没有必要动作就空数组，不为填表制造动作。Worker阶段结果未完成的businessState仍是进行中，continue_local指本轮继续做业务而非结束后自我续派。不同任务状态可用混合。发送动作purpose须说明具体剩余结果或已解除条件。reason简述判断，userReply用人话完整回答当前问题，不捏造尚未执行的成果。只返回符合下列schema的JSON。\n${JSON.stringify(schema)}\n${JSON.stringify(cases, null, 2)}`;
 }
 
 function evaluate(output) {
@@ -72,12 +77,15 @@ if (process.argv.includes('--check-fixtures')) {
     const [kind, target] = a.split(':'); return { kind, target, purpose: 'checker self-test' };
   }), businessState: c.expectedState })) };
   if (evaluate(good).failures.length) throw Error('checker rejected its oracle');
+  const nonempty = good.results.findIndex(r => r.actions.length);
   const mutations = [
     data => data.results[0].actions.push({ kind: 'send', target: 'W5' }),
-    data => { data.results[3].actions = []; },
-    data => { data.results[7].actions.reverse(); },
-    data => { data.results[15].actions.pop(); },
+    data => { data.results[nonempty].actions = []; },
+    data => { data.results[0].businessState = 'invalid'; },
+    data => { data.results.pop(); },
   ];
+  const ordered = good.results.findIndex(r => r.actions.some(a => a.kind === 'ack'));
+  if (ordered >= 0) mutations.push(data => { data.results[ordered].actions.reverse(); });
   for (const mutate of mutations) { const data = structuredClone(good); mutate(data); if (!evaluate(data).failures.length) throw Error('checker missed mutation'); }
   console.log(JSON.stringify({ cases: fixture.cases.length, checkerMutations: mutations.length, passed: true }));
 } else if (process.argv.includes('--evaluate')) {
@@ -173,5 +181,5 @@ if (process.argv.includes('--check-fixtures')) {
   }
   if (runs.some(r => r.variant === 'candidate' && r.failures.length)) process.exitCode = 1;
 } else {
-  console.log('Usage: --check-fixtures | --prepare-native [--baseline-ref <ref>] | --run [--baseline-ref <ref>] | --evaluate <final.json>');
+  console.log('Usage: [--fixture <file>] --check-fixtures | --prepare-native [--baseline-ref <ref>] | --run [--baseline-ref <ref>] | --evaluate <final.json>');
 }

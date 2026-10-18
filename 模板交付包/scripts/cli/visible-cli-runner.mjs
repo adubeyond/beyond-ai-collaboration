@@ -98,6 +98,7 @@ export async function runVisibleCli({ binding, run: firstRun, profile, prompt, s
     }
     const handle = async () => {
       if (request.method !== 'POST') throw new Error('Unsupported Native CLI request');
+      request.setEncoding('utf8'); // Preserve multibyte prompt/result characters across HTTP chunks.
       let text = ''; for await (const bytes of request) { text += bytes; if (Buffer.byteLength(text) > 1024 * 1024) throw new Error('Native CLI request too large'); }
       const input = JSON.parse(text || '{}');
       if (closing && !['/event', '/ended'].includes(request.url)) throw new Error('Native CLI view is closing');

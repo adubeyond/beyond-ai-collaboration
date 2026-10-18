@@ -3,6 +3,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const claudeHookEvents = ['SessionStart', 'UserPromptSubmit', 'Stop', 'StopFailure', 'SessionEnd', 'PreModelSwitch'];
+export async function readClaudeHookText(stream) {
+  // A Chinese character or emoji can span stdin or HTTP chunks. Decode as one stream.
+  stream.setEncoding('utf8');
+  let text = '', bytes = 0;
+  for await (const chunk of stream) {
+    bytes += Buffer.byteLength(chunk);
+    if (bytes > 4 * 1024 * 1024) throw new Error('Claude hook input too large');
+    text += chunk;
+  }
+  return text;
+}
 export async function forwardClaudeHook(event, input, connection, env = process.env) {
   if (!claudeHookEvents.includes(event) || input.hook_event_name !== event || typeof input.session_id !== 'string' || !input.session_id) throw new Error('Invalid Claude hook identity');
   const url = new URL(connection.url);
@@ -14,7 +25,7 @@ export async function forwardClaudeHook(event, input, connection, env = process.
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    let text = ''; for await (const chunk of process.stdin) { text += chunk; if (Buffer.byteLength(text) > 4 * 1024 * 1024) throw new Error('Claude hook input too large'); }
+    const text = await readClaudeHookText(process.stdin);
     const connection = JSON.parse(fs.readFileSync(process.env.BEYOND_CLAUDE_HOOK_CONNECTION, 'utf8'));
     process.stdout.write(JSON.stringify(await forwardClaudeHook(process.argv[2], JSON.parse(text), connection)));
   } catch {
