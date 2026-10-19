@@ -75,8 +75,46 @@ export function watchClaudeFailures({ transcriptPath, sessionId, cwd, onSignal, 
   const physical = fs.realpathSync(transcriptPath), root = fs.realpathSync(cwd);
   let offset = stat.size, pending = Buffer.alloc(0), closed = false, watcher, delivery = Promise.resolve(), alerted = false;
   let desired = null, inFlight = null, scheduled = false, alertedTool = null, attemptedTool = null;
-  const tools = new Map(), seen = new Set(), failures = new Map();
+  const tools = new Map(), toolInputs = new Map(), seen = new Set(), failures = new Map();
+  // Explicit questions/denials are independent incidents within a native turn.
+  // Keep only identifiers and offsets; business questions and credentials stay
+  // in the native transcript, not in the wake-up message or managed evidence.
+  const incidents = new Map(), pendingIncidents = new Map(), knownQuestions = new Set();
+  let incidentDeliveryScheduled = false;
   const diagnostic = event => { try { diagnose({ event }); } catch { /* Observing must never stop the native task. */ } };
+  function incident(code, itemId, tool, firstOffset, lastOffset, inputDigest = null) {
+    if (!/^[\w.-]{1,128}$/.test(itemId ?? '')) return;
+    const key = `${code}:${itemId}`;
+    if (incidents.has(key)) return;
+    const item = { signal: { status: 'blocked', code, itemId, tool, count: 1, firstOffset, lastOffset }, inputDigest, attempted: false, failed: false };
+    incidents.set(key, item); pendingIncidents.set(key, item.signal);
+  }
+  function resolveIncident(key) {
+    const item = incidents.get(key);
+    if (!item) return;
+    incidents.delete(key);
+    // Cancel an unsent question answered in the same batch; if delivery might
+    // have reached the manager, explicitly resolve it even after a lost reply.
+    if (item.attempted) pendingIncidents.set(key, { ...item.signal, status: 'recovered' });
+    else pendingIncidents.delete(key);
+  }
+  function dispatchIncidents() {
+    if (incidentDeliveryScheduled || !pendingIncidents.size || closed) return;
+    incidentDeliveryScheduled = true;
+    delivery = delivery.then(async () => {
+      while (!closed && pendingIncidents.size) {
+        const [key, signal] = pendingIncidents.entries().next().value;
+        pendingIncidents.delete(key);
+        if (signal.status === 'blocked') {
+          const item = incidents.get(key);
+          if (!item) continue;
+          item.attempted = true;
+        }
+        try { await onSignal({ ...signal, transcriptPath: physical }); const item = incidents.get(key); if (item) item.failed = false; }
+        catch { const item = incidents.get(key); if (item) item.failed = true; diagnostic('attention-delivery-unavailable'); }
+      }
+    }).finally(() => { incidentDeliveryScheduled = false; if (pendingIncidents.size) dispatchIncidents(); });
+  }
   function dispatch() {
     if (scheduled || !desired || closed) return;
     scheduled = true;
@@ -100,24 +138,56 @@ export function watchClaudeFailures({ transcriptPath, sessionId, cwd, onSignal, 
       if (desired && desired !== attempted) dispatch();
     });
   }
-  function record(line, endOffset) {
+  function record(line, endOffset, startOffset) {
     let row; try { row = JSON.parse(line); } catch { return; }
-    if (row.sessionId !== sessionId || row.isSidechain || typeof row.cwd !== 'string' || path.relative(root, path.resolve(row.cwd)) !== '') return;
+    if (row.sessionId !== sessionId || row.isSidechain || typeof row.cwd !== 'string' || !path.isAbsolute(row.cwd)) return;
+    // Native compaction can retain a real project subdirectory in transcript
+    // records. Keep the bound session/root, and reject missing or escaping cwd.
+    let relative;
+    try {
+      const actualCwd = fs.realpathSync(row.cwd);
+      if (!fs.statSync(actualCwd).isDirectory()) return;
+      relative = path.relative(root, actualCwd);
+    } catch { return; }
+    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return;
     const content = row.message?.content;
     if (!Array.isArray(content)) return;
     for (const block of content) {
       if (row.type === 'assistant' && block.type === 'tool_use' && typeof block.id === 'string' && /^[\w.-]{1,128}$/.test(block.name ?? '')) {
-        tools.set(block.id, block.name); if (tools.size > 512) tools.delete(tools.keys().next().value);
+        tools.set(block.id, block.name); toolInputs.set(block.id, block.input && typeof block.input === 'object' ? digest(block.input) : null);
+        if (tools.size > 512) { const oldest = tools.keys().next().value; tools.delete(oldest); toolInputs.delete(oldest); }
+        if (block.name === 'AskUserQuestion' && !knownQuestions.has(block.id)) {
+          knownQuestions.add(block.id); if (knownQuestions.size > 512) knownQuestions.delete(knownQuestions.values().next().value);
+          // A concrete follow-up question replaces an unsent generic denial
+          // reminder. This cancels notification only; it never grants permission.
+          for (const [key, item] of incidents) if (item.signal.code === 'permission-denied') resolveIncident(key);
+          incident('question-awaiting-answer', block.id, block.name, startOffset, endOffset);
+        }
       }
       if (row.type !== 'user' || block.type !== 'tool_result' || !tools.has(block.tool_use_id) || seen.has(block.tool_use_id)) continue;
-      const tool = tools.get(block.tool_use_id); tools.delete(block.tool_use_id);
+      const tool = tools.get(block.tool_use_id), inputDigest = toolInputs.get(block.tool_use_id);
+      tools.delete(block.tool_use_id); toolInputs.delete(block.tool_use_id);
       seen.add(block.tool_use_id); if (seen.size > 1024) seen.delete(seen.values().next().value);
+      if (tool === 'AskUserQuestion') resolveIncident(`question-awaiting-answer:${block.tool_use_id}`);
       if (!block.is_error) {
+        // A different PowerShell command succeeding does not resolve a refused
+        // deployment. Only identical tool input can cancel that reminder.
+        if (inputDigest) for (const [key, item] of incidents)
+          if (item.signal.code === 'permission-denied' && item.signal.tool === tool && item.inputDigest === inputDigest) resolveIncident(key);
         if (failures.has(tool)) {
           if (alertedTool === tool || attemptedTool === tool || (inFlight?.status === 'blocked' && inFlight.tool === tool)) desired = { status: 'recovered', code: 'permission-classifier-unavailable', tool };
           else if (desired?.tool === tool) desired = null;
         }
         failures.delete(tool); continue;
+      }
+      if (row.classifierBoundary === true && row.toolDenialKind === 'automode-blocked'
+        && row.permissionDecision?.decision === 'reject' && row.permissionDecision?.reasonType === 'classifier') {
+        // Repeated denials of the same tool remain one outstanding incident,
+        // rather than repeatedly waking the owner while the model retries it.
+        const existing = [...incidents.entries()].find(([, item]) => item.signal.code === 'permission-denied' && item.signal.tool === tool && inputDigest && item.inputDigest === inputDigest);
+        if (!existing) incident('permission-denied', block.tool_use_id, tool, startOffset, endOffset, inputDigest);
+        else if (existing[1].failed) pendingIncidents.set(existing[0], existing[1].signal);
+        continue;
       }
       // Permission denials are not PostToolUseFailure hooks. The native transcript
       // distinguishes a real denial from unavailable classification; do not bypass either.
@@ -145,11 +215,12 @@ export function watchClaudeFailures({ transcriptPath, sessionId, cwd, onSignal, 
         let end;
         while ((end = pending.indexOf(10)) >= 0) {
           const line = pending.subarray(0, end).toString('utf8'), endOffset = offset - pending.length + end + 1;
-          pending = pending.subarray(end + 1); record(line, endOffset);
+          const startOffset = offset - pending.length;
+          pending = pending.subarray(end + 1); record(line, endOffset, startOffset);
         }
         if (pending.length > 2 * 1024 * 1024) throw new Error('Claude attention record too large');
       }
-      if (offset > beforeOffset) dispatch();
+      if (offset > beforeOffset) { dispatch(); dispatchIncidents(); }
     } catch { close(); diagnostic('attention-observer-unavailable'); }
     finally { if (fd !== undefined) fs.closeSync(fd); }
   }
@@ -198,7 +269,14 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
       sameSession(input);
       if (input.agent_id) return {}; // Never bind a subagent's lifecycle to the owner's turn.
       if (input.hook_event_name === 'SessionStart') {
-        if (fs.realpathSync(input.cwd) !== fs.realpathSync(cwd)) throw new Error('Claude cwd identity mismatch');
+        const actualCwd = fs.realpathSync(input.cwd), root = fs.realpathSync(cwd);
+        const relative = path.relative(root, actualCwd);
+        // Native compaction keeps the current shell directory. A build inside a
+        // project subdirectory must not invalidate this already-bound session.
+        // Initial/resume binding stays exact; real paths reject junction escapes.
+        const projectCompaction = registered && input.source === 'compact'
+          && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+        if (actualCwd !== root && !projectCompaction) throw new Error('Claude cwd identity mismatch');
         // This native version omits model in resume hooks. The explicit --model argument
         // still owns selection; only an exact saved-session resume may use that evidence.
         const missingOnResume = input.model == null && input.source === 'resume' && resuming;

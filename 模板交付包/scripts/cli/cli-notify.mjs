@@ -1,6 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { atomicJson, sha256File } from './cli-task-store.mjs';
+import { atomicJson, sha256File, digest } from './cli-task-store.mjs';
+
+export function attentionPaths(store, run, { code = 'permission-classifier-unavailable', itemId } = {}) {
+  const directory = store.runDir(run, run.runNumber);
+  const legacy = code === 'permission-classifier-unavailable';
+  if (!legacy && (!['question-awaiting-answer', 'permission-denied'].includes(code) || !/^[\w.-]{1,128}$/.test(itemId ?? ''))) throw new Error('Invalid CLI attention identity');
+  const stem = legacy ? 'attention' : `attention-${digest([code, itemId])}`;
+  return { evidencePath: store.checkedPath(path.join(directory, `${stem}.json`)), markerPath: store.checkedPath(path.join(directory, `${stem}-notification.json`)) };
+}
 
 export async function notifyWhenReady({ store, identity, runNumber, host, sourceEnd }) {
   const result = store.readResult(identity, runNumber);
@@ -24,14 +32,15 @@ export async function notifyWhenReady({ store, identity, runNumber, host, source
 
 // An evidence-backed attention signal is not a final, acceptance or stop request.
 // Keep its claim separate so it cannot consume the eventual result notification.
-export async function notifyOnAttention({ store, run, host, sourceEnd }) {
+export async function notifyOnAttention({ store, run, host, sourceEnd, attention = { code: 'permission-classifier-unavailable' } }) {
   const directory = store.runDir(run, run.runNumber);
-  const evidencePath = store.checkedPath(path.join(directory, 'attention.json'));
-  const markerPath = store.checkedPath(path.join(directory, 'attention-notification.json'));
+  const { evidencePath, markerPath } = attentionPaths(store, run, attention);
   const eligible = () => {
     try {
       const state = store.currentRun(run), evidence = store.readJson(evidencePath);
       return state.status === 'running' && state.sessionId === evidence.sessionId
+        && evidence.projectId === run.projectId && evidence.taskId === run.taskId && evidence.runNumber === run.runNumber
+        && evidence.code === attention.code && evidence.itemId === attention.itemId
         && evidence.ownerThreadId === run.ownerThreadId && evidence.requestId === run.requestId
         && !evidence.recoveredAt && !fs.existsSync(path.join(directory, 'result.json'))
         && !fs.existsSync(path.join(directory, 'stop.json'));
@@ -50,9 +59,14 @@ export async function notifyOnAttention({ store, run, host, sourceEnd }) {
       const capability = await host.checkCapability();
       if (!capability.available) outcome = { status: 'unavailable', error: capability.reason };
       else {
-        const prompt = ['CLI_ATTENTION_REQUIRED（执行异常待负责人判断，不是终态）', `projectId=${run.projectId}`, `taskId=${run.taskId}`, `runNumber=${run.runNumber}`,
-          '原会话连续遇到权限分类服务不可用，可能无法继续执行；尚无本轮最终结果。', `evidencePath=${evidencePath}`, `sha256=${sha256File(evidencePath)}`,
-          '请核对当前用户目标、本轮证据与原会话现状，判断如何处理；保持当前主问题完整。此通知不授权停止、重建、切换模型或绕过权限，不代表完成、暂停或验收。'].join('\n');
+        const description = attention.code === 'question-awaiting-answer'
+          ? '原会话提出了需要回答的问题；请核对是否仍在等待，不能把运行中当作正在推进。'
+          : attention.code === 'permission-denied'
+            ? '原会话遇到明确权限拒绝；请核对其影响和当前是否仍受阻，不能自动批准或绕过拒绝。'
+            : '原会话连续遇到权限分类服务不可用，可能无法继续执行；尚无本轮最终结果。';
+        const prompt = ['CLI_ATTENTION_REQUIRED（执行异常或问题待负责人判断，不是终态）', `projectId=${run.projectId}`, `taskId=${run.taskId}`, `runNumber=${run.runNumber}`,
+          description, `evidencePath=${evidencePath}`, `sha256=${sha256File(evidencePath)}`,
+          '请沿证据定位原问题，核对当前目标和已有授权；在授权内完成技术核查与处理，需要新增业务决定或安全授权时向用户说明事实和建议，不原样转交未经核实的选项。保持当前主问题完整。此通知不授权停止、重建、切换模型、代替用户批准或绕过权限，不代表完成、暂停或验收。'].join('\n');
         outcome = await host.send({ ownerThreadId: run.ownerThreadId, prompt, beforeSend: eligible });
       }
     }

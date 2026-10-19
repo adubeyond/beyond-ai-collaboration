@@ -194,6 +194,33 @@ test('partial shared recovery updates A and its summary without clearing B or co
   assertPreserved(f);
 });
 
+test('HTTP recovery can update a paused business record without resuming it or consuming old receipts', () => {
+  const f = fixture();
+  // Fixture the user's existing pause via the permitted transaction interface;
+  // this is not an inference that an HTTP recovery authorizes business resume.
+  f.call('workbench.update', {
+    projectId, operationId: 'fixture-existing-pause', taskId: 'task-a',
+    expectedStatus: '进行中', status: '已暂停', progress: 'HTTP 503; user requested no business resume',
+    pause: 'User has not authorized business resumption', result: f.evidenceA, updatedAt: recoveryTime,
+  });
+  const beforeB = f.store().snapshot().tasks['task-b'];
+  const beforeActions = f.actions.length;
+  f.call('workbench.update', {
+    projectId, operationId: 'http-fact-only', taskId: 'task-a',
+    expectedStatus: '已暂停', status: '已暂停', progress: 'HTTP 200 empty response verified; data coverage and release acceptance outstanding',
+    pause: 'User has not authorized business resumption', result: f.evidenceA, updatedAt: laterTime,
+  });
+  const state = f.store().snapshot();
+  assert.equal(state.tasks['task-a'].status, '已暂停');
+  assert.equal(state.tasks['task-a'].worker, 'worker-a');
+  assert.match(state.tasks['task-a'].pause, /not authorized/);
+  assert.match(f.store().view(), /HTTP 200 empty response verified/);
+  assert.deepEqual(state.tasks['task-b'], beforeB);
+  assert.deepEqual(f.actions.slice(beforeActions), ['workbench.update']);
+  for (const [index, root] of f.immutableRoots.entries()) assert.deepEqual(treeBytes(root), f.immutableBytes[index]);
+  assert.equal(f.cli.read(f.bindings.a).sessionId, 'fixture-session-a');
+});
+
 test('same operation replay is byte-stable and changed reuse is rejected', () => {
   const f = fixture();
   const recovered = updateA(f);

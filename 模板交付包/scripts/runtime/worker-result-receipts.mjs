@@ -304,7 +304,7 @@ export class WorkerResultReceiptStore {
     return { count: records.length, records };
   }
 
-  acknowledge(raw) {
+  acknowledge(raw, beforeRemove) {
     if (this.readOnly) throw new Error('read-only Worker result store does not accept mutations');
     const input = object(raw, 'Worker result receipt acknowledgement');
     const projectId = identifier(input.projectId, 'projectId');
@@ -321,6 +321,9 @@ export class WorkerResultReceiptStore {
       if (workerThreadId && record.workerThreadId && record.workerThreadId !== workerThreadId) {
         throw new Error('Worker result receipt owner mismatch');
       }
+      // Runtime commit validation must run while this receipt is locked: a newer
+      // result cannot replace the validated body between the check and removal.
+      beforeRemove?.(record);
       fs.unlinkSync(target);
       return { acknowledged: receiptId, projectId, taskId, workerThreadId: record.workerThreadId, removed: true };
     });

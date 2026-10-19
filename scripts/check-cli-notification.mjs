@@ -72,11 +72,11 @@ function actor(t, f, options = {}) {
   const instance = { child, result, ready }; f.actors.push(instance); return instance;
 }
 
-function attentionEvidence(f) {
-  f.store.setProcess(f.run, { pid: process.pid, startedAt: 'isolated-notification-fixture', token: crypto.randomUUID() });
-  f.store.bindSession(f.run, 'native-session');
-  const file = path.join(f.store.runDir(f.run, 1), 'attention.json');
-  fs.writeFileSync(file, JSON.stringify({ ownerThreadId: f.ownerThreadId, requestId: f.run.requestId, sessionId: 'native-session', code: 'permission-classifier-unavailable', count: 3 }));
+function attentionEvidence(f, attention = { code: 'permission-classifier-unavailable' }, fileName = 'attention.json') {
+  if (!f.store.read(f.binding).processIdentity) f.store.setProcess(f.run, { pid: process.pid, startedAt: 'isolated-notification-fixture', token: crypto.randomUUID() });
+  if (!f.store.read(f.binding).sessionId) f.store.bindSession(f.run, 'native-session');
+  const file = path.join(f.store.runDir(f.run, 1), fileName);
+  fs.writeFileSync(file, JSON.stringify({ projectId: f.run.projectId, taskId: f.run.taskId, runNumber: f.run.runNumber, ownerThreadId: f.ownerThreadId, requestId: f.run.requestId, sessionId: 'native-session', ...attention, count: 3 }));
   return file;
 }
 
@@ -112,6 +112,29 @@ test('separate managers serialize same-owner delivery; no overlapping MCP calls'
   for (const result of await Promise.all(senders.map(s => s.result))) assert.equal(result.status, 'delivered', JSON.stringify(result));
   const phases = fs.readFileSync(f.trace, 'utf8').trim().split('\n').map(line => JSON.parse(line).phase);
   assert.deepEqual(phases, ['start', 'end', 'start', 'end', 'start', 'end']);
+});
+
+test('two explicit questions in the same run have independent claims and preserve foreground protection', async t => {
+  const { createDesktopHost, notifyOnAttention, attentionPaths } = await modules(); const f = fixture(t); f.end();
+  const host = createDesktopHost(f);
+  for (const itemId of ['deploy-question', 'tls-question']) {
+    const attention = { code: 'question-awaiting-answer', itemId };
+    const { evidencePath } = attentionPaths(f.store, f.run, attention);
+    attentionEvidence(f, attention, path.basename(evidencePath));
+    event(f, 'task_started', itemId);
+    const priorCount = fs.existsSync(f.calls) ? fs.readFileSync(f.calls, 'utf8').trim().split('\n').length : 0;
+    const waiting = notifyOnAttention({ store: f.store, run: f.run, host, attention });
+    await delay(100);
+    assert.equal(fs.existsSync(f.calls) ? fs.readFileSync(f.calls, 'utf8').trim().split('\n').length : 0, priorCount);
+    event(f, 'task_complete', itemId);
+    assert.equal((await waiting).status, 'delivered');
+    assert.equal((await notifyOnAttention({ store: f.store, run: f.run, host, attention })).status, 'suppressed');
+  }
+  const calls = fs.readFileSync(f.calls, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every(call => call.arguments.prompt.includes('需要回答的问题')));
+  assert.equal(f.store.read(f.binding).status, 'running');
+  assert.equal(fs.existsSync(f.run.resultPath), false);
 });
 
 test('different owners do not block each other while one owner is busy', async t => {

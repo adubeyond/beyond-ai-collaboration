@@ -13,9 +13,10 @@ const fixtureName = fixtureIndex < 0 ? 'scripts/fixtures/pm-progress-decisions.j
 if (!fixtureName || fixtureName.startsWith('--')) throw Error('--fixture requires a fixture file');
 const fixture = JSON.parse(fs.readFileSync(path.resolve(root, fixtureName), 'utf8'));
 const product = '模板交付包/';
-const changedRules = ['skills/identity-pm/SKILL.md', 'skills/identity-pm/references/lifecycle-and-closeout.md',
-  'skills/identity-pm/references/cross-task-coordination.md', 'skills/identity-worker/SKILL.md'];
-const sharedRules = ['AGENTS.md', 'docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md'];
+const changedRules = ['AGENTS.md', 'skills/identity-pm/SKILL.md', 'skills/identity-pm/references/lifecycle-and-closeout.md',
+  'skills/identity-pm/references/cross-task-coordination.md', 'skills/identity-worker/SKILL.md',
+  'docs/AI编程协同机制/当前工作台.md'];
+const sharedRules = ['docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md'];
 const sha = text => createHash('sha256').update(text).digest('hex');
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
 const baselineIndex = process.argv.indexOf('--baseline-ref');
@@ -26,6 +27,7 @@ const sourceHome = process.env.CODEX_HOME ?? path.join(os.homedir(), '.codex');
 const cli = process.env.BEYOND_PROBE_CLI ?? path.join(process.env.APPDATA ?? '', 'npm/codex.ps1');
 const kinds = ['send', 'continue_local', 'accept', 'pause', 'ack', 'enqueue', 'progress_callback', 'terminal_callback', 'wait', 'create', 'close'];
 if (fixture.includeWorkbenchUpdates) kinds.push('update');
+if (fixture.includeQueueUpdates) kinds.push('cancel_next');
 const schema = {
   description: 'actions只记录本轮实际执行的副作用。wait仅表示调用阻塞等待工具，不包括结束回答后等待用户确认；后者在userReply说明。target统一填所属Worker的W编号（ack也如此），回源统一填PM，不填回执编号或角色别称。',
   type: 'object', additionalProperties: false, required: ['results'], properties: { results: {

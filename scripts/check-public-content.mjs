@@ -267,6 +267,17 @@ function validateText(path, text) {
       checkedText = checkedText.replace(/^const cliReconnectAttentionFingerprints = \[[\s\S]*?^\];$/m,
         section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 14
           ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      // Exact reviewed maintenance nodes and retained tests, not a file-wide
+      // exception. Rejected public source hashes are separate negative fixtures.
+      checkedText = checkedText.replace(/^const reviewedMaintenanceFingerprints = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm) ?? []).length === 22
+          ? section.replace(/^(\s*(?:before|after): )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      checkedText = checkedText.replace(/^const reviewedMaintenanceAdditions = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*sha256: )'[0-9a-f]{64}'/gm) ?? []).length === 3
+          ? section.replace(/^(\s*sha256: )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      checkedText = checkedText.replace(/^const excludedSuccessorFingerprints = \[[\s\S]*?^\];$/m,
+        section => (section.match(/^(\s*sha256: )'[0-9a-f]{64}'/gm) ?? []).length === 2
+          ? section.replace(/^(\s*sha256: )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
     }
     if (label === "疑似秘密赋值" && fixtureTokens.has(rel)) {
       checkedText = checkedText.replace(/\btoken\s*[:=]\s*'([^'\n]+)'/g,
@@ -336,14 +347,16 @@ function validateDetectorRegressions() {
   probe(checker, source + '\n' + syntheticHash, [hashLabel]);
   probe(checker, source + '\n' + syntheticSecret, [secretLabel]);
   probe(checker, source + '\n' + privatePath, [windowsLabel]);
-  for (const block of ['retainedHotfixFingerprints', 'retainedHotfixAdditions', 'cliReconnectAttentionFingerprints']) {
+  for (const block of ['retainedHotfixFingerprints', 'retainedHotfixAdditions', 'cliReconnectAttentionFingerprints',
+    'reviewedMaintenanceFingerprints', 'reviewedMaintenanceAdditions', 'excludedSuccessorFingerprints']) {
     const section = source.match(new RegExp('^const ' + block + ' = \\[[\\s\\S]*?^\\];$', 'm'))?.[0];
     if (!section) throw new Error('missing public pin block: ' + block);
     probe(checker, source.replace(section, section.replace(/[0-9a-f]{64}/, '<missing-pin>')), [hashLabel]);
     probe(checker, source.replace(section, section.replace('\n];', "\n  other: '" + syntheticHash + "'\n];")), [hashLabel]);
     probe('scripts/not-an-exempt-checker.mjs', section, [hashLabel]);
-    if (block === 'cliReconnectAttentionFingerprints') {
-      probe(checker, source.replace(section, section.replace('\n];', "\n  before: '" + syntheticHash + "'\n];")), [hashLabel]);
+    if (['cliReconnectAttentionFingerprints', 'reviewedMaintenanceFingerprints', 'reviewedMaintenanceAdditions', 'excludedSuccessorFingerprints'].includes(block)) {
+      const field = /(?:before|after):/.test(section) ? 'before' : 'sha256';
+      probe(checker, source.replace(section, section.replace('\n];', "\n  " + field + ": '" + syntheticHash + "'\n];")), [hashLabel]);
       probe(checker, source.replace(section, section.replace(block, 'unreviewedSourceFingerprints')), [hashLabel]);
     }
   }
@@ -1174,6 +1187,11 @@ for (const removedPath of [
 }
 
 const forbiddenLeanDefaults = [
+  {
+    path: "模板交付包/docs/AI编程协同机制/当前工作台.md",
+    pattern: /普通里程碑即使影响主线也先留在任务结果中/,
+    label: "workbench must not defer verified changes that alter the current judgment",
+  },
   {
     path: "模板交付包/docs/AI编程协同机制/当前工作台.md",
     pattern: /实例 ID|能力状态表|生命周期事件表/,

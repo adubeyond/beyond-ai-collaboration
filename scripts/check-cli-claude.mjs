@@ -162,12 +162,11 @@ test('result or explicit stop while owner is busy suppresses obsolete abnormal a
   }
 });
 
-test('wrong identities, historical records, real permission denials, transient errors and slow tools do not alert', { timeout: 25000 }, async t => {
+test('wrong identities, historical records, transient errors and slow tools do not alert', { timeout: 25000 }, async t => {
   const f = fixture(t, undefined, { transcript: true });
   f.append([1, 2, 3].flatMap(n => toolEvidence('old-' + n))); await f.start();
   for (const extra of [{ sessionId: 'foreign' }, { cwd: path.dirname(f.root) }, { isSidechain: true }])
     f.append([1, 2, 3].flatMap(n => toolEvidence('wrong-' + n)).map(row => ({ ...row, ...extra })));
-  f.append([1, 2, 3].flatMap(n => toolEvidence('denied-' + n, { kind: 'automode-blocked' })));
   f.append([...toolEvidence('a'), ...toolEvidence('b'), ...toolEvidence('ok', { success: true }), ...toolEvidence('c'), ...toolEvidence('d')]);
   f.append([{ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'long-build', name: 'PowerShell' }] } }]); await f.flush();
   assert.equal(fs.existsSync(path.join(f.store.runDir(f.binding, 1), 'attention.json')), false);
@@ -310,6 +309,13 @@ test('Claude delivery contains current document bodies on both rounds of its ori
     const text = f.calls[number - 1];
     const sources = text.split('\n').flatMap(line => { try { const value = JSON.parse(line); return value.content ? [value] : []; } catch { return []; } });
     const manifest = f.store.readJson(manifestPath(number));
+    assert.deepEqual(manifest.ownership, {
+      projectId: f.binding.projectId, taskId: f.binding.taskId,
+      ownerThreadId: f.binding.ownerThreadId, returnChannel: 'normal-final-via-managed-bridge',
+    });
+    assert.ok(text.includes(`Current managed assignment: ${JSON.stringify(manifest.ownership)}`));
+    assert.match(text, /normal final answer/);
+    assert.match(text, /Same-session internal subagents remain available/);
     for (const file of f.contextFiles) {
       assert.equal(sources.find(item => item.path === file)?.content, fs.readFileSync(file, 'utf8'));
       assert.equal(manifest.entries.find(item => item.path === file)?.sha256, sha256File(file));
@@ -455,6 +461,10 @@ test('manual continuation is tracked while competing input and model switching a
   assert.equal((await f.hook('UserPromptSubmit', { prompt: 'unrelated second task' })).decision, 'block');
   assert.equal((await f.hook('PreModelSwitch')).decision, 'block');
   await f.finish(); assert.deepEqual(await f.hook('UserPromptSubmit', { prompt: 'fix previous result' }), {});
+  const manualReview = f.store.readReview(f.binding, 1);
+  assert.equal(manualReview.decision, 'continue');
+  assert.equal(manualReview.evidenceLocator, `cli-ui:${f.sessionId}`);
+  assert.match(manualReview.conclusion, /User typed a continuation.*goal not yet accepted/);
   await f.finish('fixed'); assert.equal(f.store.read(f.binding).runNumber, 2);
   assert.equal(f.store.readResult(f.binding, 2).finalText, 'fixed');
 });

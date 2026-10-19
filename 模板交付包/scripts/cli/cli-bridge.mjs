@@ -58,7 +58,7 @@ export function readProfile(file, configuration = {}, { liveEndpoint = null } = 
   if (!resolved.pinned && !fs.statSync(profile.runner.command).isFile()) throw new Error('invalid CLI profile');
   return profile;
 }
-function validateBinding(binding, context, store) {
+function validateBinding(binding, context, store, request = null) {
   if (binding.ownerThreadId !== context.ownerThreadId || !path.isAbsolute(binding.executionRoot) || path.resolve(binding.executionRoot) !== path.resolve(context.executionRoot)) throw new Error('CLI owner/execution identity mismatch');
   const provider = new ProjectIdentityProvider({ controlRoot: context.controlRoot, runtimeRoot: path.join(context.controlRoot, 'local/runtime/project-identity') });
   if (binding.projectRoute) provider.validateWorkerRoute(binding.projectId, binding.projectRoute, { executionRoot: context.executionRoot });
@@ -75,7 +75,13 @@ function validateBinding(binding, context, store) {
     const historyRoot = path.join(context.controlRoot, 'local/history/workbench');
     if (fs.existsSync(historyRoot)) for (const entry of fs.readdirSync(historyRoot).filter(x => x.endsWith('.json'))) {
       const records = JSON.parse(fs.readFileSync(path.join(historyRoot, entry), 'utf8'));
-      if ((Array.isArray(records) ? records : records.records ?? []).some(x => x.taskId === binding.taskId)) throw new Error('CLI goal is already archived');
+      for (const record of (Array.isArray(records) ? records : records.records ?? []).filter(x => x.taskId === binding.taskId)) {
+        const recovery = request?.action === 'cli.resume' && request.input.acceptedGoalRecovery && !binding.acceptedGoalRecovery
+          ? store.verifyAcceptedGoalRecovery(binding, { ...request.input, ownerTurnId: context.ownerTurnId })
+          : store.readAcceptedGoalRecovery(binding);
+        if (!recovery || record.status !== '已完成' || record.worker !== binding.ownerThreadId
+          || recovery.archiveRecordSha256 !== digest(record)) throw new Error('CLI goal is already archived');
+      }
     }
   }
 }
@@ -261,7 +267,7 @@ export async function launchCliRequest(request, context) {
     const run = store.beginRun(binding, { requestId: request.requestId, prompt, stage, expectedRunNumber: 0, expectedSessionId: null, ownerTurnId: context.ownerTurnId, profile, configuration: { model: profile.model, effort: profile.effort ?? null } });
     return startManager(store, binding, run, profile, prompt, context);
   }
-  const binding = store.read(input); validateBinding(binding, context, store);
+  const binding = store.read(input); validateBinding(binding, context, store, request);
   if (request.action === 'cli.status') return binding;
   if (request.action === 'cli.result') return store.readResult(input, input.runNumber);
   if (request.action === 'cli.queue') {
@@ -332,7 +338,7 @@ export async function launchCliRequest(request, context) {
     if (input.continuationId && endpoint && (endpoint.status !== 'idle' || endpoint.activeTurnId)) throw new Error('CLI native session not yet idle; saved continuation retained');
     const desktopTransport = endpoint && context.hostSpec ? createDesktopHost(context.hostSpec).transportSnapshot() : null;
     if (desktopTransport && (desktopTransport.ownerThreadId !== context.ownerThreadId || desktopTransport.ownerTurnId !== context.ownerTurnId)) throw new Error('CLI resume Desktop source identity mismatch');
-    const run = store.beginRun(input, { requestId: request.requestId, prompt: input.prompt, stage: input.stage, continuationId: input.continuationId, expectedRunNumber: input.expectedRunNumber, expectedSessionId: input.expectedSessionId, ownerTurnId: context.ownerTurnId, profile, configuration: { model: profile.model, effort: profile.effort ?? null }, initialSessionRecovery: input.initialSessionRecovery, contract: input.contract, authorizationLocator: input.authorizationLocator });
+    const run = store.beginRun(input, { requestId: request.requestId, prompt: input.prompt, stage: input.stage, continuationId: input.continuationId, expectedRunNumber: input.expectedRunNumber, expectedSessionId: input.expectedSessionId, ownerTurnId: context.ownerTurnId, profile, configuration: { model: profile.model, effort: profile.effort ?? null }, initialSessionRecovery: input.initialSessionRecovery, acceptedGoalRecovery: input.acceptedGoalRecovery, contract: input.contract, authorizationLocator: input.authorizationLocator });
     if (endpoint) {
       const current = store.read(binding);
       if (current.status !== 'starting') return { ...run, status: current.status, stateLocator: store.locator(run) };

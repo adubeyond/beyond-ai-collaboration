@@ -3,7 +3,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CliTaskStore } from './cli-task-store.mjs';
-import { processIsGone } from './process-identity.mjs';
+import { processIsGone, nativeViewIsGone } from './process-identity.mjs';
 import { cliEnvironment, redact } from './native-cli-runner.mjs';
 
 export function projectTrustOverride(root) {
@@ -14,20 +14,31 @@ export function projectTrustOverride(root) {
   return `projects={${JSON.stringify(canonical)}={trust_level="trusted"}}`;
 }
 
-export function readInteractiveEndpoint(store, identity) {
+export function readInteractiveEndpoint(store, identity, { retiring = false } = {}) {
   const file = store.checkedPath(path.join(store.taskDir(identity), 'interactive.json'));
   if (!fs.existsSync(file)) return null;
   const record = store.readJson(file);
   if (record.ownerThreadId !== identity.ownerThreadId || record.projectId !== identity.projectId || record.taskId !== identity.taskId) throw new Error('Interactive owner mismatch');
   if (record.status === 'closed') return null;
-  if (processIsGone(record.manager) && processIsGone(record.server)) return null;
-  if (processIsGone(record.manager) || processIsGone(record.server)) throw new Error('Interactive process state unconfirmed; recover only after both saved processes exit');
+  const managerGone = processIsGone(record.manager), nativeGone = processIsGone(record.server);
+  if (managerGone && nativeGone) return null;
+  if (managerGone || nativeGone) {
+    // Only owner-bound detach may retire a stranded Claude manager. Never open or
+    // resume a dead native process, or treat an unproved window as safely exited.
+    if (!retiring || managerGone || record.provider !== 'claude' || record.status !== 'idle'
+      || !nativeViewIsGone(record)) throw new Error('Interactive process state unconfirmed; recover only after both saved processes exit');
+    const state = store.read(identity), result = store.readResult(identity, state.runNumber);
+    if (!record.sessionId || record.sessionId !== state.sessionId || result.sessionId !== state.sessionId
+      || result.status !== state.status || state.currentResultPath !== path.join(store.runDir(identity, state.runNumber), 'result.json')) {
+      throw new Error('Interactive retirement result/session mismatch');
+    }
+  }
   const url = new URL(record.controlUrl);
   if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.pathname !== '/') throw new Error('Invalid interactive control endpoint');
   return record;
 }
 export async function callInteractive(store, identity, action, input = {}) {
-  const endpoint = readInteractiveEndpoint(store, identity);
+  const endpoint = readInteractiveEndpoint(store, identity, { retiring: action === 'detach' });
   if (!endpoint) return null;
   const token = fs.readFileSync(store.checkedPath(endpoint.tokenPath), 'utf8').trim();
   const response = await fetch(new URL(action, endpoint.controlUrl), { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: AbortSignal.timeout(20000) });

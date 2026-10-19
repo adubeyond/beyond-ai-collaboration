@@ -72,8 +72,12 @@ jobs:
         run: node --test --test-concurrency=4 scripts/check-cli-task-store.mjs scripts/check-cli-launcher.mjs scripts/check-cli-notification.mjs scripts/check-cli-workbench.mjs scripts/check-cli-routing.mjs scripts/check-cli-recovery.mjs scripts/check-cli-goal-loop.mjs scripts/check-cli-interactive.mjs scripts/check-cli-zcode.mjs scripts/check-zcode-capabilities.mjs scripts/check-cli-claude.mjs scripts/check-cli-transfer.mjs scripts/check-cli-context.mjs scripts/check-cli-contract.mjs scripts/check-cli-next-store.mjs scripts/check-cli-next-bridge.mjs scripts/check-codex-executable.mjs scripts/check-cli-manager.mjs scripts/check-cli-host-lifetime.mjs
       - name: Validate implementation paths
         run: node scripts/check-implementation-paths.mjs
+      - name: Validate retained accepted CLI recovery
+        run: node --test scripts/check-cli-accepted-recovery-preservation.mjs
       - name: Validate progress-decision fixtures and evaluator
         run: node scripts/probe-pm-progress-decisions.mjs --check-fixtures
+      - name: Validate multi-PM communication decision fixtures
+        run: node scripts/probe-pm-progress-decisions.mjs --fixture scripts/fixtures/multi-pm-communication-decisions.json --check-fixtures
       - name: Run minimal example tests
         working-directory: examples/minimal-project
         run: npm test
