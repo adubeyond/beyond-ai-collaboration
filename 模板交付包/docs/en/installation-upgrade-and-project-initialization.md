@@ -1,19 +1,21 @@
 # BEYOND Installation, Upgrade, and Project Initialization
 
+> **Complete BEYOND 4.1.0 installation guide.** Use the matching official release assets after installation into the target project is authorized. Publication does not upgrade existing projects or resume business work.
+
 > This is an operator guide, not a second runtime-rule owner. Follow the target release package, project-root `AGENTS.md`, identity Skills, and fixed-script results if anything conflicts.
 
 ## 1. Three separate outcomes
 
 | Outcome | Completion evidence |
 | --- | --- |
-| Install or upgrade files | `beyond-control/beyond-release.json`, all six installed Skills, and the project entry belong to the same target release |
+| Install or upgrade files | `beyond-control/beyond-release.json`, all seven installed Skills, and the project entry belong to the same target release |
 | Verify installation | The verifier exits `0`, with no stale, mixed, or legacy BEYOND Hook content |
 | Initialize the project | Project boundaries, the workbench, legacy tasks, and durable fact locations are investigated and confirmed by the user |
 
 The standard order is:
 
 ```text
-prepare the target package and six Skills
+prepare the target package and seven Skills
 → initialize or upgrade the project entry
 → run installation verification
 → record the user's full-or-on-demand initialization choice
@@ -22,45 +24,46 @@ prepare the target package and six Skills
 
 The standard BEYOND path does not install an identity Hook and does not require `/hooks` or a guard probe. Use a new ordinary conversation without an identity Skill for installation maintenance so an active PM or Worker does not replace its own project entry while doing business work. Wait for active tasks to stop before replacing the root entry or Skills; after installation, restart Codex and verify the loaded version from a new process.
 
-The standard BEYOND 4.0.1 installation adds no terminal-result Hook, notify branch, persistent background service, or extra Codex CLI. The optional CLI route uses an existing local CLI with finite per-dispatch background execution and notification; see the [CLI goal-collaboration mechanism](../AI编程协同机制/机制/04-CLI目标协作机制.md). It does not configure authentication or replace the native Worker route. Formal results remain in user-visible Codex Worker tasks. Only the [Worker identity rules](../../skills/identity-worker/SKILL.md) own terminal formation and the native callback; only [PM pause, resume, and closeout](../../skills/identity-pm/references/lifecycle-and-closeout.md) owns matching, acceptance, pause, and receipt consumption. This installation guide describes what to install and verify; it does not copy the pending-scan, Worker-read, or workbench-transaction algorithm. An upgrade replaces the control repository and six Skills, then verifies the loaded version after restart. The upgrade maintenance path backs up and removes only a legacy BEYOND notify branch, without changing other plugins or user-owned notify configuration.
+Version 4.1.0 retains the existing runtime and adds no terminal-result Hook, notify branch, persistent background service, or extra Codex CLI. The optional CLI route uses an existing local CLI with finite per-dispatch background execution and notification; see the [CLI goal-collaboration mechanism](../AI编程协同机制/机制/04-CLI目标协作机制.md). It does not configure authentication or replace the native Worker route. Formal results remain in user-visible Codex Worker tasks. Only the [Worker identity rules](../../skills/identity-worker/SKILL.md) own terminal formation and the native callback; only [PM pause, resume, and closeout](../../skills/identity-pm/references/lifecycle-and-closeout.md) owns matching, acceptance, pause, and receipt consumption. This installation guide describes what to install and verify; it does not copy the pending-scan, Worker-read, or workbench-transaction algorithm. A subsequently authorized upgrade replaces the control repository and seven Skills, then verifies the loaded version after restart. The upgrade maintenance path backs up and removes only a legacy BEYOND notify branch, without changing other plugins or user-owned notify configuration.
 
 ## 2. Prepare the target release
 
-The current stable release is BEYOND 4.0.1. Use the matching immutable release artifacts:
+Use the complete BEYOND 4.1.0 release; do not mix product files or Skills from different versions:
 
-- Release: <https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v4.0.1>
-- Package: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.0.1/BEYOND-4.0.1.zip>
-- Optional SHA-256 file: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.0.1/BEYOND-4.0.1.zip.sha256>
+- Release: <https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v4.1.0>
+- Package: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.0/BEYOND-4.1.0.zip>
+- Optional SHA-256 file: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.0/BEYOND-4.1.0.zip.sha256>
 
-Only the ZIP is required on Windows. If the optional checksum file is already present beside it, verify it without using a web UI for Git operations:
+Windows download and verification example. If the optional checksum file is already present beside the ZIP, verify it without using a web UI for Git operations:
 
 ```powershell
-curl.exe -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.0.1/BEYOND-4.0.1.zip" -o "BEYOND-4.0.1.zip"
-$checksumPath = ".\BEYOND-4.0.1.zip.sha256"
+curl.exe -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.0/BEYOND-4.1.0.zip" -o "BEYOND-4.1.0.zip"
+$checksumPath = ".\BEYOND-4.1.0.zip.sha256"
 if (Test-Path -LiteralPath $checksumPath) {
   $expectedHash = ((Get-Content -LiteralPath $checksumPath -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
-  $actualHash = (Get-FileHash -LiteralPath ".\BEYOND-4.0.1.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
-  if ($actualHash -ne $expectedHash) { throw "BEYOND-4.0.1.zip SHA-256 mismatch" }
+  $actualHash = (Get-FileHash -LiteralPath ".\BEYOND-4.1.0.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actualHash -ne $expectedHash) { throw "BEYOND-4.1.0.zip SHA-256 mismatch" }
 } else {
   Write-Warning "Optional SHA-256 file not supplied; continue and complete the in-package and installed-content checks"
 }
-Expand-Archive -LiteralPath ".\BEYOND-4.0.1.zip" -DestinationPath ".\BEYOND-4.0.1-install"
+Expand-Archive -LiteralPath ".\BEYOND-4.1.0.zip" -DestinationPath ".\BEYOND-4.1.0-install"
 ```
 
-On Linux or macOS:
+Linux or macOS example:
 
 ```bash
-curl -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.0.1/BEYOND-4.0.1.zip" -o BEYOND-4.0.1.zip
-if [ -f BEYOND-4.0.1.zip.sha256 ]; then sha256sum -c BEYOND-4.0.1.zip.sha256 || exit 1; else echo "optional SHA-256 file not supplied; continuing to in-package verification"; fi
-unzip BEYOND-4.0.1.zip -d BEYOND-4.0.1-install
+curl -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.0/BEYOND-4.1.0.zip" -o BEYOND-4.1.0.zip
+if [ -f BEYOND-4.1.0.zip.sha256 ]; then sha256sum -c BEYOND-4.1.0.zip.sha256 || exit 1; else echo "optional SHA-256 file not supplied; continuing to in-package verification"; fi
+unzip BEYOND-4.1.0.zip -d BEYOND-4.1.0-install
 ```
 
-The ZIP is required; the external SHA-256 file is optional verification material. A missing or unavailable checksum file does not block installation, but a supplied checksum that does not match must stop it. With or without the external checksum, verify the in-package content manifest and the final installed content. Extraction produces one complete `beyond-control/` directory. Put that directory under the business-project root instead of scattering package files over the project.
+The remaining instructions apply only to an explicitly authorized target project. The ZIP is required; the external SHA-256 file is optional verification material. A missing or unavailable checksum file does not block installation, but a supplied checksum that does not match must stop it. With or without the external checksum, verify the in-package content manifest and the final installed content. Extraction produces one complete `beyond-control/` directory. Put that directory under the business-project root instead of scattering package files over the project.
 
-Install these six directories from `beyond-control/skills/` into the active Codex Skills directory:
+Install these seven directories from the matching package's `beyond-control/skills/` into the active Codex Skills directory:
 
 ```text
 identity-pm
+identity-product
 identity-worker
 task-design
 task-dev
@@ -74,17 +77,17 @@ For a cross-root or multi-repository project, or a project that must support an 
 
 If an existing `.codex/hooks.json` references `beyond-runtime-guard.mjs`, the fixed script removes only those legacy BEYOND handlers after backup. Other Hooks and `.codex` files remain unchanged.
 
-Installation maintenance is file-level copying, entry fusion, and verification; the business project does not need to be a Git repository. Resolve the project root from the current Codex project directory and its root `AGENTS.md`; never make a successful `git rev-parse` a prerequisite. An upgrade rollback preimage covers only objects that this run will actually replace or fuse: the project-root `AGENTS.md`, candidate product paths that will be overwritten in the existing project, and the six user Skills. Record a candidate path that did not previously exist so rollback can remove it precisely. `beyond-control/local/**`, `projects/**`, `shared/**`, `.git/**`, and business code are preserved in place and are outside both the overwrite set and the backup-permission gate; do not recursively enumerate, copy, or change permissions on them. Stop only when an actual overwrite target is unreadable. On Windows, backup inventories for the actual overwrite set must include hidden files and directories. For directory targets, use `Get-ChildItem -Force -Recurse -File` or an equivalent relative-path, byte-count, and SHA-256 comparison on both sides. A changed Hidden attribute on a directory is not evidence that file content was lost.
+Installation maintenance is file-level copying, entry fusion, and verification; the business project does not need to be a Git repository. Resolve the project root from the current Codex project directory and its root `AGENTS.md`; never make a successful `git rev-parse` a prerequisite. An upgrade rollback preimage covers only objects that this run will actually replace or fuse: the project-root `AGENTS.md`, candidate product paths that will be overwritten in the existing project, and the seven user Skills. Record a candidate path that did not previously exist so rollback can remove it precisely. `beyond-control/local/**`, `projects/**`, `shared/**`, `.git/**`, and business code are preserved in place and are outside both the overwrite set and the backup-permission gate; do not recursively enumerate, copy, or change permissions on them. Stop only when an actual overwrite target is unreadable. On Windows, backup inventories for the actual overwrite set must include hidden files and directories. For directory targets, use `Get-ChildItem -Force -Recurse -File` or an equivalent relative-path, byte-count, and SHA-256 comparison on both sides. A changed Hidden attribute on a directory is not evidence that file content was lost.
 
-Prompt for an AI-assisted maintenance conversation:
+After obtaining the complete release and installation approval, use this maintenance prompt:
 
 ```text
 This is BEYOND installation maintenance. Do not create a PM, Worker, or business task.
-Install or upgrade the current project's beyond-control directory and six global Skills from the official BEYOND 4.0.1 release. If BEYOND-4.0.1.zip.sha256 is present beside the ZIP, verify it; if it is absent, do not block installation, but still complete the in-package manifest and final installed-content checks.
+Install or upgrade the current project's beyond-control directory and seven global Skills from the explicitly approved complete BEYOND 4.1.0 release; do not mix in older content. If that ZIP's optional SHA-256 file is present beside it, verify it; if it is absent, do not block installation, but still complete the in-package manifest and final installed-content checks.
 The project may be non-Git. Resolve its root from the current Codex project directory and root AGENTS.md; do not run or depend on a git rev-parse gate.
 The fixed entry discovers only the project root itself and exact Git roots that are direct children. Pass every confirmed formal repository that is deeper or outside the project root through --repository-roots. Do not copy beyond-control into each business repository and do not create a worktree for installation.
 For cross-root, multi-repository, or existing-worktree use, obtain the actual hostId and Codex projectId from the current Codex project and pass --host-id and --codex-project-id during first fusion; never guess them. Later upgrades preserve registered external roots and platform bindings when those flags are omitted. Stop and request a decision if a path, exact Git root, or origin remote has drifted.
-Back up only the project entry, candidate product paths, and six user Skills that this run will actually overwrite; record candidate paths that were previously absent. Preserve native rules and real local, projects, shared, .git, and business-code content in place. Do not enumerate or copy those preserved roots, never replace them with empty templates, and do not treat an unreadable cache inside them as an installation blocker.
+Back up only the project entry, candidate product paths, and seven user Skills that this run will actually overwrite; record candidate paths that were previously absent. Preserve native rules and real local, projects, shared, .git, and business-code content in place. Do not enumerate or copy those preserved roots, never replace them with empty templates, and do not treat an unreadable cache inside them as an installation blocker.
 On Windows, inventory actual overwrite targets on both sides with hidden entries included, and compare relative paths, bytes, and SHA-256. Do not fail an otherwise identical backup only because a directory lost its Hidden attribute.
 If a legacy BEYOND identity Hook exists, remove only BEYOND handlers and guard files while preserving all other Hooks and .codex content.
 Run installation verification afterward. Do not claim project initialization or business work is complete.
@@ -92,7 +95,7 @@ Run installation verification afterward. Do not claim project initialization or 
 
 ## 3. Initialize a new project
 
-After installing the six Skills, open a new conversation at the project root:
+After the seven Skills have been installed under a later explicit approval, open a new conversation at the project root:
 
 ```text
 $identity-pm
@@ -150,7 +153,7 @@ From the project root, run:
 node beyond-control/scripts/verify-install-integrity.mjs --installed-skills-root "<Codex Skills directory>" --project-agents "<business-project-root>/AGENTS.md"
 ```
 
-Installation is verified only when it exits `0` and confirms matching Skills, control structure, and project runtime entry. It also rejects remaining legacy BEYOND guard content. `--content-only` checks candidate content only; it does not prove project fusion. Restart Codex after the on-disk check and confirm the project identity and loaded release from a new process.
+Installation is verified only when it exits `0` and confirms all seven matching Skills, control structure, and project runtime entry. It also rejects remaining legacy BEYOND guard content. `--content-only` checks candidate content only; it does not prove project fusion. Restart Codex after the on-disk check and confirm the project identity and loaded release from a new process.
 
 An ordinary installation does not require the user to rerun the release-qualification matrix for normal completion, genuine pause, busy-PM handling, parallel closeout, and multi-stage recovery. Those are release gates. For a first adoption or a suspected host-callback problem, use only one no-business-write smoke Worker to verify `receipt enqueue → native callback → final → PM acceptance → receipt removal`.
 

@@ -231,7 +231,7 @@ test("阶段目标、实际读入与局部纠旧有明确连接，普通续做�
   validateStageMaterials(snapshot);
   assert.match(read(snapshot, paths.handoff), /同一 Worker连续执行不使用本模板/);
   assert.match(read(snapshot, paths.handoff), /当前正文路径、章节\/修订.*摘要不等于已读正文/);
-  assert.match(read(snapshot, paths.design), /不因此强制新增原型、UI角色或任务/);
+  assert.match(read(snapshot, paths.design), /无界面任务、已定交互的局部修复不强制做原型，也不强制另开 UI 对话/);
 });
 
 test("负例：阶段缩水、擅自扩项、只读摘要或追加纠正均不能冒充接通", () => {

@@ -6,6 +6,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-10-22
+
+### Changed
+
+- Rework the collaboration and delivery layer around project PMs, product-interaction owners, and module owners who combine planning with implementation. Assistants and CLI helpers are optional; the roles do not require three conversations.
+- Discuss new interactions through a usable prototype, retain engineering contracts, and reuse existing requirements, designs, handoffs, and UI Skills rather than duplicating documents or plugins.
+- Plan small, independently verifiable outcomes while preserving the complete project objective. Split frontend/backend work only when justified; one existing owner verifies their actual combined user path.
+- Add optional delivery contracts tied to current design revisions, interface versions, and artifact references. Reject stale acceptance across revisions without treating machine references as proof of business truth.
+- Deliver CLI notifications to the current direct owner and preserve receiver identity during transfer; do not broadcast, turn peer messages into user authorization, or resume paused goals from stale notifications.
+
+### Fixed
+
+- Preserve owner-authorized result queries and idle-manager cleanup after formal CLI archival without reopening execution.
+- Distinguish manager exit from window closure and retain unknown states when window identity is insufficient.
+- Scope CLI result reporting without dropping business, engineering, or safety context; retain existing session, continuation, compatibility, and lifecycle fixes.
+
+### Validation and boundaries
+
+- Publish the existing isolated collaboration/delivery candidate as a complete release, without adding a new business or mechanism redesign in this release pass.
+- Preserve the Desktop Worker terminal-receipt protocol and model policy. Installation does not migrate native sessions, resume business work, or install private gateway configuration.
+- Historical isolated checks and the observed direct two-owner handoff are supporting evidence, not proof of fresh end-to-end development, improved business quality, token savings, or long-term unattended operation. Final release checks are bound to the actual source, CI, and release assets.
+- See [release notes](docs/releases/v4.1.0.md), [validation](docs/releases/v4.1.0-validation.md), and [installation](docs/releases/v4.1.0-install.md).
+
 ## [4.0.1] - 2026-10-16
 
 ### Fixed

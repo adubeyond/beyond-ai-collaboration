@@ -15,6 +15,8 @@ const ACTIONS = new Set([
   'workbench.pause',
   'workbench.snapshot',
   'workbench.inspect',
+  'workbench.delivery-plan',
+  'workbench.revise-delivery',
   'workbench.accept',
   'workbench.accept-cli',
   'workbench.close',
@@ -240,6 +242,34 @@ function inspectWorkbench(config, rawInput, { validateProject = true } = {}) {
 }
 
 function execute(action, request, config) {
+  if (action === 'workbench.delivery-plan') {
+    const input = object(request.input, 'delivery continuation inspection');
+    projectIdentity(config).validateControlProject(nonEmpty(input.projectId, 'projectId'));
+    return new WorkbenchTransactionStore({
+      runtimeRoot: config.workbenchRoot, viewPath: config.viewPath, historyRoot: config.historyRoot, readOnly: true,
+    }).deliveryPlan(input);
+  }
+  if (action === 'workbench.register' && Object.hasOwn(request.input ?? {}, 'deliveryContract')) {
+    projectIdentity(config).validateControlProject(nonEmpty(request.input.projectId, 'projectId'));
+    const contract = request.input.deliveryContract;
+    if (!config.ownerThreadId || contract?.acceptanceOwnerThreadId !== config.ownerThreadId) {
+      throw new Error('delivery registration must be made by its acceptance owner');
+    }
+  }
+  if (action === 'workbench.revise-delivery') {
+    const input = object(request.input, 'delivery contract revision');
+    projectIdentity(config).validateControlProject(nonEmpty(input.projectId, 'projectId'));
+    if (!config.ownerThreadId || input.changedBy !== config.ownerThreadId) {
+      throw new Error('delivery revision caller identity mismatch');
+    }
+    return workbench(config).reviseDeliveryContract(input);
+  }
+  if (action === 'workbench.accept') {
+    const task = activeWorkbenchTask(config, request.input?.taskId);
+    if (task?.deliveryContract && request.input?.acceptedBy !== config.ownerThreadId) {
+      throw new Error('delivery acceptance caller identity mismatch');
+    }
+  }
   if (action === 'workbench.register' && request.input?.execution?.kind === 'cli') {
     const input = object(request.input, 'CLI registration');
     projectIdentity(config).validateControlProject(nonEmpty(input.projectId, 'projectId'));

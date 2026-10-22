@@ -290,7 +290,36 @@ const excludedSuccessorFingerprints = [
   { path: product + 'scripts/cli/cli-task-store.mjs',
     sha256: '0fe5ac8811a8fc75954ceef41b250dfadfd83807690a85a5af93b6f430b193eb' },
 ];
-const latestCliRepairHash = (file, previous) => reviewedMaintenanceFingerprints.find(item => item.path === file)?.after
+// Reviewed collaboration/delivery candidate, promoted unchanged for 4.1.0.
+// These normalized pins were checked against the immutable tested candidate and
+// its preceding committed maintenance source. Keep every earlier freeze node.
+const collaborationDeliveryFingerprints = [
+  { path: cli, before: '6953d6bf75ae8cd93fa5039f2923e07fef0141a848cab3decee2299f2198cc1b', after: '55033fc8a28f781cb7f4bffe36c987f46ec72f495042323d35d26ea9abf27fe4' },
+  { path: product + 'scripts/cli/cli-bridge.mjs', before: '88d09a2f810cdbb3ccbbd62f7e90a24d20c1b42596437e41f13dbc2c9f376f0d', after: 'f71a1a4056977322fa1cdb92c771dd307186a5680a135f850b074ffe82de3f8c' },
+  { path: product + 'scripts/cli/cli-notify.mjs', before: '6d1d598b003db2a5da8af83fddca87cefe712e8814abf8559f329a990790cf89', after: '68b935d8ee7021b25d1754235ba353bdc156123c424d3d76a81b9c47fe06cdc4' },
+  { path: product + 'scripts/runtime/control-runtime.mjs', before: 'e3075b239a98f643ca39633962fcf8adc41e891e1b38111f966df3192ef708ac', after: 'd174ec56cd7f65361934547473de3bd92ad7f467f109b8cb71ed5e450f6f05e1' },
+  { path: product + 'scripts/runtime/workbench-transaction.mjs', before: '6554383e59f6dc6bbaec8128b1b75abbad06ebce50b0d972f5b3d15709616aa8', after: '84a4334d80e15d29058c485b1bc44b42d07730d53c727d689ff7204dcec273e5' },
+  { path: product + 'skills/identity-pm/references/lifecycle-and-closeout.md', before: 'e586f2f8f38e42cdb1c35bcd0d3b5b6c437451a5f4ec7808f19e654a7eac208e', after: '8b2fbfcb381ba5a6d9e7b0d4b68ac357ff1a2d4bc3850be8c84f089fa6bec973' },
+  { path: product + 'skills/identity-worker/SKILL.md', before: '3510210cb3f13c6d168ef5620c1d572e5c241ec4c189d6b722f4198b7bfb11c1', after: 'f7773816a510205442ba411e221dd3ef1cc9fbd6ec9702c020365058be948cbe' },
+  { path: product + 'skills/identity-worker/agents/openai.yaml', before: 'd15ff52e60d2a39bf2764f3a431a9adac59c949d650b6a4a600d954e505a8cd7', after: 'd2e5d1a2072f51ab46faaad412680cdf2a4aa72de3254208015797eb43d387a7' },
+  { path: product + 'skills/identity-worker/references/capability-correction-and-cost.md', before: '05a561ba345c61a1af7e343dce4735a027615cc49fec61b0ac9f5ab49cb34447', after: 'a13801f9b3424bf2611f0e3e46e23fef728d9381bf91d09f404885dfd98af0a0' },
+  { path: product + 'skills/identity-worker/references/collaboration-and-rework.md', before: '0bbcb50fd883d09ec2a4e4e28e479d2ebfe5ea0121444ac75a138297439563e2', after: '5aef12bbf095e81bc31ef661efa919553321773d4b4ed495d8279900f4fe18fb' },
+  { path: product + 'skills/identity-worker/references/lifecycle-and-recovery.md', before: '39eb1a6ae5af776097867797b11d08a9345ae3c02dd269ad31bc6849b07e965d', after: '8d96291bc04173acfb216331a9ee17c46046be2773894842a8e0bb507b72506f' },
+];
+const collaborationDeliveryAdditions = [
+  { path: product + 'scripts/runtime/delivery-policy.mjs', sha256: '0a8ff8392d15d8948b818a0405666026338d4701fdd93ad801837f98bb7970f7' },
+  // Only the synthetic fixture token's spelling changed to avoid a false
+  // secret-assignment alert; its runtime value and assertions are unchanged.
+  { path: product + 'scripts/runtime/workbench-delivery.test.mjs', sha256: '579da5599e2cd1be68e985800cdc92b2f77e4411f39a89cceaaefd9c2be05018' },
+  { path: product + 'scripts/cli/cli-notify.delivery-boundaries.test.mjs', sha256: '837f3fc28f12bbb199e4708f735092e3669d976b6480fe6db4e994c6e64b9715' },
+];
+const collaborationDeliveryPortions = [
+  { path: pm, start: '## 5. 状态与执行边界',
+    before: 'eeaadd9d8cd218a9e65a6912b3e17556d92fa424ffd8aa303f255fc7cba425a1',
+    after: 'e8994c7535992e50d678c7aa69c03daeda879f2d3109ef64e25840e5642678d0' },
+];
+const latestCliRepairHash = (file, previous) => collaborationDeliveryFingerprints.find(item => item.path === file)?.after
+  ?? reviewedMaintenanceFingerprints.find(item => item.path === file)?.after
   ?? cliReconnectAttentionFingerprints.find(item => item.path === file)?.after ?? previous;
 function normalizeClaudeCompatibility(file, text) {
   for (const change of claudeCompatibilityEdits.filter(item => item.path === file)) {
@@ -300,6 +329,11 @@ function normalizeClaudeCompatibility(file, text) {
   return text;
 }
 function matchesFrozenFingerprint(item, currentHash) {
+  const collaboration = collaborationDeliveryFingerprints.find(change => change.path === item.path);
+  if (collaboration) {
+    if (currentHash !== collaboration.after) return false;
+    currentHash = collaboration.before;
+  }
   const maintenance = reviewedMaintenanceFingerprints.find(change => change.path === item.path);
   if (maintenance) {
     if (currentHash !== maintenance.after) return false;
@@ -408,7 +442,7 @@ function frozenFailures(source = read) {
     }
     catch { errors.push(item.path + ': missing or unreadable'); }
   }
-  for (const item of [...retainedHotfixAdditions, ...reviewedMaintenanceAdditions]) {
+  for (const item of [...retainedHotfixAdditions, ...reviewedMaintenanceAdditions, ...collaborationDeliveryAdditions]) {
     try { if (sha256(source(item.path)) !== item.sha256) errors.push(item.path); }
     catch { errors.push(item.path + ': missing or unreadable'); }
   }
@@ -416,7 +450,8 @@ function frozenFailures(source = read) {
     const text = source(item.path);
     const start = text.indexOf(item.start);
     const end = item.end ? text.indexOf(item.end, start + item.start.length) : text.length;
-    if (start < 0 || end < start || sha256(text.slice(start, end)) !== item.sha256)
+    const change = collaborationDeliveryPortions.find(change => change.path === item.path && change.start === item.start);
+    if ((change && change.before !== item.sha256) || start < 0 || end < start || sha256(text.slice(start, end)) !== (change?.after ?? item.sha256))
       errors.push(item.path + ': ' + item.start);
   }
   return errors;
@@ -425,7 +460,7 @@ function frozenFailures(source = read) {
 function frozenDirectoryMembers(directory) {
   const earlierAdditions = directory === product + 'scripts/cli'
     ? ['cli-context', 'codex-executable', 'manager-launch'].map(name => product + 'scripts/cli/' + name + '.mjs') : [];
-  return [...fixture.files, ...retainedHotfixAdditions, ...reviewedMaintenanceAdditions].filter(item => item.path.startsWith(directory + '/'))
+  return [...fixture.files, ...retainedHotfixAdditions, ...reviewedMaintenanceAdditions, ...collaborationDeliveryAdditions].filter(item => item.path.startsWith(directory + '/'))
     .map(item => item.path).concat(earlierAdditions).sort();
 }
 
@@ -461,24 +496,26 @@ test('approval has a specific scope and revision, without turning discussion int
     '确认须对应需求/设计的路径、章节、修订和实现范围',
     '可追溯的用户原话或消息入口',
     '用户只批准设计时仍不开发',
-    '确认前只在授权内调查、写设计',
-    '不能借实验开发正式功能',
+    '确认前只在授权内调查、设计或制作已获准的原型',
+    '不能借原型开发正式业务功能',
     '旧批准不能覆盖新范围',
     '不重复索要同一批准',
     '记录其指定的适用范围与条件',
     '本次例外不自行泛化为长期默认',
     '明确的跨任务授权也不逐任务重问',
   ]);
-  contains(pm, ['未确认不派开发', '已确认需求与设计的路径/章节/修订、确认来源']);
+  contains(pm, ['新的业务开发任务，PM在派单前完整读取`task-design/SKILL.md`', '复用已有文档记录需求、技术设计及确认依据', '已确认需求与设计的路径/章节/修订、确认来源']);
   contains(agents, ['只读问答、状态查询和精确文件操作不套业务设计流程']);
   contains(design, ['用户要求只讨论或不写文件时仅在回复中给草案，不落盘、不开发']);
 });
 
 test('implementation and testing consume approved documentation, not an untraceable PM summary', () => {
   contains(rule, [
-    '执行者开始前实际读取任务所指当前正文与必要直接依赖，不能只读派单摘要',
+    '开始前实际读取当前需求、技术设计与必要直接依赖',
+    '有原型时实际操作对应修订',
+    '不能只读派单摘要或看截图',
     '修订不匹配时仅核实受影响差异',
-    '共享正文保持明确写入者',
+    '同一文件当次只由一个写入者维护',
     '不能靠把文档改成错误实现来消除失败',
     '其他不冲突工作继续',
     '未满足项如实保留',
@@ -538,7 +575,11 @@ const reviewedBoundaries = [
     '普通低风险、可逆且范围明确的实施细节不因此增加审查、文档、子智能体、新对话或等待点',
     '但不能据此跳过新业务任务的需求与设计确认及默认独立审查',
   ] },
-  { file: pm, fragments: ['已定及否决决策理由'] },
+  // Decision rationale now lives with the engineering owner, not the PM hot path.
+  { file: product + 'docs/AI编程协同机制/模板/阶段方案与关键决策模板.md', fragments: [
+    '**选择与理由**：采用什么、为什么，与目标和约束如何对应',
+    '若替代旧方案，写明被替代内容、原因和当前入口',
+  ] },
   { file: rule, fragments: [
     '按是否改变已批准的业务范围、公开契约、验收、权限或关键技术路线判断',
     '不按按钮、字段或代码量判断',
@@ -550,8 +591,8 @@ const reviewedBoundaries = [
     '不能把“开始开发”默认为免审查',
     '由用户明确选择单模型路径并按第0节记录适用范围',
     '同一文件当次只由一个写入者维护',
-    'PM将获准设计交给Worker后不并写',
-    '其他人的修订交当前写入者合入',
+    '项目 PM 维护整体目标与跨模块取舍，产品交互负责人维护需求、原型及其确认来源，模块负责人随实现更新技术设计、契约和必要实施记录',
+    '交接后其他人的修订由当前写入者合入',
     '不靠分章节掩盖同文件冲突',
     '汇报说明身份核实边界',
     '缺少返回标识时只称已请求该模型，不称已证实异模型审查',
@@ -930,8 +971,9 @@ test('reviewed maintenance pins extend exact historical nodes without refreshing
       assert.equal(current.split(receiptRenameAfter).length, 2, 'the prior bounded retry is retained exactly once');
       current = current.replace(receiptRenameAfter, receiptRenameBefore);
     }
-    assert.equal(sha256(current), change.after, file);
-    assert.equal(matchesFrozenFingerprint(original, change.after), true, file);
+    const latest = latestCliRepairHash(file, change.after);
+    assert.equal(sha256(current), latest, file);
+    assert.equal(matchesFrozenFingerprint(original, latest), true, file);
     assert.equal(matchesFrozenFingerprint(original, change.before), false, file + ': reviewed fix rollback rejected');
     assert.equal(matchesFrozenFingerprint(original, original.sha256), false, file + ': initial baseline rollback rejected');
     for (const mutate of [text => text + '\nextra', text => text.slice(1), () => '']) {
@@ -989,6 +1031,31 @@ test('retained hotfix regression files require exact contents and frozen directo
     checkFrozenDirectory(directory, current);
     assert.throws(() => checkFrozenDirectory(directory, current.slice(1)), /membership changed/);
     assert.throws(() => checkFrozenDirectory(directory, [...current, directory + '/unexpected.mjs'].sort()), /membership changed/);
+  }
+});
+
+test('collaboration delivery pins the reviewed successor and rejects rollback, extra edits and unknown files', () => {
+  assert.equal(collaborationDeliveryFingerprints.length, 11);
+  for (const change of collaborationDeliveryFingerprints) {
+    const original = fixture.files.find(item => item.path === change.path);
+    const predecessor = reviewedMaintenanceFingerprints.find(item => item.path === change.path)
+      ?? retainedHotfixFingerprints.find(item => item.path === change.path);
+    assert.ok(original);
+    assert.equal(change.before, predecessor?.after ?? original.sha256);
+    assert.equal(matchesFrozenFingerprint(original, change.after), true);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false);
+    for (const mutate of [text => text + '\nextra', text => text.slice(1), () => '']) {
+      assert.ok(frozenFailures(file => file === change.path ? mutate(read(file)) : read(file)).includes(change.path));
+    }
+  }
+  for (const item of collaborationDeliveryAdditions) {
+    assert.equal(sha256(read(item.path)), item.sha256);
+    assert.ok(frozenFailures(file => file === item.path ? read(file) + '\nextra' : read(file)).includes(item.path));
+    assert.ok(frozenFailures(file => { if (file === item.path) throw Error('missing'); return read(file); }).includes(item.path + ': missing or unreadable'));
+  }
+  assert.equal(collaborationDeliveryPortions.length, 1);
+  for (const item of collaborationDeliveryPortions) {
+    assert.equal(item.before, fixture.portions.find(original => original.path === item.path && original.start === item.start).sha256);
   }
 });
 

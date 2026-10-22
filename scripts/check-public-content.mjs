@@ -278,6 +278,19 @@ function validateText(path, text) {
       checkedText = checkedText.replace(/^const excludedSuccessorFingerprints = \[[\s\S]*?^\];$/m,
         section => (section.match(/^(\s*sha256: )'[0-9a-f]{64}'/gm) ?? []).length === 2
           ? section.replace(/^(\s*sha256: )'[0-9a-f]{64}'/gm, "$1'<public-source-pin>'") : section);
+      // Exact published collaboration/delivery successor pins. Counts and field
+      // names stay bounded; an added hash, foreign field or missing pin is rejected.
+      for (const [block, count, fields] of [
+        ['collaborationDeliveryFingerprints', 22, 'before|after'],
+        ['collaborationDeliveryAdditions', 3, 'sha256'],
+        ['collaborationDeliveryPortions', 2, 'before|after'],
+      ]) {
+        const sectionPattern = new RegExp('^const ' + block + ' = \\[[\\s\\S]*?^\\];$', 'm');
+        const fieldPattern = new RegExp('\\b(' + fields + "): '[0-9a-f]{64}'", 'g');
+        checkedText = checkedText.replace(sectionPattern, section =>
+          [...section.matchAll(fieldPattern)].length === count
+            ? section.replace(fieldPattern, "$1: '<public-source-pin>'") : section);
+      }
     }
     if (label === "疑似秘密赋值" && fixtureTokens.has(rel)) {
       checkedText = checkedText.replace(/\btoken\s*[:=]\s*'([^'\n]+)'/g,
@@ -348,13 +361,15 @@ function validateDetectorRegressions() {
   probe(checker, source + '\n' + syntheticSecret, [secretLabel]);
   probe(checker, source + '\n' + privatePath, [windowsLabel]);
   for (const block of ['retainedHotfixFingerprints', 'retainedHotfixAdditions', 'cliReconnectAttentionFingerprints',
-    'reviewedMaintenanceFingerprints', 'reviewedMaintenanceAdditions', 'excludedSuccessorFingerprints']) {
+    'reviewedMaintenanceFingerprints', 'reviewedMaintenanceAdditions', 'excludedSuccessorFingerprints',
+    'collaborationDeliveryFingerprints', 'collaborationDeliveryAdditions', 'collaborationDeliveryPortions']) {
     const section = source.match(new RegExp('^const ' + block + ' = \\[[\\s\\S]*?^\\];$', 'm'))?.[0];
     if (!section) throw new Error('missing public pin block: ' + block);
     probe(checker, source.replace(section, section.replace(/[0-9a-f]{64}/, '<missing-pin>')), [hashLabel]);
     probe(checker, source.replace(section, section.replace('\n];', "\n  other: '" + syntheticHash + "'\n];")), [hashLabel]);
     probe('scripts/not-an-exempt-checker.mjs', section, [hashLabel]);
-    if (['cliReconnectAttentionFingerprints', 'reviewedMaintenanceFingerprints', 'reviewedMaintenanceAdditions', 'excludedSuccessorFingerprints'].includes(block)) {
+    if (['cliReconnectAttentionFingerprints', 'reviewedMaintenanceFingerprints', 'reviewedMaintenanceAdditions', 'excludedSuccessorFingerprints',
+      'collaborationDeliveryFingerprints', 'collaborationDeliveryAdditions', 'collaborationDeliveryPortions'].includes(block)) {
       const field = /(?:before|after):/.test(section) ? 'before' : 'sha256';
       probe(checker, source.replace(section, section.replace('\n];', "\n  " + field + ": '" + syntheticHash + "'\n];")), [hashLabel]);
       probe(checker, source.replace(section, section.replace(block, 'unreviewedSourceFingerprints')), [hashLabel]);
@@ -423,7 +438,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "a design checkpoint does not create an implementation Worker",
-    value: "不得再建立一个实施Worker",
+    value: "设计与实现同属已批准结果时，设计确认仍是原任务检查点",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
@@ -432,8 +447,8 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
-    label: "formal workers use fresh project tasks instead of forks",
-    value: "全新用户可见项目任务",
+    label: "formal workers use authorized visible project tasks rather than forks",
+    value: "不使用fork或内部助手冒充该正式结果，也不创建或推荐worktree",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
@@ -458,7 +473,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "ordinary test failures stay inside the worker task",
-    value: "普通测试失败、实现调整、格式化、lint、构建和复测由本 Worker闭环",
+    value: "普通测试失败、实现调整、格式化、lint、构建和复测由本Worker闭环",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
@@ -483,7 +498,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "completion requires current first-hand evidence",
-    value: "当前轮验收已用一手证据证明",
+    value: "当前小目标的全部验收已用一手证据证明",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
@@ -543,7 +558,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
     label: "unfinished worker turns return one nonterminal update",
-    value: "正式任务尚未形成终态却实际结束当前执行turn",
+    value: "确需在非终态结束turn时，先稳定现场，final以`进行中`开头",
   },
   {
     path: "模板交付包/skills/identity-worker/SKILL.md",
@@ -553,12 +568,12 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
     label: "nonterminal callbacks do not enter terminal transactions",
-    value: "该来源不做终态事务",
+    value: "`进行中`只是进展，不做终态事务或ack",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
-    label: "PM continues the same worker after a nonterminal turn",
-    value: "向原Worker发一次继续或纠偏",
+    label: "PM continues the same worker only when a substantive event requires it",
+    value: "向原Worker发一次有实质依据的继续或纠偏",
   },
   {
     path: "模板交付包/skills/identity-pm/SKILL.md",
@@ -612,8 +627,8 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/task-design/SKILL.md",
-    label: "design skill gives the Worker technical design capability",
-    value: "Worker加载后形成当前任务中的技术设计能力",
+    label: "design method gives the module owner technical design capability",
+    value: "模块负责人把需求落实为技术设计和实施路径",
   },
   {
     path: "模板交付包/skills/task-design/SKILL.md",
@@ -623,7 +638,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/task-design/references/complex-design-document-and-implementation.md",
     label: "the same Worker continues from design to development",
-    value: "同一个 Worker切换到开发方法继续",
+    value: "同一个模块负责人切换到开发方法继续",
   },
   {
     path: "模板交付包/skills/task-design/SKILL.md",
@@ -637,13 +652,13 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/task-dev/SKILL.md",
-    label: "PM does not execute development",
-    value: "不因使用本方法而接替Worker实施",
+    label: "PM coordination does not grant another module's write ownership",
+    value: "项目统筹身份本身不取得其他模块的写入权",
   },
   {
     path: "模板交付包/skills/task-dev/SKILL.md",
-    label: "development skill gives the Worker programmer capability",
-    value: "Worker加载后形成当前任务中的程序员专业能力",
+    label: "module owners may implement directly",
+    value: "模块负责人可直接实现",
   },
   {
     path: "模板交付包/skills/task-dev/SKILL.md",
@@ -702,8 +717,8 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/task-test/SKILL.md",
-    label: "PM does not execute complete testing",
-    value: "不因使用本方法而接替Worker运行完整测试",
+    label: "PM coordination does not take over another owner's testing",
+    value: "不凭统筹身份接管另一负责人的测试",
   },
   {
     path: "模板交付包/skills/task-test/SKILL.md",
@@ -722,8 +737,8 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/task-test/SKILL.md",
-    label: "testing skill gives the Worker software tester capability",
-    value: "Worker加载后形成当前任务中的测试工程师专业能力",
+    label: "module owners may verify the complete user journey",
+    value: "模块负责人可以直接验证完整用户链路",
   },
   {
     path: "模板交付包/skills/task-test/SKILL.md",
@@ -743,7 +758,7 @@ const requiredSkillFacts = [
   {
     path: "模板交付包/skills/task-test/SKILL.md",
     label: "same-worker testing is not independent testing",
-    value: "同一 Worker切换到`task-test`是专业测试，不得称为独立测试",
+    value: "同一负责人切换到`task-test`是专业测试，不得称为独立测试",
   },
   {
     path: "模板交付包/skills/task-test/SKILL.md",
@@ -797,13 +812,13 @@ const requiredSkillFacts = [
   },
   {
     path: "模板交付包/skills/task-ops/SKILL.md",
-    label: "PM does not execute operations",
-    value: "PM不得读取本 Skill并直接操作环境",
+    label: "PM coordination does not grant environmental operation rights",
+    value: "项目统筹身份不自动取得环境操作权",
   },
   {
     path: "模板交付包/skills/task-ops/SKILL.md",
-    label: "operations skill gives the Worker operations capability",
-    value: "Worker加载后形成当前任务中的运维工程师专业能力",
+    label: "module owners may operate only within their approved scope",
+    value: "模块负责人可在已批准范围直接检查、操作和交付",
   },
   {
     path: "模板交付包/skills/task-ops/SKILL.md",
@@ -1003,12 +1018,12 @@ const requiredTaskStateFacts = [
   {
     path: "模板交付包/docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md",
     label: "BEYOND does not create or recommend worktrees",
-    value: "BEYOND不创建或推荐 worktree",
+    value: "BEYOND 不创建或推荐 worktree",
   },
   {
     path: "模板交付包/docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md",
     label: "same directory is not automatically a conflict",
-    value: "同一仓库或目录也不能单独证明冲突",
+    value: "同一目录、同一项目或名称相似本身不是冲突",
   },
   {
     path: "模板交付包/skills/identity-pm/references/dispatch-and-init.md",
@@ -1018,7 +1033,7 @@ const requiredTaskStateFacts = [
   {
     path: "模板交付包/docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md",
     label: "shared Git index and history operations are serialized",
-    value: "同一 Git工作区的索引、HEAD和历史动作串行",
+    value: "同一 Git 工作区的索引、HEAD 和历史动作串行",
   },
   {
     path: "模板交付包/skills/task-ops/references/git-and-resource-closeout.md",
@@ -1028,11 +1043,11 @@ const requiredTaskStateFacts = [
   {
     path: "模板交付包/docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md",
     label: "collaboration is not loaded for a single task",
-    value: "单一任务、普通 Skill切换和 Worker内部修复不进入本文件",
+    value: "只有真实依赖、共享写入或组合交付才需要协调其他成员",
   },
   {
-    path: "模板交付包/docs/AI编程协同机制/机制/03-跨任务协同与共享对象机制.md",
-    label: "collaboration exposes only three business states",
+    path: "模板交付包/skills/identity-worker/SKILL.md",
+    label: "collaboration delegates business states to the Worker owner",
     value: "业务状态只使用`进行中 / 已暂停 / 已完成`",
   },
   {
@@ -1082,6 +1097,7 @@ for (const fact of requiredTaskStateFacts) {
 const expectedSkills = [
   "identity-pm",
   "identity-worker",
+  "identity-product",
   "task-design",
   "task-dev",
   "task-test",

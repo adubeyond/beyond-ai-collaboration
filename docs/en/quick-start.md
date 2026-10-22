@@ -1,4 +1,6 @@
-# BEYOND 4.0.1 Quick Start
+# BEYOND 4.1.0 Quick Start
+
+> Version 4.1.0 supports project PMs, product-interaction owners, and module owners who can implement directly. The PM-to-Worker fixture below remains one supported route, not a mandatory organization for every task. See [4.1.0 notes](releases/v4.1.0.md).
 
 This page is for the minimal fixture. For real-project installation, upgrades, new/existing-project initialization, and copy-ready prompts, use the [Installation, Upgrade, and Project Initialization Guide](../../模板交付包/docs/en/installation-upgrade-and-project-initialization.md) instead of assembling an adoption sequence from this example.
 
@@ -18,7 +20,7 @@ The guide does not touch a real server, database, production environment, or rem
 - Node.js 18 or later. The fixture uses only built-in modules and needs no `npm install`.
 - A writable local directory.
 
-If you want to invoke `$identity-pm`, `$identity-worker`, and `$task-*` directly, install the six Skills from this repository. Restart Codex after the first installation or any replacement of global Skills. A restart is unnecessary when only project-local `SKILL.md` files are referenced and the global copies did not change.
+If you want to invoke `$identity-pm`, `$identity-product`, `$identity-worker`, and `$task-*` directly, install the seven Skills from this repository. Restart Codex after the first installation or any replacement of global Skills. A restart is unnecessary when only project-local `SKILL.md` files are referenced and the global copies did not change.
 
 Confirm the environment:
 
@@ -61,10 +63,11 @@ An unadopted project does not yet have the BEYOND root entry. Start with `$ident
 
 ## Install the Skills
 
-Install or explicitly reference these six directories from `beyond-control/skills/`:
+Install or explicitly reference these seven directories from `beyond-control/skills/`:
 
 ```text
 identity-pm
+identity-product
 identity-worker
 task-design
 task-dev
@@ -78,7 +81,7 @@ Verify the actual installed copy from the immutable release checkout:
 node beyond-control/scripts/verify-install-integrity.mjs --installed-skills-root "<Codex Skills directory>" --project-agents "<business project root>/AGENTS.md"
 ```
 
-The on-disk installation is complete only when this command exits with code `0` and confirms that all six Skills, the control-repository structure, and the full project runtime kernel match with no legacy BEYOND Hook content. `--content-only` checks candidate content but does not prove project fusion. Restart Codex after installing or replacing global Skills, then create a new task from the demo root.
+The on-disk installation is complete only when this command exits with code `0` and confirms that all seven Skills, the control-repository structure, and the full project runtime kernel match with no legacy BEYOND Hook content. `--content-only` checks candidate content but does not prove project fusion. Restart Codex after installing or replacing global Skills, then create a new task from the demo root.
 
 ## Run the initial baseline
 
@@ -140,7 +143,7 @@ Normal behavior:
 - Ordinary implementation or test failures are repaired and retested in the same task.
 - Git, dependencies, servers, production, and data remain untouched because they were not authorized.
 
-### Execution decisions in 4.0.1
+### Execution decisions in 4.1.0
 
 - When the confirmed design and implementation scope remain applicable, continue along the shortest viable path without repeated approval. New business work or material scope changes first require confirmation of the affected requirements and design.
 - When wording such as “optimize this” can lead to materially different outcomes, ask one result-changing question. Investigate technical details that the project itself can answer instead of sending them back to the user.

@@ -36,6 +36,7 @@ const errors = [];
 const expectedSkills = [
   "identity-pm",
   "identity-worker",
+  "identity-product",
   "task-design",
   "task-dev",
   "task-test",
@@ -46,6 +47,7 @@ const expectedControlRuntimeFiles = [
   "scripts/runtime/project-identity-provider.mjs",
   "scripts/runtime/worker-result-receipts.mjs",
   "scripts/runtime/workbench-transaction.mjs",
+  "scripts/runtime/delivery-policy.mjs",
 ];
 const expectedCliProductFiles = [
   "scripts/cli/cli-task-store.mjs", "scripts/cli/native-cli-runner.mjs", "scripts/cli/cli-context.mjs", "scripts/cli/codex-executable.mjs", "scripts/cli/manager-launch.mjs",
@@ -329,6 +331,23 @@ if (manifestText) {
   }
 }
 
+const hasDevelopmentCandidate = manifest && Object.hasOwn(manifest, "developmentCandidate");
+let developmentIdentity = null;
+if (hasDevelopmentCandidate) {
+  const candidate = manifest.developmentCandidate;
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)
+    || ["buildId", "status", "baseBuildId"].some((field) =>
+      typeof candidate[field] !== "string" || !candidate[field].trim())) {
+    errors.push("developmentCandidate必须声明有效的buildId、status和baseBuildId");
+  } else {
+    developmentIdentity = `BEYOND开发候选 ${candidate.buildId}（状态：${candidate.status}；底座版本：${manifest.releaseVersion}；底座构建：${candidate.baseBuildId}）`;
+  }
+  // A development marker is never an installed-release identity, even if its fields are invalid.
+  if (!contentOnly) {
+    errors.push("developmentCandidate是未发布、不可安装的开发候选，不能通过完整安装验真；仅核对候选内容请显式使用 --content-only");
+  }
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -433,7 +452,7 @@ if (manifest) {
     errors.push("候选版本清单必须声明控制仓入口、项目入口和固定动作脚本，且不得继续登记BEYOND Hook");
   }
   if (!Array.isArray(manifest.skills) || JSON.stringify(manifest.skills) !== JSON.stringify(expectedSkills)) {
-    errors.push("候选版本清单必须按正式名称声明六个Skill");
+    errors.push("候选版本清单必须按正式名称声明七个Skill");
   } else {
     for (const skill of manifest.skills) compareSkill(skill);
   }
@@ -601,11 +620,13 @@ if (manifest) {
 }
 
 if (errors.length > 0) {
-  console.error(`BEYOND安装验真失败：${errors.length}项`);
+  console.error(`${developmentIdentity ?? (hasDevelopmentCandidate ? "BEYOND开发候选（身份无效）" : "BEYOND")}安装验真失败：${errors.length}项`);
   for (const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
 
 console.log(contentOnly
-  ? `BEYOND ${manifest.releaseVersion}内容验真通过（模式：发行模板，不是已初始化业务项目）：六个Skill、控制仓入口和固定脚本一致`
-  : `BEYOND ${manifest.releaseVersion}安装验真通过（模式：已初始化业务项目）：六个Skill、控制仓结构、项目运行内核一致，标准路径不依赖BEYOND Hook`);
+  ? developmentIdentity
+    ? `${developmentIdentity}内容验真通过（模式：隔离开发候选；不是已安装发行版，不可发布或安装）：七个Skill、控制仓入口和固定脚本一致`
+    : `BEYOND ${manifest.releaseVersion}内容验真通过（模式：发行模板，不是已初始化业务项目）：七个Skill、控制仓入口和固定脚本一致`
+  : `BEYOND ${manifest.releaseVersion}安装验真通过（模式：已初始化业务项目）：七个Skill、控制仓结构、项目运行内核一致，标准路径不依赖BEYOND Hook`);

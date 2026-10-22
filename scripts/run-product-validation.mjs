@@ -71,6 +71,8 @@ export function productCommands(sourceRoot) {
     { name: 'task-engineering-separation', args: ['scripts/check-task-engineering-separation.mjs'] },
     { name: 'retained-cli-regressions', args: ['--test', ...fs.readdirSync(path.join(sourceRoot, '模板交付包/scripts/cli')).filter(n => n.endsWith('.test.mjs')).map(n => '模板交付包/scripts/cli/' + n)] },
     { name: 'team-control-results', args: ['scripts/check-team-control-results.mjs'] },
+    { name: 'small-goal-composition', args: ['--test', '模板交付包/scripts/runtime/workbench-delivery.test.mjs'] },
+    { name: 'cli-report-scope', args: ['--test', 'scripts/check-cli-report-scope.mjs'] },
     { name: 'runtime-and-cli', args: ['--test', '--test-concurrency=4', ...runtime] },
     { name: 'accepted-cli-recovery-preservation', args: ['--test', 'scripts/check-cli-accepted-recovery-preservation.mjs'] },
     { name: 'progress-decision-fixtures', args: ['scripts/probe-pm-progress-decisions.mjs', '--check-fixtures'] },
