@@ -124,7 +124,7 @@ if(q.method==='tools/call'){
     fs.mkdirSync(path.join(scripts, 'runtime'), { recursive: true });
     // Only executable bridge dependencies are copied, never the repository or business tree.
     fs.cpSync(fileURLToPath(new URL('../模板交付包/scripts/cli/', import.meta.url)), path.join(scripts, 'cli'), { recursive: true });
-    for (const file of ['project-identity-provider.mjs', 'workbench-transaction.mjs']) {
+    for (const file of ['project-identity-provider.mjs', 'workbench-transaction.mjs', 'delivery-policy.mjs']) {
       fs.copyFileSync(fileURLToPath(new URL('../模板交付包/scripts/runtime/' + file, import.meta.url)), path.join(scripts, 'runtime', file));
     }
     // Trace only this fixture's subprocess boundaries. No argv, environment or

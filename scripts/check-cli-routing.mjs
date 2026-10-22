@@ -28,7 +28,8 @@ test('optional CLI has one rule owner and keeps the default Worker callback inta
   assert.match(rule, /CLI_RESULT_READY/); assert.match(rule, /workbench\.accept-cli/);
   assert.match(rule, /不.*worker-result\.enqueue/);
   const worker = fs.readFileSync(path.join(base, 'skills/identity-worker/SKILL.md'), 'utf8');
-  assert.match(worker, /已确认.*CLI后台/);
+  assert.match(worker, /CLI后台已实际接管、受管状态与返回本负责人的通知责任均已建立时/);
+  assert.match(worker, /不生成终态回执、不请求PM续派、不陪跑轮询/);
   assert.match(worker, /当前Worker正在提交终态；请扫描待处理终态并在任务线程结束后核对final/);
   assert.match(worker, /"threadId":"<source_thread_id>","prompt"/);
   assert.match(worker, /正式任务在回源前通过固定`runtime`入口执行一次`worker-result.enqueue`/);
