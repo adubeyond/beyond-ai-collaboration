@@ -64,6 +64,34 @@ function snapshot(directory) {
     .sort().map(relative => [relative, sha(fs.readFileSync(path.join(directory, relative)))]));
 }
 
+test('current managed ownership is explicit without promoting a document or native peer to owner', t => {
+  const f = fixture(t);
+  f.write('docs/设计.md', 'Historical note: report to BEYOND-newwst-backend-foundation [2378eb].');
+  const context = f.build();
+  assert.deepEqual(context.manifest.ownership, {
+    projectId: f.binding.projectId, taskId: f.binding.taskId,
+    ownerThreadId: f.binding.ownerThreadId, returnChannel: 'normal-final-via-managed-bridge',
+  });
+  assert.equal(context.text.split('\n')[0], `Current managed assignment: ${JSON.stringify(context.manifest.ownership)}`);
+  assert.match(context.text, /normal final answer/);
+  assert.match(context.text, /not a native peer address/);
+  assert.match(context.text, /Same-session internal subagents remain available/);
+  assert.ok(sourceFor(context, f.design).content.includes('[2378eb]'), 'preserve source bytes, do not rewrite history');
+  assert.equal(context.manifest.ownership.ownerThreadId, 'context-owner');
+});
+
+test('owner transfer refreshes the next-round context while retaining native session and contract', t => {
+  const f = fixture(t), before = f.build(), savedRun = structuredClone(f.run);
+  const currentBinding = { ...f.binding, ownerThreadId: 'verified-new-desktop-owner' };
+  const after = buildCliContext({ binding: currentBinding, run: f.run, controlRoot: productRoot });
+  assert.equal(before.manifest.ownership.ownerThreadId, 'context-owner');
+  assert.equal(after.manifest.ownership.ownerThreadId, 'verified-new-desktop-owner');
+  assert.ok(!after.text.includes('context-owner'));
+  assert.deepEqual(after.manifest.entries, before.manifest.entries);
+  assert.deepEqual(f.run, savedRun);
+  assert.equal(f.run.sessionId, 'unchanged-native-session');
+});
+
 test('nested execution cwd resolves current requirements and design from the bound project root', t => {
   const f = fixture(t);
   f.write('packages/module/docs/需求.md', 'WRONG-CWD-REQUIREMENT: obsolete source');

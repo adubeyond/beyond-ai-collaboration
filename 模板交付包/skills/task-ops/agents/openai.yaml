@@ -1,7 +1,7 @@
 interface:
   display_name: "运维"
-  short_description: "核验环境并执行发布、恢复、回滚和运行收口"
-  default_prompt: "$task-ops：先沿项目正式运维入口确认实际环境、主机、服务、版本、验证与回滚。正式任务把结果交回原 Worker，直接请求由当前基础智能体交付；PM只管理门禁和顺序，不直接操作环境。已有相同范围授权时连续执行，缺生产或高风险授权时只做安全预检并提出一个最小问题。"
+  short_description: "在实际授权内核验目标环境并执行发布、恢复、回滚和运行收口"
+  default_prompt: "$task-ops：沿正式运行手册核对目标、授权、实际版本、验证与回滚，由当前结果负责人在既有范围内连续执行；不接管他人对象，缺必要高风险授权时只做安全预检。"
 
 policy:
   allow_implicit_invocation: true

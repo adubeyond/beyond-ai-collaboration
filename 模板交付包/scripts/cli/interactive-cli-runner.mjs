@@ -163,6 +163,14 @@ export async function runInteractiveCli({ binding, run: initialRun, profile, pro
           if (digest(input.profile) !== digest(profile)) throw new Error('Live native profile changed; detach idle view before changing model');
           const saved = store.readJson(path.join(store.runDir(input.run, input.run.runNumber), 'run.json'));
           if (digest(saved) !== digest(input.run) || saved.sessionId !== sessionId || store.read(binding).runNumber !== saved.runNumber) throw new Error('Native resume run mismatch');
+          // Capability negotiation yields; reserve this idle session so a second
+          // request cannot dispatch the same saved run while transport refreshes.
+          dispatching = true;
+          try {
+            if (host?.refreshTransport) await host.refreshTransport(input.desktopTransport, saved);
+            else if (input.desktopTransport) throw new Error('Desktop transport refresh unavailable');
+            if (response.destroyed) throw new Error('Native resume caller disconnected before dispatch; retry the same request');
+          } catch (error) { dispatching = false; throw error; }
           run = saved; store.setProcess(run, managerIdentity); store.setChildProcess(run, serverIdentity);
           await dispatch(input.prompt, false); result = { ...run, status: 'running', stateLocator: store.locator(run) };
         } else if (request.url === '/open') { result = openWindow(store, binding); }

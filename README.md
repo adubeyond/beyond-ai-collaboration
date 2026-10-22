@@ -7,13 +7,13 @@
 > **Beyond Chat. Build Reality.**
 > Help Codex finish real project outcomes instead of stopping at answers.
 
-BEYOND is an open-source AI project collaboration system for **local Codex Desktop projects**. It helps AI organize, advance, and deliver real outcomes beyond a single conversation. PMs understand the project, analyze product and technical questions, plan work, and verify results; Workers continuously perform the design, development, testing, and authorized operations needed for their assigned outcome.
+BEYOND is an open-source AI collaboration system for **local Codex Desktop projects**, built around small, verifiable outcomes. Project PMs manage direction and real dependencies; product-and-interaction owners turn business intent into usable prototypes; module owners combine planning with execution and may develop directly or use assistants and CLI tools. These are responsibilities, not three mandatory conversations.
 
 Use one PM for the whole project or several PMs for explicit scopes. With a user-approved model policy, PMs select model-and-reasoning combinations by task, upgrade for harder problems, and downgrade when the remaining work becomes simpler, preserving the same Worker's context and results. Reusable project knowledge, focused context loading, callbacks, pause/resume, and evidence-based acceptance help reduce repeated explanations, manual chasing, and unnecessary rework.
 
 It is built for people already using Codex on real repositories who are tired of repeated context loss, finished Workers that never return to the PM, stage-heavy workflows that require constant “continue” prompts, ambiguous claims such as “tests passed” versus “released,” and conflicting writes across parallel tasks.
 
-[Download BEYOND v4.0.1](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v4.0.1) · [Gitee mirror](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90-second real case](docs/en/real-case-and-90-second-demo.md) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [4.0.1 Upgrade Guide](docs/en/releases/v4.0.1.md) · [Architecture](docs/en/architecture.md)
+[Download BEYOND v4.1.0](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v4.1.0) · [Gitee mirror](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90-second real case](docs/en/real-case-and-90-second-demo.md) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [4.1.0 Upgrade Guide](docs/en/releases/v4.1.0.md) · [Architecture](docs/en/architecture.md)
 
 ## What BEYOND changes
 
@@ -26,7 +26,7 @@ It is built for people already using Codex on real repositories who are tired of
 | “Tests passed,” “may commit,” and “may release” collapse into one permission | Files, Git, network, servers, data, and production remain separate evidence and authorization domains |
 | Parallel tasks overwrite one another or close twice | The PM registers one owner and write boundary per result; acceptance and archival are idempotent |
 
-## Core capabilities in 4.0.1
+## Core capabilities in 4.1.0
 
 ### 1. Select models by task, adjust them by stage
 
@@ -54,41 +54,49 @@ PMs interpret objectives using project context, make product and technical judgm
 
 Version 3.2.14 records pre-development discussion in existing requirements and technical-design documents: end-to-end behavior, data sources, permissions, errors, acceptance, and stack reuse. Once the user confirms the applicable revision and implementation scope, the original Worker develops, tests, delivers, and maintains implementation changes without per-command approval. New designs normally receive one different-model review, with a third model for consequential disagreement; repeated failed fixes without new evidence trigger independent diagnosis instead of blind retries. Review does not replace user decisions or change callbacks or the model matrix.
 
-One PM can manage a small project; several PMs can manage explicit scopes with a shared understanding of the overall objective. Independent results run in parallel and real dependencies are coordinated directly. Each result keeps one responsible owner and one formal Worker, without an extra supervisory layer or requiring the user to relay messages.
+One PM can manage a small project; several PMs can manage explicit scopes with a shared understanding of the overall objective. Each small outcome has one responsible owner. A module owner may design, develop, test, and deliver directly without delegating to another Worker. Handoffs address a named recipient and a real dependency; ordinary progress is not broadcast to every PM, and peer suggestions do not become user authorization.
 
-### 3. One Worker continuously delivers one outcome
+### 3. Prototype handoff and composition of small outcomes
+
+Discuss new screens and interactions through a usable prototype, then connect confirmed behavior, states, data sources, permissions, and errors to existing requirements and technical designs. `identity-product` owns this scope and reuses suitable UI Skills without copying entire external plugins. A prototype does not replace API or data contracts; backend-only work and focused repairs to established flows do not require a UI prerequisite.
+
+Keep each small goal meaningful to a user, not merely “frontend written” or “API tests passed.” Split frontend and backend only when coupling and actual parallel benefits justify it. An existing owner integrates separate contributions and verifies the real screen/API/data chain; two component reports do not prove composition. An optional delivery contract binds the current design revision, interfaces, and artifact references. Old acceptance cannot close a revised design, and machine references do not authenticate the business evidence itself.
+
+### 4. One module owner continuously delivers one outcome
 
 Design, development, testing, and operations are methods selected as needed, not four mandatory handoffs. Ordinary errors, repair, and retesting stay in the same task. Checkpoints, rework, and missing evidence keep the same Worker rather than repeatedly creating new conversations.
 
 If an execution turn ends before the task is complete, the Worker reports what is done, what remains, and the next step so the PM can guide continuation within existing authority. Genuine business choices, additional high-risk authorization, unresolved shared conflicts, or unavailable essential resources can require a pause; the original Worker resumes when the condition is resolved.
 
-### 4. Reusable project knowledge, context supplied on demand
+### 5. Reusable project knowledge, context supplied on demand
 
 Goals, architecture, development conventions, tests, operational entry points, and user corrections have identifiable project sources. New PMs learn the overall project before dispatching work; Workers load facts relevant to their result instead of receiving every project document.
 
 Existing documents can stay in place with registered entry points. Stale documents must be checked against current evidence rather than treated as unquestionable instructions. Missing documentation is not a new gate when safe investigation can establish the needed facts.
 
-Version 4.0.1 separates tasks from lasting engineering documents. Tasks describe the current outcome, scope, and evidence; requirements and designs describe how the business should work, its interfaces, data, errors, and acceptance. PMs analyze the gap before dispatching or correcting work; Workers follow applicable source sections and maintain actual changes at their original locations. Existing documents stay in place. Obsolete sections are corrected or retired locally without hiding still-valid designs or treating an approved, unimplemented design as obsolete. See the [engineering documentation guide](模板交付包/docs/AI编程协同机制/工程资料指南.md).
+Version 4.1.0 separates tasks from lasting engineering documents. Tasks describe the current outcome, scope, and evidence; requirements and designs describe how the business should work, its interfaces, data, errors, and acceptance. PMs analyze the gap before dispatching or correcting work; Workers follow applicable source sections and maintain actual changes at their original locations. Existing documents stay in place. Obsolete sections are corrected or retired locally without hiding still-valid designs or treating an approved, unimplemented design as obsolete. See the [engineering documentation guide](模板交付包/docs/AI编程协同机制/工程资料指南.md).
 
-### 5. Reporting, verification, and recovery close the loop
+### 6. Reporting, verification, and recovery close the loop
 
 On completion or genuine pause, Workers save a short-lived receipt and call their PM back. The PM checks the current turn's completion, formal result, and acceptance evidence before updating the workbench and acknowledging the receipt. Repeated notifications do not duplicate acceptance. User-cancelled work can close with history without pretending it was completed.
 
 Busy PMs handle injected callbacks at safe tool boundaries and then continue the original user request, retaining both foreground and background results. Visibility races have a bounded wait of up to one minute and a strictly scoped, read-only local final fallback. If the host does not start a processing turn, pending results can be checked on the next natural PM turn. These are recovery paths, not a guarantee that every callback will always be processed automatically.
 
-### 6. Optional CLI collaboration with retained-session goal loops
+### 7. Optional CLI collaboration with retained-session goal loops
 
-The native Desktop Worker route remains the default. Optional routes support PM → Worker → CLI and PM or Worker → CLI. Codex, ZCode, and Claude Code can use real native interactive terminals, show execution, accept corrections, and resume the same session rather than presenting JSON logs as a conversation. Runs can finish concurrently; notifications for the same owner are serialized and wait for that owner's latest foreground turn to end before review, continuation, or acceptance.
+The native Desktop Worker route remains the default. Optional routes support PM → Worker → CLI and PM or Worker → CLI. Codex, ZCode, and Claude Code can use real native interactive terminals, show execution, accept corrections, and resume the same session rather than presenting JSON logs as a conversation. Runs can finish concurrently; notifications go only to the current direct owner, are serialized for that owner, and wait for the latest foreground turn to end before review, continuation, or acceptance. Receiver identity is checked across owner transfer; old notifications neither broadcast work nor resume a paused goal.
 
 Each CLI task selects its own model and effort. Configuration changes resume the saved session after the previous run ends and is reviewed, without changing shared defaults. Explicitly authorized full-access modes avoid per-command approvals, but cannot override business scope, OS permissions, or provider entitlements. Claude Code and ZCode no longer reject an upgrade solely because its version number changed: Claude uses the existing native startup/handshake, and ZCode checks actual integration points and runtime capabilities before dispatch. Unsupported interfaces still fail explicitly; see the [CLI mechanism and support boundaries](模板交付包/docs/AI编程协同机制/机制/04-CLI目标协作机制.md).
 
 A notification means a run ended, not that the business goal was achieved. Direct CLI work has its own result and acceptance records instead of impersonating Worker receipts; Worker-mediated work still returns through the original Worker protocol. Recovery, concurrency isolation, duplicate-notification suppression, and explicit closure after a goal change are supported. Third-party API settings and authentication come from the existing local CLI profile, not the user's Codex subscription or credentials shipped in the package.
 
-Version 4.0.1 preserves the 3.2.15 explicitly authorized, single-task owner transfer for an unregistered `assist` CLI task after its current run has completed. It preserves the original task, session, model, results and reviews without creating a formal workbench task. The successor independently reviews the result before continuing the same session; the previous owner loses control. Transfer journals and task locks reject competing control and allow interrupted or duplicate requests to be handled without silently taking over a live process. Existing formal transfers, Desktop callbacks and the model matrix are unchanged.
+Version 4.1.0 preserves the 3.2.15 explicitly authorized, single-task owner transfer for an unregistered `assist` CLI task after its current run has completed. It preserves the original task, session, model, results and reviews without creating a formal workbench task. The successor independently reviews the result before continuing the same session; the previous owner loses control. Transfer journals and task locks reject competing control and allow interrupted or duplicate requests to be handled without silently taking over a live process. Existing formal transfers, Desktop callbacks and the model matrix are unchanged.
 
-### 7. Lightweight adoption with real boundaries
+After a formal CLI task is archived, its original owner can still inspect results and use managed cleanup for an idle manager, but cannot use that path to resume work or create a session. Manager exit and window closure are reported separately; missing identity remains unknown. Existing sessions, staged delivery, document loading, executable discovery, and CLI compatibility fixes are retained.
 
-Project entry files, six Skills, and local control scripts work without a new persistent daemon, Hook, or second task scheduler. Non-Git projects, single repositories, multiple repositories, and platform-provided worktrees are supported; project identity and execution location are verified separately to prevent cross-project writes.
+### 8. Lightweight adoption with real boundaries
+
+Project entry files, seven Skills, and local control scripts work without a new persistent daemon, Hook, or second task scheduler. Non-Git projects, single repositories, multiple repositories, and platform-provided worktrees are supported; project identity and execution location are verified separately to prevent cross-project writes.
 
 Current explicit goals and authorization override ordinary workflow preferences. Tools follow the actual task rather than making either CLI or browser the only route; permission to edit code does not imply permission to change production. Installation replaces manifest-owned product content while preserving project knowledge and runtime state. External checksum files are optional, but a supplied mismatch still requires stopping.
 
@@ -96,14 +104,13 @@ Current explicit goals and authorization override ordinary workflow preferences.
 
 ```mermaid
 flowchart LR
-    U["Project owner\ndefines the outcome"] --> PM["PM\nmain line · workbench · boundaries · acceptance"]
-    PM --> W1["Worker A\none business result"]
-    PM --> W2["Worker B\nanother business result"]
-    W1 --> E["Code · tests · Git · runtime evidence"]
-    W2 --> E
-    E --> R["Short-lived receipt + native final"]
-    R --> PM
-    PM --> S["Acceptance · archive · reusable facts"]
+    U["Project owner\ngoals and tradeoffs"] --> PM["Project PM\ndirection and real dependencies"]
+    U --> P["Product interaction\nprototype and business behavior"]
+    PM --> W["Module owner\nsmall outcome · direct work or helpers"]
+    P --> W
+    W --> E["Screen · API · data\ncomposition checks"]
+    E --> R["Result and evidence\ndirect recipient only"]
+    R --> S["Acceptance and document maintenance"]
 ```
 
 The PM understands objectives, analyzes problems, designs tasks, and corrects course rather than merely forwarding work or continuously polling Workers. A Worker continuously performs authorized work; if its execution turn ends before the task is done, it reports the remaining result so the PM can guide the same Worker within the existing authorization. On completion or genuine pause, the Worker freezes its final, stores a short-lived receipt, and sends one callback. The PM verifies that the current turn has ended and checks the formal result and evidence before closeout. A callback alone does not prove that the Worker has finished.
@@ -112,8 +119,8 @@ The PM understands objectives, analyzes problems, designs tasks, and corrects co
 
 ### 1. Download the official release
 
-- [BEYOND-4.0.1.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.0.1/BEYOND-4.0.1.zip)
-- [BEYOND-4.0.1.zip.sha256 (optional checksum)](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.0.1/BEYOND-4.0.1.zip.sha256)
+- [BEYOND-4.1.0.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.0/BEYOND-4.1.0.zip)
+- [BEYOND-4.1.0.zip.sha256 (optional checksum)](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.0/BEYOND-4.1.0.zip.sha256)
 
 The ZIP is sufficient for installation. A missing or unavailable `.sha256` file does not block installation; if a checksum file is supplied and does not match, stop. See the [Installation, Upgrade, and Project Initialization Guide](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) for exact commands.
 
@@ -123,20 +130,20 @@ Open a new ordinary Codex task in the target project and send this prompt withou
 
 ```text
 This is BEYOND installation maintenance. Do not create a PM, Worker, or business task.
-Use the verified official BEYOND 4.0.1 package I downloaded to install or upgrade this project's beyond-control directory and six global Skills.
+Use the verified official BEYOND 4.1.0 package I downloaded to install or upgrade this project's beyond-control directory and seven global Skills.
 Create a precise backup first. Preserve native project rules and real content under local, projects, and shared; never replace them with empty templates.
 Fuse the project entry, run installation verification, then stop and wait for me to restart Codex. Do not start, resume, or modify business tasks.
 ```
 
-Installation adds the project-local `beyond-control/`, fuses the root `AGENTS.md`, and installs six user-level Skills:
+Installation adds the project-local `beyond-control/`, fuses the root `AGENTS.md`, and installs seven user-level Skills:
 
 ```text
-identity-pm      identity-worker
+identity-pm      identity-product      identity-worker
 task-design      task-dev
 task-test        task-ops
 ```
 
-BEYOND 4.0.1 does not install an identity Hook, notify branch, persistent daemon, or extra Codex CLI. The optional route uses an existing local CLI with finite per-dispatch background execution and notification; it does not replace the default Desktop route.
+BEYOND 4.1.0 does not install an identity Hook, notify branch, persistent daemon, or extra Codex CLI. The optional route uses an existing local CLI with finite per-dispatch background execution and notification; it does not replace the default Desktop route.
 
 ### 3. Restart and adopt the project
 
@@ -188,10 +195,11 @@ It is not currently a good fit for:
 
 ## Current boundaries
 
-- The current stable release is `v4.0.1`, primarily for local Codex Desktop projects.
+- The current stable release is `v4.1.0`, primarily for local Codex Desktop projects.
 - Standard installation and operation have been validated in real Windows projects; public checks also cover package contents, installation structure, and the minimal fixture.
 - Task creation, callbacks, and persistent permissions vary across platforms. Evidence from one platform is not a universal compatibility claim.
 - The existing read-only local fallback for completed tasks with unavailable final text is retained. It does not guarantee compatibility with every host version or eliminate long-context goal drift.
+- The observed two-owner direct handoff revalidated existing completed functionality; it was not a fresh end-to-end development trial. This release does not guarantee improved business quality, fixed allowance savings, or long-term unattended reliability. See [validation and limits](docs/releases/v4.1.0-validation.md).
 - BEYOND collects no installation telemetry. GitHub Release download counts measure release-asset downloads only, not every installation or active user.
 
 ## Documentation
@@ -202,7 +210,7 @@ It is not currently a good fit for:
 | Install, upgrade, or roll back | [Installation, Upgrade, and Project Initialization](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) |
 | Try a clean fixture | [Quick Start](docs/en/quick-start.md) |
 | Understand PM, Worker, documents, and runtime | [Architecture](docs/en/architecture.md) |
-| Review 4.0.1 changes | [Upgrade Guide](docs/en/releases/v4.0.1.md) · [CHANGELOG](CHANGELOG.md) |
+| Review 4.1.0 changes | [Upgrade Guide](docs/en/releases/v4.1.0.md) · [CHANGELOG](CHANGELOG.md) |
 | Inspect the control repository | [Template Package](模板交付包/README.md) |
 | Report a problem or propose an improvement | [Issues](https://github.com/adubeyond/beyond-ai-collaboration/issues) · [Contributing](CONTRIBUTING.en.md) |
 | Report a vulnerability privately | [Security Policy](SECURITY.en.md) |

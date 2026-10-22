@@ -4,20 +4,21 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
+import http from 'node:http';
 import crypto from 'node:crypto';
 import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { CliTaskStore, atomicJson, digest, sha256File } from '../模板交付包/scripts/cli/cli-task-store.mjs';
 import { currentProcessIdentity } from '../模板交付包/scripts/cli/process-identity.mjs';
 import { runVisibleCli } from '../模板交付包/scripts/cli/visible-cli-runner.mjs';
-import { createClaudeSession, sendClaudePrompt } from '../模板交付包/scripts/cli/claude-client.mjs';
+import { createClaudeSession, sendClaudePrompt, watchClaudeFailures } from '../模板交付包/scripts/cli/claude-client.mjs';
 import { readClaudeProfile, claudeArguments } from '../模板交付包/scripts/cli/claude-profile.mjs';
 import { forwardClaudeHook } from '../模板交付包/scripts/cli/claude-hook.mjs';
 import { callInteractive } from '../模板交付包/scripts/cli/interactive-client.mjs';
 
 async function until(check) { const end = Date.now() + 12000; while (!check()) { if (Date.now() > end) throw new Error('Claude fixture timeout'); await new Promise(resolve => setTimeout(resolve, 10)); } }
 const transport = { pipe: '\\\\.\\pipe\\fixture-claude', token: crypto.randomUUID() };
-function fixture(t, stage, { documents = false } = {}) {
+function fixture(t, stage, { documents = false, corruptFirstPrompt = false, splitUnicodePosts = false, transcript = false, attentionPostFails = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-claude-unit-'));
   const profile = { schemaVersion: 1, provider: 'claude', mode: 'interactive', ui: 'window', model: 'test-model', permissionMode: 'dontAsk', runner: { command: process.execPath, args: [] } };
   const profilePath = path.join(root, 'profile.json'); atomicJson(profilePath, profile);
@@ -29,15 +30,45 @@ function fixture(t, stage, { documents = false } = {}) {
   const store = new CliTaskStore({ controlRoot: root }); store.create(binding);
   const run = store.beginRun(binding, { requestId: 'start', prompt: 'review', stage, expectedRunNumber: 0, expectedSessionId: null });
   const identity = { ...currentProcessIdentity(), token: crypto.randomUUID() }; store.setProcess(run, identity);
-  const sessionId = crypto.randomUUID(), calls = [], callbacks = [], abort = new AbortController();
+  const sessionId = crypto.randomUUID(), calls = [], submissions = [], postRoutes = [], fragmentedRoutes = [], callbacks = [], abort = new AbortController();
+  const transcriptPath = path.join(root, sessionId + '.jsonl'), observers = [];
+  if (transcript) fs.writeFileSync(transcriptPath, '');
   let releaseForeground, native, attached, commands, closing, deliveryError;
+  let attentionFailures = 0;
   const foreground = new Promise(resolve => { releaseForeground = resolve; });
-  const host = { currentSource: () => ({ ownerThreadId: 'owner', ownerTurnId: 'foreground' }), waitForSourceTurnEnd: () => foreground, checkCapability: async () => ({ available: true }), send: async value => { callbacks.push(value); return { status: 'delivered' }; } };
+  const host = { currentSource: () => ({ ownerThreadId: 'owner', ownerTurnId: 'foreground' }), waitForSourceTurnEnd: () => foreground, checkCapability: async () => ({ available: true }), send: async value => { if (value.beforeSend && !value.beforeSend()) return { status: 'unavailable' }; callbacks.push(value); return { status: 'delivered' }; } };
   const endpoint = () => store.readJson(path.join(store.taskDir(binding), 'interactive.json'));
   const hook = (event, extra = {}) => native.hook({ session_id: sessionId, hook_event_name: event, ...extra }, transport);
   async function post(route, data) {
-    const ep = endpoint(), response = await fetch(new URL(route, ep.controlUrl), { method: 'POST', headers: { authorization: 'Bearer ' + fs.readFileSync(ep.tokenPath, 'utf8'), 'content-type': 'application/json' }, body: JSON.stringify(data) });
-    const body = await response.json(); if (!response.ok) throw new Error(body.error); return body;
+    postRoutes.push(route);
+    if (route === '/attention' && (attentionPostFails === true || (attentionPostFails === 'once' && attentionFailures++ === 0))) throw new Error('isolated attention transport failure');
+    const ep = endpoint(), bodyText = JSON.stringify(data), url = new URL(route, ep.controlUrl);
+    const headers = { authorization: 'Bearer ' + fs.readFileSync(ep.tokenPath, 'utf8'), 'content-type': 'application/json' };
+    if (splitUnicodePosts && bodyText.includes('中文🙂')) {
+      fragmentedRoutes.push(route);
+      const bytes = Buffer.from(bodyText), start = bytes.indexOf(Buffer.from('中文🙂'));
+      // Force separate HTTP chunks inside both a three-byte character and a four-byte emoji.
+      const cuts = [start + 1, start + Buffer.byteLength('中文') + 2];
+      return new Promise((resolve, reject) => {
+        const request = http.request(url, { method: 'POST', headers }, response => {
+          let text = ''; response.setEncoding('utf8'); response.on('data', chunk => { text += chunk; });
+          response.once('error', reject); response.once('end', () => {
+            try { const body = JSON.parse(text); if (response.statusCode !== 200) throw new Error(body.error); resolve(body); }
+            catch (error) { reject(error); }
+          });
+        });
+        request.once('error', reject);
+        void (async () => {
+          request.write(bytes.subarray(0, cuts[0])); await new Promise(resolve => setTimeout(resolve, 25));
+          request.write(bytes.subarray(cuts[0], cuts[1])); await new Promise(resolve => setTimeout(resolve, 25));
+          request.end(bytes.subarray(cuts[1]));
+        })().catch(reject);
+      });
+    }
+    const response = await fetch(url, { method: 'POST', headers, body: bodyText });
+    const body = await response.json(); if (!response.ok) throw new Error(body.error);
+    if (route === '/attention' && attentionPostFails === 'lost-reply' && data.status === 'blocked' && attentionFailures++ === 0) throw new Error('isolated response lost after persistence');
+    return body;
   }
   function close() {
     closing ??= (async () => { await attached; await native.nativeEnded(); const ep = endpoint(); atomicJson(ep.viewExitPath, { launchId: ep.launchId, exitCode: 0 }); abort.abort(); })();
@@ -46,17 +77,229 @@ function fixture(t, stage, { documents = false } = {}) {
   const lifetime = runVisibleCli({ binding, run, profile, prompt: 'review', store, managerIdentity: identity, host, openWindow() {
     // The real launcher records child identity before SessionStart, including failed startup.
     store.setChildProcess(run, identity);
-    native = createClaudeSession({ sessionId, model: profile.model, cwd: root, pid: process.pid, post, terminate: () => { void close(); }, deliver: async (_pipe, prompt) => { calls.push(prompt); assert.deepEqual(await hook('UserPromptSubmit', { prompt }), {}); } });
-    attached = hook('SessionStart', { cwd: root, model: profile.model });
+    native = createClaudeSession({ sessionId, model: profile.model, cwd: root, pid: process.pid, post, terminate: () => { void close(); },
+      observeFailures(options) { const observer = watchClaudeFailures(options); observers.push(observer); return observer; }, deliver: async (_pipe, prompt) => {
+      calls.push(prompt);
+      const corrupted = corruptFirstPrompt && calls.length === 1;
+      const received = corrupted ? prompt + '\nUnexpected transport suffix' : prompt;
+      const result = await hook('UserPromptSubmit', { prompt: received });
+      if (corrupted) assert.equal(result.decision, 'block');
+      else assert.deepEqual(result, {});
+      submissions.push({ prompt: received, result });
+    } });
+    attached = hook('SessionStart', { cwd: root, model: profile.model, ...(transcript ? { transcript_path: transcriptPath } : {}) });
     commands = (async () => { await attached; while (!abort.signal.aborted) { const ep = endpoint(), response = await fetch(ep.controlUrl + 'command', { headers: { authorization: 'Bearer ' + fs.readFileSync(ep.tokenPath, 'utf8') }, signal: abort.signal }); if (!response.ok) break; await native.command(await response.json()); } })().catch(error => { if (!abort.signal.aborted) deliveryError = error; });
     return { windowPid: process.pid, transport: 'isolated-native-fixture' };
   } });
   t.after(async () => { releaseForeground(); await close(); await lifetime; await commands; fs.rmSync(root, { recursive: true, force: true }); });
-  async function start() { await attached; await until(() => calls.length === 1); assert.ifError(deliveryError); }
+  async function start() { await attached; await until(() => submissions.length === 1 || deliveryError); assert.ifError(deliveryError); }
   function review(decision = 'continue') { const state = store.read(binding); return store.recordReview({ ...binding, runNumber: state.runNumber, resultSha256: sha256File(path.join(store.runDir(binding, state.runNumber), 'result.json')), decision, evidenceLocator: 'file:fixture', conclusion: 'independent verification', reviewedAt: new Date().toISOString() }); }
   async function finish(text = 'answer', extra = {}) { await hook('Stop', { last_assistant_message: text, background_tasks: [], session_crons: [], ...extra }); }
-  return { root, binding, profile, store, run, contextFiles, sessionId, callbacks, calls, start, hook, finish, review, releaseForeground, close, lifetime, endpoint };
+  const append = records => fs.appendFileSync(transcriptPath, records.map(row => JSON.stringify({ sessionId, cwd: root, isSidechain: false, ...row })).join('\n') + '\n');
+  const flush = async () => { await observers.at(-1)?.flush(); };
+  return { root, binding, profile, store, run, contextFiles, sessionId, callbacks, calls, submissions, postRoutes, fragmentedRoutes, post, start, hook, finish, review, releaseForeground, close, lifetime, endpoint, transcriptPath, append, flush };
 }
+
+// Shape retained from the real failed run, not an LLM's interpretation of prose.
+function toolEvidence(id, { tool = 'PowerShell', kind = 'automode-unavailable', success = false } = {}) {
+  return [
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id, name: tool, input: { command: 'isolated fixture only' } }] } },
+    { type: 'user', classifierBoundary: !success, toolDenialKind: kind,
+      permissionDecision: { decision: 'reject', source: 'config', reasonType: 'classifier' },
+      message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: !success,
+        content: success ? 'ok' : 'gpt-6.1-sol is temporarily unavailable, so auto mode cannot determine the safety of PowerShell right now' }] } },
+  ];
+}
+
+test('real classifier-unavailable shape alerts original owner once without ending the run or interrupting foreground', { timeout: 25000 }, async t => {
+  const f = fixture(t, undefined, { transcript: true }); await f.start();
+  const before = f.store.read(f.binding), evidencePath = path.join(f.store.runDir(f.binding, 1), 'attention.json');
+  f.append([...toolEvidence('failure-1'), ...toolEvidence('failure-2')]); await f.flush();
+  assert.equal(fs.existsSync(evidencePath), false);
+  await f.hook('SessionStart', { cwd: f.root, source: 'compact' });
+  f.append([...toolEvidence('glob-success', { tool: 'Glob', success: true }), ...toolEvidence('failure-3')]); await f.flush();
+  const evidence = f.store.readJson(evidencePath);
+  assert.equal(evidence.count, 3); assert.equal(evidence.sessionId, f.sessionId); assert.equal(evidence.ownerThreadId, 'owner');
+  assert.equal(f.callbacks.length, 0); assert.deepEqual(f.store.read(f.binding), before);
+  assert.equal(fs.existsSync(f.run.resultPath), false); assert.equal(fs.existsSync(path.join(f.store.runDir(f.binding, 1), 'review.json')), false);
+  assert.equal(fs.existsSync(path.join(f.root, 'local/runtime/worker-results/pending')), false);
+  f.releaseForeground(); await until(() => f.callbacks.length === 1);
+  assert.match(f.callbacks[0].prompt, /CLI_ATTENTION_REQUIRED/); assert.equal(f.callbacks[0].ownerThreadId, 'owner');
+  // Repeat actual failure count, then an unfinished tool: neither floods nor fabricates finality.
+  for (let i = 4; i <= 104; i++) f.append(toolEvidence('failure-' + i));
+  f.append([{ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'pending-glob', name: 'Glob' }] } }]); await f.flush();
+  assert.equal(f.callbacks.length, 1); assert.equal(f.endpoint().status, 'running');
+  await f.finish('same session final after owner diagnosis'); await until(() => f.callbacks.length === 2);
+  assert.match(f.callbacks[1].prompt, /CLI_RESULT_READY/);
+  assert.equal(f.store.readResult(f.binding, 1).sessionId, f.sessionId);
+  assert.equal(f.store.readResult(f.binding, 1).finalText, 'same session final after owner diagnosis');
+});
+
+test('same tool recovery suppresses an unsent abnormal signal but preserves its evidence', { timeout: 25000 }, async t => {
+  const f = fixture(t, undefined, { transcript: true }); await f.start();
+  f.append([1, 2, 3].flatMap(n => toolEvidence('fail-' + n))); await f.flush();
+  f.append(toolEvidence('recovery', { success: true })); await f.flush();
+  const dir = f.store.runDir(f.binding, 1);
+  assert.ok(f.store.readJson(path.join(dir, 'attention.json')).recoveredAt);
+  f.releaseForeground(); await until(() => f.store.readJson(path.join(dir, 'attention-notification.json')).status !== 'claimed');
+  assert.equal(f.callbacks.length, 0); assert.equal(fs.existsSync(f.run.resultPath), false);
+  await f.finish('normal completion'); await until(() => f.callbacks.length === 1);
+  assert.match(f.callbacks[0].prompt, /CLI_RESULT_READY/);
+});
+
+test('result or explicit stop while owner is busy suppresses obsolete abnormal alert', { timeout: 25000 }, async t => {
+  for (const ending of ['result', 'stop']) {
+    const f = fixture(t, undefined, { transcript: true }); await f.start();
+    f.append([1, 2, 3].flatMap(n => toolEvidence('fail-' + n))); await f.flush();
+    if (ending === 'result') await f.finish('stable final');
+    else {
+      const state = f.store.read(f.binding);
+      f.store.requestStop(f.binding, { stateSha256: digest(state), expectedSessionId: f.sessionId, reason: 'fixture authorized stop', requestId: 'stop' });
+    }
+    f.releaseForeground(); const marker = path.join(f.store.runDir(f.binding, 1), 'attention-notification.json');
+    await until(() => f.store.readJson(marker).status !== 'claimed');
+    assert.ok(f.callbacks.every(value => !value.prompt.includes('CLI_ATTENTION_REQUIRED')));
+  }
+});
+
+test('wrong identities, historical records, transient errors and slow tools do not alert', { timeout: 25000 }, async t => {
+  const f = fixture(t, undefined, { transcript: true });
+  f.append([1, 2, 3].flatMap(n => toolEvidence('old-' + n))); await f.start();
+  for (const extra of [{ sessionId: 'foreign' }, { cwd: path.dirname(f.root) }, { isSidechain: true }])
+    f.append([1, 2, 3].flatMap(n => toolEvidence('wrong-' + n)).map(row => ({ ...row, ...extra })));
+  f.append([...toolEvidence('a'), ...toolEvidence('b'), ...toolEvidence('ok', { success: true }), ...toolEvidence('c'), ...toolEvidence('d')]);
+  f.append([{ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'long-build', name: 'PowerShell' }] } }]); await f.flush();
+  assert.equal(fs.existsSync(path.join(f.store.runDir(f.binding, 1), 'attention.json')), false);
+  assert.equal(fs.existsSync(f.run.resultPath), false); assert.equal(f.endpoint().status, 'running');
+  await assert.rejects(f.post('/attention', { sessionId: 'foreign', runNumber: 1 }), /identity mismatch/);
+  await assert.rejects(f.post('/attention', { sessionId: f.sessionId, runNumber: 99 }), /identity mismatch/);
+});
+
+test('fragmented UTF8, duplicate watch events and duplicate tool results are counted once', { timeout: 25000 }, async t => {
+  const f = fixture(t, undefined, { transcript: true }); await f.start();
+  const rows = [1, 2, 3].flatMap(n => toolEvidence('unique-' + n));
+  rows[1].message.content[0].content += ' 中文🙂';
+  for (const row of rows) {
+    const bytes = Buffer.from(JSON.stringify({ sessionId: f.sessionId, cwd: f.root, ...row }) + '\n');
+    const split = Math.max(1, bytes.indexOf(Buffer.from('中')) + 1);
+    fs.appendFileSync(f.transcriptPath, bytes.subarray(0, split)); await f.flush();
+    fs.appendFileSync(f.transcriptPath, bytes.subarray(split)); await f.flush(); await f.flush();
+  }
+  f.append(rows); await f.flush(); f.releaseForeground(); await until(() => f.callbacks.length === 1);
+  assert.equal(f.store.readJson(path.join(f.store.runDir(f.binding, 1), 'attention.json')).count, 3);
+});
+
+test('observer delivery failure and damaged transcript never terminate or fail the native run', { timeout: 25000 }, async t => {
+  const f = fixture(t, undefined, { transcript: true, attentionPostFails: true }); await f.start();
+  f.append([1, 2, 3].flatMap(n => toolEvidence('fail-' + n))); await f.flush();
+  assert.equal(f.endpoint().status, 'running'); assert.equal(fs.existsSync(f.run.resultPath), false);
+  fs.truncateSync(f.transcriptPath, 0); await f.flush();
+  assert.equal(f.endpoint().status, 'running');
+  await f.finish('native result preserved');
+  assert.equal(f.store.readResult(f.binding, 1).finalText, 'native result preserved');
+});
+
+test('failed first abnormal report retries only on new evidence and cannot consume final notification', { timeout: 25000 }, async t => {
+  const f = fixture(t, undefined, { transcript: true, attentionPostFails: 'once' }); await f.start();
+  f.append([1, 2, 3].flatMap(n => toolEvidence('fail-' + n))); await f.flush();
+  assert.equal(f.postRoutes.filter(route => route === '/attention').length, 1);
+  await f.flush(); assert.equal(f.postRoutes.filter(route => route === '/attention').length, 1);
+  f.append(toolEvidence('fail-4')); await f.flush();
+  assert.equal(f.postRoutes.filter(route => route === '/attention').length, 2);
+  f.releaseForeground(); await until(() => f.callbacks.length === 1);
+  f.append(toolEvidence('fail-5')); await f.flush(); assert.equal(f.callbacks.length, 1);
+  await f.finish('final still delivered'); await until(() => f.callbacks.length === 2);
+  assert.match(f.callbacks[1].prompt, /CLI_RESULT_READY/);
+});
+
+test('recovery already present in the same transcript batch never sends a stale alert to idle owner', { timeout: 25000 }, async t => {
+  const f = fixture(t, undefined, { transcript: true }); await f.start(); f.releaseForeground();
+  f.append([...([1, 2, 3].flatMap(n => toolEvidence('fail-' + n))), ...toolEvidence('ok', { success: true })]); await f.flush();
+  assert.equal(f.postRoutes.filter(route => route === '/attention').length, 0);
+  assert.equal(f.callbacks.length, 0); assert.equal(fs.existsSync(f.run.resultPath), false);
+  f.append([4, 5, 6].flatMap(n => toolEvidence('fail-' + n))); await f.flush();
+  await until(() => f.callbacks.length === 1); assert.match(f.callbacks[0].prompt, /CLI_ATTENTION_REQUIRED/);
+});
+
+test('recovery clears manager evidence even when the blocked signal response was lost', { timeout: 25000 }, async t => {
+  const f = fixture(t, undefined, { transcript: true, attentionPostFails: 'lost-reply' }); await f.start();
+  f.append([1, 2, 3].flatMap(n => toolEvidence('fail-' + n))); await f.flush();
+  const dir = f.store.runDir(f.binding, 1); assert.equal(f.store.readJson(path.join(dir, 'attention.json')).count, 3);
+  f.append(toolEvidence('ok', { success: true })); await f.flush();
+  assert.ok(f.store.readJson(path.join(dir, 'attention.json')).recoveredAt);
+  f.releaseForeground(); await until(() => f.store.readJson(path.join(dir, 'attention-notification.json')).status !== 'claimed');
+  assert.equal(f.callbacks.length, 0); assert.equal(f.endpoint().status, 'running');
+});
+
+test('rejected first Claude delivery persists one failure and resumes the same session after owner review', { timeout: 25000 }, async t => {
+  const f = fixture(t, undefined, { corruptFirstPrompt: true }); await f.start();
+  const failedBytes = fs.readFileSync(f.run.resultPath, 'utf8'), failed = JSON.parse(failedBytes);
+  assert.equal(failed.status, 'failed'); assert.equal(failed.finalText, '');
+  assert.equal(failed.sessionId, f.sessionId); assert.ok(failed.error);
+  assert.doesNotMatch(failedBytes, /Unexpected transport suffix/);
+  assert.equal(f.store.read(f.binding).status, 'failed'); assert.equal(f.store.read(f.binding).runNumber, 1);
+  assert.equal(f.endpoint().status, 'idle');
+  assert.equal(f.postRoutes.filter(route => route === '/event').length, 1);
+  assert.equal(f.callbacks.length, 0); f.releaseForeground(); await until(() => f.callbacks.length === 1);
+  assert.equal(f.callbacks[0].ownerThreadId, f.binding.ownerThreadId);
+  assert.match(f.callbacks[0].prompt, /runNumber=1\nstatus=failed/);
+
+  // Rejected-input replays must not become an unreviewed manual continuation.
+  for (const prompt of [f.submissions[0].prompt, f.submissions[0].prompt, f.calls[0], 'unapproved manual continuation']) {
+    assert.equal((await f.hook('UserPromptSubmit', { prompt })).decision, 'block');
+  }
+  await f.hook('StopFailure'); await f.finish('late result must not overwrite the rejection');
+  assert.equal(f.postRoutes.filter(route => route === '/manual').length, 0);
+  assert.equal(f.postRoutes.filter(route => route === '/event').length, 1);
+  assert.equal(f.store.read(f.binding).runNumber, 1); assert.equal(f.endpoint().status, 'idle');
+  assert.equal(fs.readFileSync(f.run.resultPath, 'utf8'), failedBytes); assert.equal(f.callbacks.length, 1);
+
+  f.review();
+  const next = f.store.beginRun(f.binding, { requestId: 'after-rejected-delivery', prompt: 'retry the approved work', expectedRunNumber: 1, expectedSessionId: f.sessionId });
+  await callInteractive(f.store, f.binding, 'resume', { run: next, profile: f.profile, prompt: 'retry the approved work' });
+  await until(() => f.submissions.length === 2);
+  assert.deepEqual(f.submissions[1].result, {}); assert.equal(f.store.read(f.binding).sessionId, f.sessionId);
+  assert.equal(f.endpoint().status, 'running'); assert.equal(f.store.read(f.binding).status, 'running');
+  assert.equal((await f.hook('UserPromptSubmit', { prompt: f.calls[1] })).decision, 'block');
+  assert.equal((await f.hook('UserPromptSubmit', { prompt: f.calls[1] })).decision, 'block');
+  assert.equal((await f.hook('UserPromptSubmit', { prompt: 'unrelated input while the resumed run is busy' })).decision, 'block');
+  assert.equal(fs.existsSync(next.resultPath), false); assert.equal(f.postRoutes.filter(route => route === '/event').length, 1);
+  await f.finish('recovered in the original session'); await until(() => f.callbacks.length === 2);
+  const completed = f.store.readResult(f.binding, 2);
+  assert.equal(completed.status, 'completed'); assert.equal(completed.finalText, 'recovered in the original session');
+  assert.equal(completed.sessionId, f.sessionId); assert.equal(f.store.read(f.binding).runNumber, 2);
+  assert.equal(f.store.read(f.binding).status, 'completed'); assert.equal(f.endpoint().status, 'idle');
+  assert.equal(fs.readFileSync(f.run.resultPath, 'utf8'), failedBytes);
+  assert.equal(f.postRoutes.filter(route => route === '/register').length, 1);
+  assert.equal(f.postRoutes.filter(route => route === '/manual').length, 0); assert.equal(f.calls.length, 2);
+  assert.equal(f.callbacks.filter(callback => /runNumber=1\n/.test(callback.prompt)).length, 1);
+  assert.match(f.callbacks[1].prompt, /runNumber=2\nstatus=completed/);
+  assert.deepEqual(f.store.readJson(f.binding.profilePath), f.profile);
+});
+
+test('Claude owner HTTP preserves split UTF-8 in manual input, resumed instruction and final answers', { timeout: 25000 }, async t => {
+  const f = fixture(t, undefined, { splitUnicodePosts: true }); await f.start();
+  const firstAnswer = '第一轮中文🙂结果'; await f.finish(firstAnswer);
+  assert.equal(f.store.readResult(f.binding, 1).finalText, firstAnswer);
+
+  const manualPrompt = '手动继续中文🙂原任务';
+  assert.deepEqual(await f.hook('UserPromptSubmit', { prompt: manualPrompt }), {});
+  assert.equal(f.store.readJson(path.join(f.store.runDir(f.binding, 2), 'input.json')).prompt, manualPrompt);
+  const secondAnswer = '第二轮中文🙂结果'; await f.finish(secondAnswer);
+  assert.equal(f.store.readResult(f.binding, 2).finalText, secondAnswer);
+
+  f.review();
+  const resumePrompt = '负责人续跑中文🙂原任务';
+  const next = f.store.beginRun(f.binding, { requestId: 'unicode-resume', prompt: resumePrompt, expectedRunNumber: 2, expectedSessionId: f.sessionId });
+  await f.post('/resume', { run: next, profile: f.profile, prompt: resumePrompt }); await until(() => f.submissions.length === 2);
+  assert.ok(f.calls[1].endsWith(`Current authorized instruction: ${resumePrompt}`));
+  assert.equal(f.store.readJson(path.join(f.store.runDir(f.binding, 3), 'input.json')).prompt, resumePrompt);
+  const thirdAnswer = '第三轮中文🙂结果'; await f.finish(thirdAnswer);
+  assert.equal(f.store.readResult(f.binding, 3).finalText, thirdAnswer);
+  assert.deepEqual(f.fragmentedRoutes, ['/event', '/manual', '/event', '/resume', '/event']);
+  assert.equal(f.store.read(f.binding).sessionId, f.sessionId); assert.equal(f.store.read(f.binding).status, 'completed');
+  assert.equal(f.endpoint().status, 'idle');
+});
 
 test('Claude delivery contains current document bodies on both rounds of its original session', { timeout: 25000 }, async t => {
   const stage = { goal: 'Check the current sources', acceptance: 'Evidence matches the approved sources' };
@@ -66,6 +309,13 @@ test('Claude delivery contains current document bodies on both rounds of its ori
     const text = f.calls[number - 1];
     const sources = text.split('\n').flatMap(line => { try { const value = JSON.parse(line); return value.content ? [value] : []; } catch { return []; } });
     const manifest = f.store.readJson(manifestPath(number));
+    assert.deepEqual(manifest.ownership, {
+      projectId: f.binding.projectId, taskId: f.binding.taskId,
+      ownerThreadId: f.binding.ownerThreadId, returnChannel: 'normal-final-via-managed-bridge',
+    });
+    assert.ok(text.includes(`Current managed assignment: ${JSON.stringify(manifest.ownership)}`));
+    assert.match(text, /normal final answer/);
+    assert.match(text, /Same-session internal subagents remain available/);
     for (const file of f.contextFiles) {
       assert.equal(sources.find(item => item.path === file)?.content, fs.readFileSync(file, 'utf8'));
       assert.equal(manifest.entries.find(item => item.path === file)?.sha256, sha256File(file));
@@ -211,6 +461,10 @@ test('manual continuation is tracked while competing input and model switching a
   assert.equal((await f.hook('UserPromptSubmit', { prompt: 'unrelated second task' })).decision, 'block');
   assert.equal((await f.hook('PreModelSwitch')).decision, 'block');
   await f.finish(); assert.deepEqual(await f.hook('UserPromptSubmit', { prompt: 'fix previous result' }), {});
+  const manualReview = f.store.readReview(f.binding, 1);
+  assert.equal(manualReview.decision, 'continue');
+  assert.equal(manualReview.evidenceLocator, `cli-ui:${f.sessionId}`);
+  assert.match(manualReview.conclusion, /User typed a continuation.*goal not yet accepted/);
   await f.finish('fixed'); assert.equal(f.store.read(f.binding).runNumber, 2);
   assert.equal(f.store.readResult(f.binding, 2).finalText, 'fixed');
 });

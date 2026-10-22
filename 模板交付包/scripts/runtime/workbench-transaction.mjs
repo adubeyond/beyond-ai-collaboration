@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { CliTaskStore, sha256File } from '../cli/cli-task-store.mjs';
+import { validateDeliveryContract, validateDeliveryAcceptance, planDeliveryContinuation } from './delivery-policy.mjs';
 
 const MANAGED_BEGIN = '<!-- BEGIN BEYOND MANAGED WORKBENCH -->';
 const MANAGED_END = '<!-- END BEYOND MANAGED WORKBENCH -->';
@@ -342,6 +343,7 @@ export class WorkbenchTransactionStore {
         || !String(input.pause ?? '').trim() || !validTimestamp(input.updatedAt)) {
         throw new Error('invalid task registration');
       }
+      validateDeliveryContract(input);
       const state = this.#readState();
       const record = clone(input);
       const existing = state.tasks[input.taskId];
@@ -366,6 +368,9 @@ export class WorkbenchTransactionStore {
   updateTask(input) {
     this.#assertWritable();
     return this.#withLock(() => {
+      if (Object.hasOwn(input, 'deliveryContract')) {
+        throw new Error('progress updates cannot replace an agreed delivery contract');
+      }
       if (!validId(input.operationId) || !validId(input.taskId) || !ACTIVE_STATES.has(input.status)) {
         throw new Error('invalid task update');
       }
@@ -395,6 +400,69 @@ export class WorkbenchTransactionStore {
       state.tasks[input.taskId] = updated;
       state.revision += 1;
       const output = { operationId: input.operationId, taskId: input.taskId, status: input.status, stateRevision: state.revision };
+      this.#rememberOperation(state, input.operationId, inputDigest, output);
+      this.#commitState(state);
+      this.#ensureView(state);
+      return clone(output);
+    });
+  }
+
+  reviseDeliveryContract(input) {
+    this.#assertWritable();
+    return this.#withLock(() => {
+      if (!validId(input.operationId) || !validId(input.projectId) || !validId(input.taskId)
+        || !validId(input.changedBy) || !validTimestamp(input.changedAt)
+        || typeof input.changeReason !== 'string' || !input.changeReason.trim()) {
+        throw new Error('invalid delivery contract revision');
+      }
+      const state = this.#readState(), inputDigest = digest(input);
+      const prior = state.operations[input.operationId];
+      if (prior) {
+        if (prior.inputDigest !== inputDigest) throw new Error('operation id reused with different input');
+        this.#ensureView(state);
+        return clone(prior.output);
+      }
+      const task = state.tasks[input.taskId];
+      if (!task?.deliveryContract || task.projectId !== input.projectId || !ACTIVE_STATES.has(task.status)) {
+        throw new Error('active delivery contract is missing');
+      }
+      if (input.changedBy !== task.deliveryContract.acceptanceOwnerThreadId) {
+        throw new Error('delivery revision requires its acceptance owner');
+      }
+      if (!isDeepStrictEqual(input.expectedDeliveryContract, task.deliveryContract)) {
+        throw new Error('delivery revision contract changed');
+      }
+      if (task.execution?.kind === 'cli') {
+        const cli = new CliTaskStore({ controlRoot: path.resolve(this.runtimeRoot, '../../..') });
+        cli.assertTransferSettled({ projectId: task.projectId, taskId: task.taskId, ownerThreadId: task.execution.ownerThreadId });
+      }
+      for (const name of fs.readdirSync(this.transactionRoot).filter(name => name.endsWith('.json'))) {
+        const transaction = readJson(path.join(this.transactionRoot, name), null);
+        if (transaction?.phase !== 'completed' && transaction?.input?.taskId === input.taskId) {
+          throw new Error('delivery revision cannot change a pending terminal transaction');
+        }
+      }
+      const next = input.deliveryContract;
+      if (next?.resultOwnerThreadId !== task.deliveryContract.resultOwnerThreadId
+        || next?.acceptanceOwnerThreadId !== task.deliveryContract.acceptanceOwnerThreadId) {
+        throw new Error('delivery revision cannot change task owners');
+      }
+      validateDeliveryContract({ ...task, deliveryContract: next });
+      const revision = {
+        operationId: input.operationId,
+        previousContract: clone(task.deliveryContract),
+        authorization: clone(next.authorization),
+        changedBy: input.changedBy,
+        changedAt: input.changedAt,
+        changeReason: input.changeReason,
+      };
+      state.tasks[input.taskId] = {
+        ...task, deliveryContract: clone(next),
+        deliveryContractHistory: [...(task.deliveryContractHistory ?? []), revision],
+      };
+      state.revision += 1;
+      const output = { operationId: input.operationId, projectId: input.projectId, taskId: input.taskId,
+        changedBy: input.changedBy, stateRevision: state.revision, contractRevisionCount: state.tasks[input.taskId].deliveryContractHistory.length };
       this.#rememberOperation(state, input.operationId, inputDigest, output);
       this.#commitState(state);
       this.#ensureView(state);
@@ -447,7 +515,9 @@ export class WorkbenchTransactionStore {
           expectedRunNumber: transfer.expectedRunNumber, expectedResultSha256: transfer.expectedResultSha256,
           authorizationLocator: transfer.authorizationLocator,
         });
-        return [item.taskId, { ...task, execution: { ...task.execution, ownerThreadId: input.toOwnerThreadId } }];
+        return [item.taskId, { ...task, execution: { ...task.execution, ownerThreadId: input.toOwnerThreadId },
+          ...(task.deliveryContract ? { deliveryContract: { ...task.deliveryContract,
+            resultOwnerThreadId: input.toOwnerThreadId, acceptanceOwnerThreadId: input.toOwnerThreadId } } : {}) }];
       });
       state.revision += 1;
       for (const [taskId, task] of updatedTasks) state.tasks[taskId] = task;
@@ -515,13 +585,21 @@ export class WorkbenchTransactionStore {
     const review = cli.readReview(input, input.runNumber);
     if (review?.decision !== 'accept' || review.resultSha256 !== input.resultSha256 || review.ownerThreadId !== input.ownerThreadId) throw new Error('CLI owner acceptance review required');
     if (state.status !== 'completed' || result.status !== 'completed' || state.managerPid !== null) throw new Error('CLI run is not completed and stable');
+    // A CLI review is immutable and belongs to its run, not to a later design.
+    // Revalidation stays in this acceptance transaction; it never rewrites the
+    // original review, restarts a CLI, or changes notification behavior.
+    const revalidation = input.deliveryRevalidation;
     const normalized = {
       operationId: input.operationId, taskId: input.taskId, projectId: input.projectId, ownerThreadId: input.ownerThreadId,
       expectedStatus: input.expectedStatus, runNumber: input.runNumber, sessionId: result.sessionId, resultSha256: input.resultSha256,
-      acceptance: 'accepted', acceptedBy: review.ownerThreadId, acceptedAt: review.reviewedAt,
-      completedAt: review.reviewedAt, businessState: '已完成', finalLocator: state.currentResultPath,
-      evidenceLocator: review.evidenceLocator, conclusion: review.conclusion, affectsMainline: input.affectsMainline === true,
+      acceptance: 'accepted', acceptedBy: review.ownerThreadId, acceptedAt: revalidation?.reviewedAt ?? review.reviewedAt,
+      completedAt: revalidation?.reviewedAt ?? review.reviewedAt, businessState: '已完成', finalLocator: state.currentResultPath,
+      evidenceLocator: revalidation?.evidenceLocator ?? review.evidenceLocator,
+      conclusion: revalidation?.conclusion ?? review.conclusion, affectsMainline: input.affectsMainline === true,
       pendingDependencies: input.pendingDependencies ?? [],
+      ...(input.deliveryEvidence ? { deliveryEvidence: input.deliveryEvidence } : {}),
+      ...(input.expectedDeliveryContract ? { expectedDeliveryContract: input.expectedDeliveryContract } : {}),
+      ...(revalidation ? { deliveryRevalidation: clone(revalidation), sourceCliReviewSha256: digest(review) } : {}),
     };
     return this.#withLock(() => this.#consumeLocked(normalized, faultAt, 'accepted-cli'));
   }
@@ -562,6 +640,8 @@ export class WorkbenchTransactionStore {
         phase: 'intent',
         output: null,
         historyRecord: null,
+        ...(state.tasks[input.taskId].deliveryContract
+          ? { deliveryContractSnapshot: clone(state.tasks[input.taskId].deliveryContract) } : {}),
         startedAt: new Date().toISOString(),
       };
       writeAtomic(transactionFile, transaction);
@@ -580,10 +660,18 @@ export class WorkbenchTransactionStore {
         if (!task || (cli ? task.execution?.kind !== 'cli' || task.execution.ownerThreadId !== input.ownerThreadId : task.worker !== input.worker) || task.status !== input.expectedStatus) {
           throw new Error('task changed after transaction intent');
         }
+        if (transaction.deliveryContractSnapshot
+          && !isDeepStrictEqual(transaction.deliveryContractSnapshot, task.deliveryContract)) {
+          throw new Error('delivery contract changed after transaction intent');
+        }
+        if (!closed) {
+          validateDeliveryAcceptance(task, input, operationId => this.committedDeliveryResult(operationId));
+          if (cli) this.#validateCliRevalidation(task, input);
+        }
         state.revision += 1;
         const terminalStatus = closed ? '已关闭' : '已完成';
         const terminalAt = closed ? input.closedAt : input.completedAt;
-        const executor = cli ? { projectId: task.projectId, execution: clone(task.execution), ...(closed ? {} : { runNumber: input.runNumber, sessionId: input.sessionId, resultSha256: input.resultSha256 }) } : { worker: input.worker };
+        const executor = cli ? { projectId: task.projectId, execution: clone(task.execution), ...(closed ? {} : { runNumber: input.runNumber, sessionId: input.sessionId, resultSha256: input.resultSha256 }) } : { worker: input.worker, ...(task.deliveryContract ? { projectId: task.projectId } : {}) };
         const historyRecord = closed ? {
           operationId: input.operationId,
           taskId: input.taskId,
@@ -610,6 +698,15 @@ export class WorkbenchTransactionStore {
           affectsMainline: input.affectsMainline === true,
           pendingDependencies: [...new Set(input.pendingDependencies ?? [])],
         };
+        if (task.deliveryContract) {
+          historyRecord.deliveryContract = clone(task.deliveryContract);
+          if (task.deliveryContractHistory) historyRecord.deliveryContractHistory = clone(task.deliveryContractHistory);
+          if (!closed) historyRecord.deliveryEvidence = clone(input.deliveryEvidence);
+          if (!closed && input.deliveryRevalidation) {
+            historyRecord.deliveryRevalidation = clone(input.deliveryRevalidation);
+            historyRecord.sourceCliReviewSha256 = input.sourceCliReviewSha256;
+          }
+        }
         delete state.tasks[input.taskId];
         if (!closed && input.affectsMainline === true) {
           state.recentMainlineResults.push({
@@ -628,6 +725,7 @@ export class WorkbenchTransactionStore {
           status: terminalStatus,
           stateRevision: state.revision,
           archived: true,
+          ...(task.deliveryContract ? { deliveryRecordSha256: digest(historyRecord) } : {}),
         };
         this.#rememberOperation(state, input.operationId, inputDigest, output, historyRecord);
         this.#commitState(state);
@@ -723,6 +821,66 @@ export class WorkbenchTransactionStore {
     }
     monthOf(input.completedAt);
     if (input.businessState !== '已完成') throw new Error('only a completed Worker final can close the task');
+    validateDeliveryAcceptance(task, input, operationId => this.committedDeliveryResult(operationId));
+    if (cli) this.#validateCliRevalidation(task, input);
+  }
+
+  #validateCliRevalidation(task, input) {
+      const revision = task.deliveryContractHistory?.at(-1);
+      const revalidation = input.deliveryRevalidation;
+      if (revision && !revalidation) {
+        throw new Error('revised CLI delivery requires current revision revalidation; the original CLI review is preserved');
+      }
+      if (revalidation && (!revision
+        || revalidation.revisionOperationId !== revision.operationId
+        || revalidation.cliReviewSha256 !== input.sourceCliReviewSha256
+        || !validTimestamp(revalidation.reviewedAt)
+        || Date.parse(revalidation.reviewedAt) < Date.parse(revision.changedAt)
+        || !String(revalidation.evidenceLocator ?? '').trim()
+        || !String(revalidation.conclusion ?? '').trim())) {
+        throw new Error('CLI delivery revalidation does not match the current revision and source review');
+      }
+  }
+
+  committedDeliveryResult(operationId) {
+    if (!validId(operationId)) throw new Error('invalid delivery result operation id');
+    const transaction = readJson(path.join(this.transactionRoot, `${operationId}.json`), null);
+    if (!transaction || transaction.phase !== 'completed'
+      || !['accepted', 'accepted-cli'].includes(transaction.kind ?? 'accepted')
+      || transaction.output?.status !== '已完成' || transaction.output?.archived !== true
+      || transaction.operationId !== operationId || transaction.output?.operationId !== operationId
+      || !validTimestamp(transaction.completedAt)) return null;
+    const matches = this.history(monthOf(transaction.completedAt)).records
+      .filter(item => item.operationId === operationId);
+    const record = matches.length === 1 ? matches[0] : null;
+    if (!record || record.taskId !== transaction.output.taskId || record.status !== '已完成'
+      || record.projectId !== transaction.output.projectId
+      || record.completedAt !== transaction.completedAt
+      || (record.worker && record.worker !== transaction.output.worker)
+      || (record.execution && !isDeepStrictEqual(record.execution, transaction.output.execution))) return null;
+    if (transaction.output.deliveryRecordSha256 && digest(record) !== transaction.output.deliveryRecordSha256) return null;
+    const cached = this.#readState().operations[operationId];
+    if (cached && (!isDeepStrictEqual(cached.output, transaction.output)
+      || !isDeepStrictEqual(cached.historyRecord, record)
+      || cached.inputDigest !== transaction.inputDigest)) return null;
+    return clone(record);
+  }
+
+  deliveryPlan(input) {
+    if (!validId(input.projectId) || !validId(input.previousTaskId)
+      || !validId(input.previousOperationId) || !validId(input.nextTaskId)) {
+      throw new Error('invalid delivery plan identity');
+    }
+    const state = this.#readState();
+    const previous = this.committedDeliveryResult(input.previousOperationId);
+    if (previous && (previous.taskId !== input.previousTaskId
+      || (previous.projectId !== undefined && previous.projectId !== input.projectId))) {
+      throw new Error('delivery plan previous result identity mismatch');
+    }
+    const next = state.tasks[input.nextTaskId];
+    if (next && next.projectId !== input.projectId) throw new Error('delivery plan next project mismatch');
+    return { projectId: input.projectId, stateRevision: state.revision,
+      ...planDeliveryContinuation(state, previous, input.nextTaskId) };
   }
 
   recover() {

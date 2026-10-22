@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -11,10 +12,32 @@ export function redact(text) {
   return String(text).replace(/(Bearer\s+)[^\s"']+/gi, '$1[REDACTED]')
     .replace(/((?:api[_-]?key|access[_-]?token|password|authorization)["']?\s*[:=]\s*["']?)[^\s,"'}]+/gi, '$1[REDACTED]');
 }
+function keepCliPathEntry(entry, tempRoot) {
+  // Old isolated BEYOND .NET runs left these tool directories in User PATH.
+  // Only remove a proven-missing local temp entry; never trim the whole PATH.
+  if (!/^[a-z]:[\\/]/i.test(entry) || /[%$"]/.test(entry)
+    || entry.split(/[\\/]/).some(part => part === '.' || part === '..')) return true;
+  const parts = path.win32.relative(tempRoot, entry).split(/[\\/]/);
+  if (!/^beyond-[a-z0-9_-]+$/i.test(parts[0])
+    || parts.slice(-3).join('/').toLowerCase() !== 'dotnet-home/.dotnet/tools') return true;
+  try { fs.statSync(entry); return true; }
+  catch (error) { return !['ENOENT', 'ENOTDIR'].includes(error.code); }
+}
 export function cliEnvironment(home) {
   const env = { ...process.env, CODEX_HOME: home };
   for (const key of Object.keys(env)) if (/^(OPENAI_|CODEX_(THREAD|TURN|APP|AUTH|API|SESSION))/.test(key)) delete env[key];
   delete env.NODE_TEST_CONTEXT;
+  if (process.platform === 'win32') {
+    const tempRoot = os.tmpdir();
+    if (/^[a-z]:[\\/]/i.test(tempRoot)) {
+      for (const key of Object.keys(env)) if (key.toLowerCase() === 'path')
+        env[key] = env[key].split(';').filter(entry => keepCliPathEntry(entry, tempRoot)).join(';');
+    }
+  }
+  // Suppress the SDK's first-run User PATH write, not tool installation or use.
+  const dotnetPathKey = 'DOTNET_ADD_GLOBAL_TOOLS_TO_PATH';
+  if (!Object.keys(env).some(key => (process.platform === 'win32' ? key.toUpperCase() : key) === dotnetPathKey))
+    env[dotnetPathKey] = 'false';
   env.CODEX_HOME = home; return env;
 }
 export function stageInstruction(stage) {

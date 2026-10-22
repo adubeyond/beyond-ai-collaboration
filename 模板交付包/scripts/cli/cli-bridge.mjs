@@ -58,26 +58,115 @@ export function readProfile(file, configuration = {}, { liveEndpoint = null } = 
   if (!resolved.pinned && !fs.statSync(profile.runner.command).isFile()) throw new Error('invalid CLI profile');
   return profile;
 }
-function validateBinding(binding, context, store) {
+function validateArchivedBinding(binding, store, workbench, request) {
+  const historyRoot = store.checkedPath(path.join(store.controlRoot, 'local/history/workbench'));
+  const records = fs.existsSync(historyRoot) ? fs.readdirSync(historyRoot).filter(file => file.endsWith('.json')).flatMap(file => {
+    const history = store.readJson(path.join(historyRoot, file));
+    return (Array.isArray(history) ? history : history.records ?? []).filter(record => record.taskId === binding.taskId);
+  }) : [];
+  if (!records.length) throw new Error('CLI formal task registration required');
+  if (records.length !== 1) throw new Error('CLI archived registration missing or ambiguous');
+  const record = records[0], accepted = record.status === '已完成';
+  const transaction = store.readJson(path.join(store.controlRoot, 'local/runtime/workbench/transactions', `${validIdentifier(record.operationId)}.json`));
+  const output = transaction.output, cached = workbench?.operations?.[record.operationId];
+  if (!['已完成', '已关闭'].includes(record.status) || record.projectId !== binding.projectId
+    || record.execution?.kind !== 'cli' || record.execution.ownerThreadId !== binding.ownerThreadId
+    || !path.isAbsolute(record.execution.stateLocator ?? '') || path.resolve(record.execution.stateLocator) !== store.locator(binding)
+    || transaction.phase !== 'completed' || transaction.kind !== (accepted ? 'accepted-cli' : 'closed-cli')
+    || transaction.operationId !== record.operationId || output?.operationId !== record.operationId
+    || output?.archived !== true || output.status !== record.status || output.taskId !== record.taskId
+    || output.projectId !== record.projectId || digest(output.execution) !== digest(record.execution)
+    || transaction.completedAt !== record.completedAt || !Number.isFinite(Date.parse(record.completedAt))
+    || !/^[a-f0-9]{64}$/.test(transaction.inputDigest ?? '')
+    || (output.deliveryRecordSha256 && output.deliveryRecordSha256 !== digest(record))
+    || (cached && (cached.inputDigest !== transaction.inputDigest || digest(cached.output) !== digest(output)
+      || digest(cached.historyRecord) !== digest(record)))) throw new Error('CLI archived registration identity or receipt mismatch');
+  // Report a known archive only after its owner-bound committed receipt matches.
+  if (!['cli.status', 'cli.result', 'cli.detach'].includes(request?.action)) throw new Error('CLI task is archived; only status/result/detach are allowed');
+  store.assertTransferSettled(binding);
+  if (binding.managerPid || binding.processIdentity || (binding.continuations ?? []).some(item => item.status === 'pending')
+    || !(['completed', 'failed', 'stopped', 'unknown'].includes(binding.status)
+      || (!accepted && binding.status === 'starting' && binding.runNumber === 0 && !binding.sessionId && !binding.currentResultPath))) {
+    throw new Error('CLI archived task is not terminal and idle');
+  }
+  if (binding.runNumber > 0) {
+    const result = store.readResult(binding, binding.runNumber);
+    if (result.sessionId !== binding.sessionId || result.status !== binding.status
+      || binding.currentResultPath !== path.join(store.runDir(binding, binding.runNumber), 'result.json')) throw new Error('CLI archived result identity mismatch');
+    if (accepted && (binding.status !== 'completed' || record.runNumber !== binding.runNumber || output.runNumber !== binding.runNumber
+      || record.sessionId !== binding.sessionId || output.sessionId !== binding.sessionId
+      || record.result !== binding.currentResultPath || record.resultSha256 !== sha256File(binding.currentResultPath)
+      || output.resultSha256 !== record.resultSha256)) throw new Error('CLI archived result fingerprint mismatch');
+  } else if (accepted) throw new Error('CLI archived accepted result missing');
+  return true;
+}
+function validateBinding(binding, context, store, request = null) {
   if (binding.ownerThreadId !== context.ownerThreadId || !path.isAbsolute(binding.executionRoot) || path.resolve(binding.executionRoot) !== path.resolve(context.executionRoot)) throw new Error('CLI owner/execution identity mismatch');
   const provider = new ProjectIdentityProvider({ controlRoot: context.controlRoot, runtimeRoot: path.join(context.controlRoot, 'local/runtime/project-identity') });
   if (binding.projectRoute) provider.validateWorkerRoute(binding.projectId, binding.projectRoute, { executionRoot: context.executionRoot });
   else provider.validateSameRootProject(binding.projectId, { executionRoot: context.executionRoot });
   const stateFile = path.join(context.controlRoot, 'local/runtime/workbench/workbench-state.json');
-  const registered = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, 'utf8')).tasks?.[binding.taskId] : null;
+  const workbench = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, 'utf8')) : null;
+  const registered = workbench?.tasks?.[binding.taskId];
   if (registered) {
     if (!['进行中', '已暂停'].includes(registered.status)) throw new Error('CLI goal is not active');
     if (binding.taskMode === 'formal') {
       if (registered.execution?.kind !== 'cli' || registered.execution.ownerThreadId !== binding.ownerThreadId || registered.projectId !== binding.projectId || path.resolve(registered.execution.stateLocator) !== store.locator(binding)) throw new Error('CLI formal registration identity mismatch');
     } else if (registered.worker !== binding.ownerThreadId) throw new Error('CLI assistance must belong to the original Worker');
-  } else if (binding.taskMode === 'formal') throw new Error('CLI formal task registration required');
+  } else if (binding.taskMode === 'formal') return validateArchivedBinding(binding, store, workbench, request);
   else {
     const historyRoot = path.join(context.controlRoot, 'local/history/workbench');
     if (fs.existsSync(historyRoot)) for (const entry of fs.readdirSync(historyRoot).filter(x => x.endsWith('.json'))) {
       const records = JSON.parse(fs.readFileSync(path.join(historyRoot, entry), 'utf8'));
-      if ((Array.isArray(records) ? records : records.records ?? []).some(x => x.taskId === binding.taskId)) throw new Error('CLI goal is already archived');
+      for (const record of (Array.isArray(records) ? records : records.records ?? []).filter(x => x.taskId === binding.taskId)) {
+        const recovery = request?.action === 'cli.resume' && request.input.acceptedGoalRecovery && !binding.acceptedGoalRecovery
+          ? store.verifyAcceptedGoalRecovery(binding, { ...request.input, ownerTurnId: context.ownerTurnId })
+          : store.readAcceptedGoalRecovery(binding);
+        if (!recovery || record.status !== '已完成' || record.worker !== binding.ownerThreadId
+          || recovery.archiveRecordSha256 !== digest(record)) throw new Error('CLI goal is already archived');
+      }
     }
   }
+}
+
+function archivedEndpoint(store, binding) {
+  const file = store.checkedPath(path.join(store.taskDir(binding), 'interactive.json'));
+  if (!fs.existsSync(file)) return null;
+  const saved = store.readJson(file);
+  if (saved.projectId !== binding.projectId || saved.taskId !== binding.taskId || saved.ownerThreadId !== binding.ownerThreadId
+    || saved.sessionId !== binding.sessionId || (saved.runNumber !== undefined && saved.runNumber !== binding.runNumber)) throw new Error('CLI archived interactive identity mismatch');
+  return saved;
+}
+function archivedViewStatus(saved) {
+  if (!saved || saved.view === undefined) return undefined;
+  const view = saved.view;
+  // Older native views saved only a PID. Never mistake a reused PID for that view.
+  if (!Number.isSafeInteger(view?.windowPid) || view.windowPid < 1
+    || typeof view.windowStartedAt !== 'string' || !/^[1-9]\d*$/.test(view.windowStartedAt)) {
+    return { status: 'unknown', reason: 'saved-view-identity-unavailable' };
+  }
+  try {
+    return { status: processIsGone({ pid: view.windowPid, startedAt: view.windowStartedAt },
+      { readStart: pid => processStart(pid, { timeoutMs: 2000 }) }) ? 'gone' : 'open' };
+  } catch { return { status: 'unknown', reason: 'view-process-identity-unavailable' }; }
+}
+async function detachArchived(store, binding) {
+  const saved = archivedEndpoint(store, binding);
+  if (!saved) return { status: 'already-detached' };
+  if (!['idle', 'closing', 'closed'].includes(saved.status) || saved.activeTurnId || saved.pending) throw new Error('CLI archived detach cannot interrupt active work');
+  const withViewStatus = result => {
+    const viewStatus = archivedViewStatus(saved);
+    // Helper retirement and the visible window are distinct; this never closes a view.
+    return viewStatus ? { ...result, viewStatus } : result;
+  };
+  const managerGone = processIsGone(saved.manager), serverGone = processIsGone(saved.server);
+  if (managerGone && serverGone) return withViewStatus({ status: 'already-detached' });
+  if (saved.status === 'closing') return withViewStatus({ status: 'detaching' });
+  if (saved.status === 'closed') throw new Error('CLI archived helper exit unconfirmed');
+  // Reuse the existing owner-bound retirement path, including orphan and PID checks.
+  const result = await callInteractive(store, binding, 'detach');
+  if (result?.status === 'detach-after-turn') throw new Error('CLI became active; archived cleanup did not stop the task');
+  return withViewStatus(result ?? { status: 'already-detached' });
 }
 
 async function detachForTransfer(store, identity) {
@@ -261,8 +350,11 @@ export async function launchCliRequest(request, context) {
     const run = store.beginRun(binding, { requestId: request.requestId, prompt, stage, expectedRunNumber: 0, expectedSessionId: null, ownerTurnId: context.ownerTurnId, profile, configuration: { model: profile.model, effort: profile.effort ?? null } });
     return startManager(store, binding, run, profile, prompt, context);
   }
-  const binding = store.read(input); validateBinding(binding, context, store);
-  if (request.action === 'cli.status') return binding;
+  const binding = store.read(input), archived = validateBinding(binding, context, store, request) === true;
+  if (request.action === 'cli.status') {
+    const viewStatus = archived ? archivedViewStatus(archivedEndpoint(store, binding)) : undefined;
+    return viewStatus ? { ...binding, viewStatus } : binding;
+  }
   if (request.action === 'cli.result') return store.readResult(input, input.runNumber);
   if (request.action === 'cli.queue') {
     const allowed = new Set(['projectId', 'taskId', 'ownerThreadId', 'prompt', 'stage', 'expectedRunNumber', 'expectedSessionId', 'replacesRequestId', 'contract', 'authorizationLocator']);
@@ -317,6 +409,7 @@ export async function launchCliRequest(request, context) {
     return openInteractiveWindow(store, binding);
   }
   if (request.action === 'cli.detach') {
+    if (archived) return detachArchived(store, binding);
     const result = await callInteractive(store, binding, 'detach');
     return result ?? { status: 'already-detached' };
   }
@@ -330,11 +423,13 @@ export async function launchCliRequest(request, context) {
     if (profile.mode === 'interactive' && (!endpoint || profile.provider)) checkNativeCapability(profile);
     if (endpoint && endpoint.profileSha256 !== digest(profile)) throw new Error('Live native profile changed; detach idle view before changing model');
     if (input.continuationId && endpoint && (endpoint.status !== 'idle' || endpoint.activeTurnId)) throw new Error('CLI native session not yet idle; saved continuation retained');
-    const run = store.beginRun(input, { requestId: request.requestId, prompt: input.prompt, stage: input.stage, continuationId: input.continuationId, expectedRunNumber: input.expectedRunNumber, expectedSessionId: input.expectedSessionId, ownerTurnId: context.ownerTurnId, profile, configuration: { model: profile.model, effort: profile.effort ?? null }, initialSessionRecovery: input.initialSessionRecovery, contract: input.contract, authorizationLocator: input.authorizationLocator });
+    const desktopTransport = endpoint && context.hostSpec ? createDesktopHost(context.hostSpec).transportSnapshot() : null;
+    if (desktopTransport && (desktopTransport.ownerThreadId !== context.ownerThreadId || desktopTransport.ownerTurnId !== context.ownerTurnId)) throw new Error('CLI resume Desktop source identity mismatch');
+    const run = store.beginRun(input, { requestId: request.requestId, prompt: input.prompt, stage: input.stage, continuationId: input.continuationId, expectedRunNumber: input.expectedRunNumber, expectedSessionId: input.expectedSessionId, ownerTurnId: context.ownerTurnId, profile, configuration: { model: profile.model, effort: profile.effort ?? null }, initialSessionRecovery: input.initialSessionRecovery, acceptedGoalRecovery: input.acceptedGoalRecovery, contract: input.contract, authorizationLocator: input.authorizationLocator });
     if (endpoint) {
       const current = store.read(binding);
       if (current.status !== 'starting') return { ...run, status: current.status, stateLocator: store.locator(run) };
-      return callInteractive(store, binding, 'resume', { run, profile, prompt: input.prompt });
+      return callInteractive(store, binding, 'resume', { run, profile, prompt: input.prompt, ...(desktopTransport ? { desktopTransport } : {}) });
     }
     return startManager(store, binding, run, profile, input.prompt, context);
   }

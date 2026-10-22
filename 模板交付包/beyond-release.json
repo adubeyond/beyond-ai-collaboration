@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "releaseVersion": "4.0.1",
+  "releaseVersion": "4.1.0",
   "controlEntry": "AGENTS.md",
   "projectEntry": "AGENTS.md",
   "controlScript": "scripts/beyond-control.mjs",
@@ -8,13 +8,15 @@
     "scripts/runtime/control-runtime.mjs",
     "scripts/runtime/project-identity-provider.mjs",
     "scripts/runtime/worker-result-receipts.mjs",
-    "scripts/runtime/workbench-transaction.mjs"
+    "scripts/runtime/workbench-transaction.mjs",
+    "scripts/runtime/delivery-policy.mjs"
   ],
   "projectOverrideBegin": "<!-- BEGIN BEYOND PROJECT OVERRIDES -->",
   "projectOverrideEnd": "<!-- END BEYOND PROJECT OVERRIDES -->",
   "skills": [
     "identity-pm",
     "identity-worker",
+    "identity-product",
     "task-design",
     "task-dev",
     "task-test",

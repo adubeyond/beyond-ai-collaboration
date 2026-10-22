@@ -120,6 +120,111 @@ function registerActiveTask(controlRoot, overrides = {}) {
   });
 }
 
+function acceptReceipt(controlRoot, pending, overrides = {}) {
+  return runtime(controlRoot, `accept-${pending.receiptId}`, 'workbench.accept', {
+    operationId: `accept-${pending.receiptId}`, taskId: pending.taskId,
+    worker: pending.workerThreadId ?? 'worker-a', expectedStatus: '进行中',
+    businessState: '已完成', acceptedBy: pending.sourceThreadId, acceptance: 'accepted',
+    acceptedAt: '2026-08-23T16:03:00+08:00', completedAt: '2026-08-23T16:03:00+08:00',
+    finalLocator: `worker-result://${pending.receiptId}`, evidenceLocator: 'git://commit-a',
+    conclusion: '任务A完成', ...overrides,
+  });
+}
+
+test('runtime ack preserves active receipts until the matching workbench operation commits', () => {
+  for (const businessState of ['已完成', '已暂停']) {
+    const root = createTestWorkspace('beyond-worker-result-ack-before-commit-');
+    registerProject(root);
+    registerActiveTask(root);
+    const pending = runtime(root, 'early-ack-enqueue', 'worker-result.enqueue', receipt({
+      businessState, finalText: `${businessState}\n本轮结果。`, workerThreadId: 'worker-a',
+    })).result.record;
+    const stateFile = path.join(root, 'local/runtime/workbench/workbench-state.json');
+    const stateBefore = fs.readFileSync(stateFile);
+    const receiptFile = new WorkerResultReceiptStore({ runtimeRoot: path.join(root, 'local/runtime/worker-results') })
+      .receiptPath(pending.projectId, pending.taskId);
+    const receiptBefore = fs.readFileSync(receiptFile);
+    assert.equal(runtime(root, 'early-ack-inspect', 'workbench.inspect', {
+      projectId: pending.projectId, taskId: pending.taskId,
+    }).result.records[0].disposition, 'review-active-task');
+    assert.throws(() => runtime(root, 'early-ack', 'worker-result.ack', {
+      projectId: pending.projectId, taskId: pending.taskId, receiptId: pending.receiptId,
+    }), /matching workbench operation.*committed/);
+    assert.deepEqual(fs.readFileSync(stateFile), stateBefore);
+    assert.deepEqual(fs.readFileSync(receiptFile), receiptBefore);
+  }
+});
+
+test('runtime ack preserves orphan receipts without committed workbench evidence', () => {
+  const root = createTestWorkspace('beyond-worker-result-ack-orphan-');
+  registerProject(root);
+  const pending = runtime(root, 'orphan-enqueue', 'worker-result.enqueue', receipt()).result.record;
+  assert.throws(() => runtime(root, 'orphan-ack', 'worker-result.ack', {
+    projectId: pending.projectId, taskId: pending.taskId, receiptId: pending.receiptId,
+  }), /matching workbench operation.*committed|read-only workbench state is missing/);
+  assert.equal(runtime(root, 'orphan-list', 'worker-result.list', { projectId: pending.projectId }).result.count, 1);
+  registerActiveTask(root, { taskId: 'unrelated-task', worker: 'worker-other', task: '其他任务' });
+  assert.throws(() => runtime(root, 'orphan-with-workbench-ack', 'worker-result.ack', {
+    projectId: pending.projectId, taskId: pending.taskId, receiptId: pending.receiptId,
+  }), /matching workbench operation.*committed/);
+  assert.equal(runtime(root, 'orphan-with-workbench-list', 'worker-result.list', { projectId: pending.projectId }).result.count, 1);
+});
+
+test('runtime ack preserves an incomplete acceptance and succeeds after original transaction recovery', () => {
+  const root = createTestWorkspace('beyond-worker-result-ack-incomplete-');
+  registerProject(root);
+  registerActiveTask(root);
+  const pending = runtime(root, 'incomplete-enqueue', 'worker-result.enqueue', receipt({ workerThreadId: 'worker-a' })).result.record;
+  const store = new WorkbenchTransactionStore({
+    runtimeRoot: path.join(root, 'local/runtime/workbench'),
+    viewPath: path.join(root, 'local/当前工作台.md'),
+    historyRoot: path.join(root, 'local/history/workbench'),
+  });
+  const acceptance = {
+    operationId: `accept-${pending.receiptId}`, taskId: pending.taskId, worker: 'worker-a', expectedStatus: '进行中',
+    businessState: '已完成', acceptedBy: pending.sourceThreadId, acceptance: 'accepted',
+    acceptedAt: '2026-08-23T16:03:00+08:00', completedAt: '2026-08-23T16:03:00+08:00',
+    finalLocator: `worker-result://${pending.receiptId}`, evidenceLocator: 'git://commit-a', conclusion: '任务A完成',
+  };
+  assert.throws(() => store.consumeAcceptedResult(acceptance, { faultAt: 'afterStateCommit' }), /injected fault/);
+  assert.equal(store.snapshot().tasks[pending.taskId], undefined);
+  const ack = { projectId: pending.projectId, taskId: pending.taskId, receiptId: pending.receiptId };
+  assert.throws(() => runtime(root, 'incomplete-ack', 'worker-result.ack', ack), /matching workbench operation.*committed/);
+  assert.equal(runtime(root, 'incomplete-list', 'worker-result.list', { projectId: pending.projectId }).result.count, 1);
+  runtime(root, 'recover-accept', 'workbench.recover', {});
+  assert.deepEqual(store.consumeAcceptedResult(acceptance), store.consumeAcceptedResult(acceptance));
+  assert.equal(runtime(root, 'recovered-ack', 'worker-result.ack', ack).result.removed, true);
+  assert.equal(store.history('2026-08').records.length, 1);
+});
+
+test('runtime ack permits committed pause replay and owner closure replay without treating active pause as uncommitted', () => {
+  for (const terminal of ['pause', 'close']) {
+    const root = createTestWorkspace(`beyond-worker-result-ack-${terminal}-`);
+    registerProject(root);
+    registerActiveTask(root);
+    const pending = runtime(root, 'terminal-enqueue', 'worker-result.enqueue', receipt({
+      workerThreadId: 'worker-a', businessState: '已暂停', finalText: '已暂停\n等待老板决定。',
+    })).result.record;
+    const input = terminal === 'pause' ? {
+      operationId: `pause-${pending.receiptId}`, taskId: pending.taskId, expectedStatus: '进行中',
+      status: '已暂停', businessState: '已暂停', progress: '等待决定', pause: '老板确认后恢复',
+      updatedAt: '2026-08-23T16:02:00+08:00',
+    } : {
+      projectId: pending.projectId, taskId: pending.taskId, worker: 'worker-a', expectedStatus: '进行中',
+      operationId: `close-${pending.receiptId}`, pendingReceiptId: pending.receiptId, businessState: '已关闭',
+      ownerDirective: 'explicit-owner-instruction', workerStopped: true, closedBy: pending.sourceThreadId,
+      closedAt: '2026-08-23T16:03:00+08:00', closureReason: '老板取消此任务',
+      taskLocator: 'thread://worker-a', authorizationLocator: 'thread://pm/owner-cancel',
+    };
+    const committed = runtime(root, 'terminal-commit', `workbench.${terminal}`, input).result;
+    assert.deepEqual(runtime(root, 'terminal-replay', `workbench.${terminal}`, input).result, committed);
+    assert.equal(runtime(root, 'terminal-ack', 'worker-result.ack', {
+      projectId: pending.projectId, taskId: pending.taskId, receiptId: pending.receiptId,
+    }).result.removed, true);
+    assert.deepEqual(runtime(root, 'terminal-replay-after-ack', `workbench.${terminal}`, input).result, committed);
+  }
+});
+
 test('worker-result actions derive requestId when the envelope omits it', () => {
   const f = fixture('derived-request-id');
   const created = executeRuntimeRequest({
@@ -139,8 +244,10 @@ test('worker-result actions derive requestId when the envelope omits it', () => 
 test('runtime write requires a local project registration and exact same-root execution', () => {
   const localRoot = createTestWorkspace('beyond-worker-result-local-only-');
   registerProject(localRoot, 'local-project-a', { shared: false });
+  registerActiveTask(localRoot);
   const created = runtime(localRoot, 'local-enqueue', 'worker-result.enqueue', receipt()).result.record;
   assert.equal(runtime(localRoot, 'local-list', 'worker-result.list', { projectId: 'local-project-a' }).result.count, 1);
+  acceptReceipt(localRoot, created);
   runtime(localRoot, 'local-ack', 'worker-result.ack', {
     projectId: 'local-project-a', taskId: 'task-a', receiptId: created.receiptId,
   });
@@ -290,10 +397,12 @@ test('registered project list distinguishes a legitimate empty result from a wro
   });
 });
 
-test('ack remains able to remove an existing receipt after source registration disappears', () => {
+test('ack remains able to remove a committed receipt after source registration disappears', () => {
   const root = createTestWorkspace('beyond-worker-result-cleanup-');
   registerProject(root);
+  registerActiveTask(root);
   const created = runtime(root, 'cleanup-enqueue', 'worker-result.enqueue', receipt()).result.record;
+  acceptReceipt(root, created);
   fs.rmSync(path.join(root, 'local', 'projects'), { recursive: true, force: true });
   fs.rmSync(path.join(root, 'shared', 'projects'), { recursive: true, force: true });
   assert.equal(runtime(root, 'cleanup-ack', 'worker-result.ack', {
@@ -349,6 +458,27 @@ test('acknowledgement deletes the body instead of archiving it', () => {
   assert.equal(result.removed, true);
   assert.equal(f.store.list({ projectId: 'local-project-a' }).count, 0);
   assert.equal(fs.existsSync(path.join(f.root, 'worker-results', 'history')), false);
+});
+
+test('acknowledgement validates commit under its receipt lock and before deleting the body', () => {
+  const f = fixture('ack-guard');
+  const pending = f.store.enqueue(receipt()).record;
+  const target = f.store.receiptPath(pending.projectId, pending.taskId);
+  const before = fs.readFileSync(target);
+  let checked = false;
+  assert.throws(() => f.store.acknowledge({
+    projectId: pending.projectId, taskId: pending.taskId, receiptId: pending.receiptId,
+  }, (record) => {
+    checked = true;
+    assert.equal(record.receiptId, pending.receiptId);
+    assert.deepEqual(fs.readFileSync(target), before);
+    const lock = path.join(f.store.runtimeRoot, 'locks', `${path.basename(target, '.json')}.lock`);
+    assert.equal(fs.readdirSync(lock).some((name) => name.startsWith(`owner-${process.pid}-`)), true);
+    throw new Error('commit check rejected');
+  }), /commit check rejected/);
+  assert.equal(checked, true);
+  assert.deepEqual(fs.readFileSync(target), before);
+  assert.deepEqual(fs.readdirSync(path.join(f.store.runtimeRoot, 'locks')), []);
 });
 
 test('optional Worker identity is checked when both producer and consumer provide it', () => {
@@ -462,6 +592,7 @@ test('runtime keeps the same task id isolated across projects and rejects cross-
   const root = createTestWorkspace('beyond-worker-result-runtime-namespace-');
   registerProject(root, 'local-project-a');
   registerProject(root, 'local-project-b');
+  registerActiveTask(root);
   const first = runtime(root, 'runtime-namespace-a', 'worker-result.enqueue', receipt()).result.record;
   const second = runtime(root, 'runtime-namespace-b', 'worker-result.enqueue', receipt({
     projectId: 'local-project-b', finalText: '已完成\n项目B结果已经交付。',
@@ -475,6 +606,7 @@ test('runtime keeps the same task id isolated across projects and rejects cross-
   assert.throws(() => runtime(root, 'runtime-cross-ack', 'worker-result.ack', {
     projectId: 'local-project-a', taskId: 'task-a', receiptId: second.receiptId,
   }), /stale acknowledgement|project mismatch/);
+  acceptReceipt(root, first);
   runtime(root, 'runtime-ack-a', 'worker-result.ack', {
     projectId: 'local-project-a', taskId: 'task-a', receiptId: first.receiptId,
   });
@@ -810,6 +942,8 @@ test('fixed beyond-control CLI enqueues, lists and acknowledges the same receipt
   };
   const created = invoke('cli-enqueue', 'worker-result.enqueue', receipt(), false).record;
   assert.equal(invoke('cli-list', 'worker-result.list', { projectId: 'local-project-a', taskId: 'task-a' }).count, 1);
+  registerActiveTask(controlRoot);
+  acceptReceipt(controlRoot, created);
   assert.equal(invoke('cli-ack', 'worker-result.ack', {
     projectId: 'local-project-a', taskId: 'task-a', receiptId: created.receiptId,
   }).removed, true);

@@ -2,12 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 let current;
-export function processStart(pid) {
+export function processStart(pid, { timeoutMs } = {}) {
   if (!Number.isSafeInteger(pid) || pid < 1) throw new Error('invalid process PID');
   if (process.platform === 'win32') {
     // Query the same Process.StartTime directly. The Get-Process cmdlet path can
     // stall in a minimal host even when the underlying .NET query is available.
-    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `[System.Diagnostics.Process]::GetProcessById(${pid}).StartTime.ToUniversalTime().Ticks`], { encoding: 'utf8', windowsHide: true });
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `[System.Diagnostics.Process]::GetProcessById(${pid}).StartTime.ToUniversalTime().Ticks`], { encoding: 'utf8', windowsHide: true, timeout: timeoutMs });
     if (result.status !== 0 || !/^\d+$/.test(result.stdout.trim())) throw new Error('process start identity unavailable');
     return result.stdout.trim();
   }
@@ -27,6 +27,13 @@ export function processIsGone(identity, { signal = pid => process.kill(pid, 0), 
     if (gone()) return true;
     throw error;
   }
+}
+
+// A lost exit receipt is not proof of exit. Both saved identities must be gone;
+// missing proof and access failures deliberately remain errors, not permission to retire.
+export function nativeViewIsGone(record, options = { readStart: pid => processStart(pid, { timeoutMs: 2000 }) }) {
+  return processIsGone(record.server, options)
+    && processIsGone({ pid: record.view?.windowPid, startedAt: record.view?.windowStartedAt }, options);
 }
 
 function readWindowsProcess(pid) {

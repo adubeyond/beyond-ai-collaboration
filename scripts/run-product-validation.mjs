@@ -60,8 +60,8 @@ function atomicWrite(target, bytes, immutable = false) {
 }
 
 export function productCommands(sourceRoot) {
-  const runtime = ['check-m3-project-identity', 'check-project-runtime-routing', 'check-worker-result-receipts', 'check-receipt-write-concurrency', 'check-receipt-list-concurrency', 'check-accept-receipt-cache-expiry', 'check-m3-workbench-transaction', 'check-workbench-upgrade-migration', 'check-native-worker-return',
-    'check-cli-task-store', 'check-cli-contract', 'check-cli-context', 'check-codex-executable', 'check-cli-manager', 'check-cli-host-lifetime', 'check-cli-next-store', 'check-cli-next-bridge', 'check-cli-launcher', 'check-cli-notification', 'check-cli-workbench', 'check-cli-routing', 'check-cli-recovery', 'check-cli-goal-loop', 'check-cli-interactive', 'check-cli-zcode', 'check-zcode-capabilities', 'check-cli-claude', 'check-cli-transfer'].map(n => 'scripts/' + n + '.mjs');
+  const runtime = ['check-m3-project-identity', 'check-project-runtime-routing', 'check-worker-result-receipts', 'check-receipt-write-concurrency', 'check-receipt-list-concurrency', 'check-accept-receipt-cache-expiry', 'check-m3-workbench-transaction', 'check-workbench-upgrade-migration', 'check-shared-recovery-workbench', 'check-native-worker-return',
+    'check-cli-task-store', 'check-cli-contract', 'check-cli-context', 'check-codex-executable', 'check-cli-manager', 'check-cli-host-lifetime', 'check-cli-next-store', 'check-cli-next-bridge', 'check-cli-launcher', 'check-cli-notification', 'check-cli-reconnect', 'check-cli-workbench', 'check-cli-routing', 'check-cli-recovery', 'check-cli-goal-loop', 'check-cli-interactive', 'check-cli-zcode', 'check-zcode-capabilities', 'check-cli-claude', 'check-cli-transfer'].map(n => 'scripts/' + n + '.mjs');
   return [
     { name: 'artifact-lifecycle', args: ['--test', '--test-concurrency=1', 'scripts/check-temporary-workspace.mjs', 'scripts/check-validation-cleanup.mjs'] },
     { name: 'backup-deduplication', args: ['scripts/check-backup-dedup-regressions.mjs'] },
@@ -71,8 +71,13 @@ export function productCommands(sourceRoot) {
     { name: 'task-engineering-separation', args: ['scripts/check-task-engineering-separation.mjs'] },
     { name: 'retained-cli-regressions', args: ['--test', ...fs.readdirSync(path.join(sourceRoot, '模板交付包/scripts/cli')).filter(n => n.endsWith('.test.mjs')).map(n => '模板交付包/scripts/cli/' + n)] },
     { name: 'team-control-results', args: ['scripts/check-team-control-results.mjs'] },
+    { name: 'small-goal-composition', args: ['--test', '模板交付包/scripts/runtime/workbench-delivery.test.mjs'] },
+    { name: 'cli-report-scope', args: ['--test', 'scripts/check-cli-report-scope.mjs'] },
     { name: 'runtime-and-cli', args: ['--test', '--test-concurrency=4', ...runtime] },
+    { name: 'accepted-cli-recovery-preservation', args: ['--test', 'scripts/check-cli-accepted-recovery-preservation.mjs'] },
     { name: 'progress-decision-fixtures', args: ['scripts/probe-pm-progress-decisions.mjs', '--check-fixtures'] },
+    { name: 'shared-recovery-decision-fixtures', args: ['scripts/probe-pm-progress-decisions.mjs', '--fixture', 'scripts/fixtures/shared-recovery-decisions.json', '--check-fixtures'] },
+    { name: 'multi-pm-communication-decision-fixtures', args: ['scripts/probe-pm-progress-decisions.mjs', '--fixture', 'scripts/fixtures/multi-pm-communication-decisions.json', '--check-fixtures'] },
     ...['check-public-content', 'check-implementation-paths', 'check-worker-policy-results', 'check-worker-policy-approval', 'check-local-worker-final', 'check-existing-project-adoption', 'check-install-integrity', 'check-project-entry-migration', 'check-project-initialization-runtime', 'check-historical-workbench-routing', 'check-workbench-convergence', 'check-shared-workspace-git'].map(n => ({ name: n, args: ['scripts/' + n + '.mjs', ...(n === 'check-public-content' ? ['--strict-candidate'] : [])] })),
     { name: 'minimal-tests', args: ['--test', 'test/calc.test.js'], cwd: 'examples/minimal-project' },
     { name: 'minimal-syntax', args: ['--check', 'src/calc.js'], cwd: 'examples/minimal-project' },

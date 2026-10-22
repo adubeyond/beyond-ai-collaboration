@@ -9,10 +9,10 @@ import { CliTaskStore, atomicJson, digest } from './cli-task-store.mjs';
 import { processStart, processIsGone } from './process-identity.mjs';
 import { cliEnvironment, redact } from './native-cli-runner.mjs';
 import { readClaudeProfile, claudeArguments } from './claude-profile.mjs';
-import { claudeHookEvents } from './claude-hook.mjs';
+import { claudeHookEvents, readClaudeHookText } from './claude-hook.mjs';
 
 export function createClaudeControlTransport({ url, token, signal, diagnosticPath, fetchImpl = fetch }) {
-  const fixedRoutes = new Set(['/command', '/register', '/manual', '/event', '/ended']);
+  const fixedRoutes = new Set(['/command', '/register', '/manual', '/event', '/attention', '/ended']);
   const safe = value => redact(String(value).split(token).join('[REDACTED]')).replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, '[URL]');
   async function traced(method, route, action) {
     const started = performance.now();
@@ -66,12 +66,188 @@ function backgroundCompletion(input) {
   return match?.[1] ?? null;
 }
 
+// Observe only bytes appended after an accepted instruction, in its exact native
+// transcript. No timeout guesses, transcript discovery, permission changes or stops.
+export function watchClaudeFailures({ transcriptPath, sessionId, cwd, onSignal, diagnose = () => {} }) {
+  if (!path.isAbsolute(transcriptPath ?? '') || path.basename(transcriptPath) !== `${sessionId}.jsonl`) throw new Error('Claude attention transcript identity mismatch');
+  const stat = fs.lstatSync(transcriptPath);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Claude attention transcript is not a regular file');
+  const physical = fs.realpathSync(transcriptPath), root = fs.realpathSync(cwd);
+  let offset = stat.size, pending = Buffer.alloc(0), closed = false, watcher, delivery = Promise.resolve(), alerted = false;
+  let desired = null, inFlight = null, scheduled = false, alertedTool = null, attemptedTool = null;
+  const tools = new Map(), toolInputs = new Map(), seen = new Set(), failures = new Map();
+  // Explicit questions/denials are independent incidents within a native turn.
+  // Keep only identifiers and offsets; business questions and credentials stay
+  // in the native transcript, not in the wake-up message or managed evidence.
+  const incidents = new Map(), pendingIncidents = new Map(), knownQuestions = new Set();
+  let incidentDeliveryScheduled = false;
+  const diagnostic = event => { try { diagnose({ event }); } catch { /* Observing must never stop the native task. */ } };
+  function incident(code, itemId, tool, firstOffset, lastOffset, inputDigest = null) {
+    if (!/^[\w.-]{1,128}$/.test(itemId ?? '')) return;
+    const key = `${code}:${itemId}`;
+    if (incidents.has(key)) return;
+    const item = { signal: { status: 'blocked', code, itemId, tool, count: 1, firstOffset, lastOffset }, inputDigest, attempted: false, failed: false };
+    incidents.set(key, item); pendingIncidents.set(key, item.signal);
+  }
+  function resolveIncident(key) {
+    const item = incidents.get(key);
+    if (!item) return;
+    incidents.delete(key);
+    // Cancel an unsent question answered in the same batch; if delivery might
+    // have reached the manager, explicitly resolve it even after a lost reply.
+    if (item.attempted) pendingIncidents.set(key, { ...item.signal, status: 'recovered' });
+    else pendingIncidents.delete(key);
+  }
+  function dispatchIncidents() {
+    if (incidentDeliveryScheduled || !pendingIncidents.size || closed) return;
+    incidentDeliveryScheduled = true;
+    delivery = delivery.then(async () => {
+      while (!closed && pendingIncidents.size) {
+        const [key, signal] = pendingIncidents.entries().next().value;
+        pendingIncidents.delete(key);
+        if (signal.status === 'blocked') {
+          const item = incidents.get(key);
+          if (!item) continue;
+          item.attempted = true;
+        }
+        try { await onSignal({ ...signal, transcriptPath: physical }); const item = incidents.get(key); if (item) item.failed = false; }
+        catch { const item = incidents.get(key); if (item) item.failed = true; diagnostic('attention-delivery-unavailable'); }
+      }
+    }).finally(() => { incidentDeliveryScheduled = false; if (pendingIncidents.size) dispatchIncidents(); });
+  }
+  function dispatch() {
+    if (scheduled || !desired || closed) return;
+    scheduled = true;
+    let attempted;
+    delivery = delivery.then(async () => {
+      attempted = desired;
+      if (!attempted || closed) return;
+      inFlight = attempted;
+      try {
+        // A lost HTTP response does not prove the manager missed the signal.
+        // A later recovery must also clear that possibly persisted evidence.
+        if (attempted.status === 'blocked') attemptedTool ??= attempted.tool;
+        await onSignal({ ...attempted, transcriptPath: physical });
+        if (attempted.status === 'blocked') { alerted = true; alertedTool = attempted.tool; }
+        if (desired === attempted || (attempted.status === 'blocked' && desired?.status === 'blocked')) desired = null;
+      } catch { diagnostic('attention-delivery-unavailable'); }
+      finally { inFlight = null; }
+    }).finally(() => {
+      scheduled = false;
+      // Only newer evidence/recovery warrants another attempt, not a retry timer.
+      if (desired && desired !== attempted) dispatch();
+    });
+  }
+  function record(line, endOffset, startOffset) {
+    let row; try { row = JSON.parse(line); } catch { return; }
+    if (row.sessionId !== sessionId || row.isSidechain || typeof row.cwd !== 'string' || !path.isAbsolute(row.cwd)) return;
+    // Native compaction can retain a real project subdirectory in transcript
+    // records. Keep the bound session/root, and reject missing or escaping cwd.
+    let relative;
+    try {
+      const actualCwd = fs.realpathSync(row.cwd);
+      if (!fs.statSync(actualCwd).isDirectory()) return;
+      relative = path.relative(root, actualCwd);
+    } catch { return; }
+    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return;
+    const content = row.message?.content;
+    if (!Array.isArray(content)) return;
+    for (const block of content) {
+      if (row.type === 'assistant' && block.type === 'tool_use' && typeof block.id === 'string' && /^[\w.-]{1,128}$/.test(block.name ?? '')) {
+        tools.set(block.id, block.name); toolInputs.set(block.id, block.input && typeof block.input === 'object' ? digest(block.input) : null);
+        if (tools.size > 512) { const oldest = tools.keys().next().value; tools.delete(oldest); toolInputs.delete(oldest); }
+        if (block.name === 'AskUserQuestion' && !knownQuestions.has(block.id)) {
+          knownQuestions.add(block.id); if (knownQuestions.size > 512) knownQuestions.delete(knownQuestions.values().next().value);
+          // A concrete follow-up question replaces an unsent generic denial
+          // reminder. This cancels notification only; it never grants permission.
+          for (const [key, item] of incidents) if (item.signal.code === 'permission-denied') resolveIncident(key);
+          incident('question-awaiting-answer', block.id, block.name, startOffset, endOffset);
+        }
+      }
+      if (row.type !== 'user' || block.type !== 'tool_result' || !tools.has(block.tool_use_id) || seen.has(block.tool_use_id)) continue;
+      const tool = tools.get(block.tool_use_id), inputDigest = toolInputs.get(block.tool_use_id);
+      tools.delete(block.tool_use_id); toolInputs.delete(block.tool_use_id);
+      seen.add(block.tool_use_id); if (seen.size > 1024) seen.delete(seen.values().next().value);
+      if (tool === 'AskUserQuestion') resolveIncident(`question-awaiting-answer:${block.tool_use_id}`);
+      if (!block.is_error) {
+        // A different PowerShell command succeeding does not resolve a refused
+        // deployment. Only identical tool input can cancel that reminder.
+        if (inputDigest) for (const [key, item] of incidents)
+          if (item.signal.code === 'permission-denied' && item.signal.tool === tool && item.inputDigest === inputDigest) resolveIncident(key);
+        if (failures.has(tool)) {
+          if (alertedTool === tool || attemptedTool === tool || (inFlight?.status === 'blocked' && inFlight.tool === tool)) desired = { status: 'recovered', code: 'permission-classifier-unavailable', tool };
+          else if (desired?.tool === tool) desired = null;
+        }
+        failures.delete(tool); continue;
+      }
+      if (row.classifierBoundary === true && row.toolDenialKind === 'automode-blocked'
+        && row.permissionDecision?.decision === 'reject' && row.permissionDecision?.reasonType === 'classifier') {
+        // Repeated denials of the same tool remain one outstanding incident,
+        // rather than repeatedly waking the owner while the model retries it.
+        const existing = [...incidents.entries()].find(([, item]) => item.signal.code === 'permission-denied' && item.signal.tool === tool && inputDigest && item.inputDigest === inputDigest);
+        if (!existing) incident('permission-denied', block.tool_use_id, tool, startOffset, endOffset, inputDigest);
+        else if (existing[1].failed) pendingIncidents.set(existing[0], existing[1].signal);
+        continue;
+      }
+      // Permission denials are not PostToolUseFailure hooks. The native transcript
+      // distinguishes a real denial from unavailable classification; do not bypass either.
+      if (row.classifierBoundary !== true || row.toolDenialKind !== 'automode-unavailable'
+        || row.permissionDecision?.decision !== 'reject' || row.permissionDecision?.reasonType !== 'classifier') continue;
+      const prior = failures.get(tool) ?? { count: 0, firstOffset: endOffset };
+      prior.count++; failures.set(tool, prior);
+      if (prior.count >= 3 && !alerted && (!attemptedTool || attemptedTool === tool)) {
+        desired = { status: 'blocked', code: 'permission-classifier-unavailable', tool, count: prior.count, firstOffset: prior.firstOffset, lastOffset: endOffset };
+      }
+    }
+  }
+  function scan() {
+    if (closed) return;
+    const beforeOffset = offset;
+    let fd;
+    try {
+      const next = fs.lstatSync(transcriptPath);
+      if (!next.isFile() || next.isSymbolicLink() || fs.realpathSync(transcriptPath) !== physical || next.size < offset) throw new Error('Claude attention transcript changed');
+      fd = fs.openSync(transcriptPath, 'r');
+      while (offset < next.size) {
+        const bytes = Buffer.alloc(Math.min(65536, next.size - offset)), length = fs.readSync(fd, bytes, 0, bytes.length, offset);
+        if (!length) break;
+        offset += length; pending = Buffer.concat([pending, bytes.subarray(0, length)]);
+        let end;
+        while ((end = pending.indexOf(10)) >= 0) {
+          const line = pending.subarray(0, end).toString('utf8'), endOffset = offset - pending.length + end + 1;
+          const startOffset = offset - pending.length;
+          pending = pending.subarray(end + 1); record(line, endOffset, startOffset);
+        }
+        if (pending.length > 2 * 1024 * 1024) throw new Error('Claude attention record too large');
+      }
+      if (offset > beforeOffset) { dispatch(); dispatchIncidents(); }
+    } catch { close(); diagnostic('attention-observer-unavailable'); }
+    finally { if (fd !== undefined) fs.closeSync(fd); }
+  }
+  function close() { closed = true; watcher?.close(); }
+  watcher = fs.watch(path.dirname(physical), (_event, file) => { if (!file || String(file) === path.basename(physical)) scan(); });
+  watcher.on('error', () => { close(); diagnostic('attention-observer-unavailable'); });
+  scan();
+  return { close, async flush() { scan(); for (;;) { const currentDelivery = delivery; await currentDelivery; if (currentDelivery === delivery) return; } } };
+}
+
 // One live native session, one foreground instruction. Hooks carry evidence, not acceptance.
-export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming = false, deliver = sendClaudePrompt, terminate }) {
-  let registered = false, transport, current = null, stopped = false, ended = false;
+export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming = false, deliver = sendClaudePrompt, terminate, diagnose = () => {}, observeFailures = watchClaudeFailures }) {
+  let registered = false, transport, transcriptPath, observation, current = null, stopped = false, ended = false, rejectedSubmission = false;
   const sameSession = input => { if (input.session_id !== sessionId) throw new Error('Claude session identity changed'); };
+  const observerDiagnostic = record => { try { diagnose(record); } catch { /* Optional observation must not stop execution. */ } };
+  function observe(job, input) {
+    observation?.close(); observation = null;
+    const file = input.transcript_path ?? transcriptPath;
+    if (!file) { observerDiagnostic({ event: 'attention-transcript-unavailable', runNumber: job.runNumber }); return; }
+    try {
+      observation = observeFailures({ transcriptPath: file, sessionId, cwd, diagnose: observerDiagnostic,
+        onSignal: signal => current === job && !stopped && !ended ? post('/attention', { sessionId, runNumber: job.runNumber, ...signal }) : undefined });
+    } catch { observerDiagnostic({ event: 'attention-observer-unavailable', runNumber: job.runNumber }); }
+  }
   async function report(status, text = '', error = null) {
     if (!current) return;
+    observation?.close(); observation = null;
     const job = current; current = null;
     await post('/event', { sessionId, runNumber: job.runNumber, status, finalText: text, error });
   }
@@ -80,9 +256,9 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
     async command(command) {
       if (command.action === 'submit') {
         if (!registered || current || ended) throw new Error('Claude native session is not idle');
-        current = { runNumber: command.runNumber, prompt: command.prompt, seen: false }; stopped = false;
+        const job = current = { runNumber: command.runNumber, prompt: command.prompt, seen: false }; stopped = false; rejectedSubmission = false;
         try { await deliver(transport, command.prompt); }
-        catch (error) { await report('unknown', '', error.message); terminate(); }
+        catch (error) { if (current === job) { await report('unknown', '', error.message); terminate(); } }
       } else if (command.action === 'stop') {
         if (!current || command.runNumber !== current.runNumber) throw new Error('Claude stop run mismatch');
         stopped = true; terminate(); // Completion is recorded only after this exact child exits.
@@ -93,7 +269,14 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
       sameSession(input);
       if (input.agent_id) return {}; // Never bind a subagent's lifecycle to the owner's turn.
       if (input.hook_event_name === 'SessionStart') {
-        if (fs.realpathSync(input.cwd) !== fs.realpathSync(cwd)) throw new Error('Claude cwd identity mismatch');
+        const actualCwd = fs.realpathSync(input.cwd), root = fs.realpathSync(cwd);
+        const relative = path.relative(root, actualCwd);
+        // Native compaction keeps the current shell directory. A build inside a
+        // project subdirectory must not invalidate this already-bound session.
+        // Initial/resume binding stays exact; real paths reject junction escapes.
+        const projectCompaction = registered && input.source === 'compact'
+          && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+        if (actualCwd !== root && !projectCompaction) throw new Error('Claude cwd identity mismatch');
         // This native version omits model in resume hooks. The explicit --model argument
         // still owns selection; only an exact saved-session resume may use that evidence.
         const missingOnResume = input.model == null && input.source === 'resume' && resuming;
@@ -101,23 +284,43 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
         if (input.model !== model && !missingOnResume && !missingAfterCompaction) throw new Error(`Claude model identity mismatch: expected ${model}; received ${String(input.model)}`);
         if (!suppliedTransport?.pipe?.startsWith('\\\\.\\pipe\\') || !suppliedTransport.token) throw new Error('Claude local messaging pipe unavailable');
         transport = suppliedTransport;
+        transcriptPath = input.transcript_path ?? transcriptPath;
         if (!registered) { await post('/register', { sessionId, model, cwd, pid }); registered = true; }
       } else if (input.hook_event_name === 'PreModelSwitch') {
         return { decision: 'block', reason: 'Ask the owner to detach the idle view and resume this same session with its next-run model and effort.' };
       } else if (input.hook_event_name === 'UserPromptSubmit') {
         if (!registered || ended || typeof input.prompt !== 'string' || !input.prompt.trim()) throw new Error('Unregistered Claude input');
+        // Record comparison evidence, not business text or transport credentials.
+        diagnose({ event: 'user-prompt-check', at: new Date().toISOString(), sessionId,
+          runNumber: current?.runNumber ?? null, currentSeen: current?.seen ?? null,
+          expectedLength: current?.prompt.length ?? null, actualLength: input.prompt.length,
+          expectedSha256: current ? crypto.createHash('sha256').update(current.prompt).digest('hex') : null,
+          actualSha256: crypto.createHash('sha256').update(input.prompt).digest('hex'),
+          promptMatches: current ? input.prompt === current.prompt : null });
+        if (rejectedSubmission) return { decision: 'block', reason: 'Managed input was rejected; the owner must review and resume this session.' };
         if (current) {
           const taskId = current.seen && !stopped && backgroundCompletion(input);
           if (taskId && current.background?.has(taskId) && !current.delivered?.has(taskId)) {
             (current.delivered ??= new Set()).add(taskId);
             return {}; // Continue the original native run; only a later Stop reports a result.
           }
-          if (current.seen || input.prompt !== current.prompt) return { decision: 'block', reason: 'The current managed instruction is still running.' };
+          if (stopped) return { decision: 'block', reason: 'The current managed instruction is stopping.' };
+          if (current.seen) return { decision: 'block', reason: 'The current managed instruction is still running.' };
+          if (input.prompt !== current.prompt) {
+            // No work began. Finish the rejected run, but do not let a repeated hook
+            // enter /manual and create an unapproved round after report clears current.
+            rejectedSubmission = true;
+            await report('failed', '', 'Claude rejected the delivered instruction: prompt content mismatch before execution');
+            return { decision: 'block', reason: 'Managed input differs from the approved instruction; this run failed before execution.' };
+          }
           current.seen = true;
+          observe(current, input);
+          diagnose({ event: 'managed-prompt-started', at: new Date().toISOString(), sessionId, runNumber: current.runNumber });
         } else {
           if (input.prompt.trim().startsWith('<task-notification>')) return { decision: 'block', reason: 'No managed instruction is awaiting this background notification.' };
           const job = await post('/manual', { sessionId, prompt: input.prompt });
           current = { runNumber: job.runNumber, prompt: input.prompt, seen: true }; stopped = false;
+          observe(current, input);
         }
       } else if (input.hook_event_name === 'Stop') {
         if (!current) return {};
@@ -128,8 +331,8 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
         const text = typeof input.last_assistant_message === 'string' ? input.last_assistant_message : '';
         await report(text.trim() ? 'completed' : 'failed', text, text.trim() ? null : 'Claude ended without an answer');
       } else if (input.hook_event_name === 'StopFailure') {
-        await report('failed', '', 'Claude API turn failed');
-      } else if (input.hook_event_name === 'SessionEnd') { ended = true; }
+        if (current?.seen) await report('failed', '', 'Claude API turn failed');
+      } else if (input.hook_event_name === 'SessionEnd') { ended = true; observation?.close(); observation = null; }
       else throw new Error('Unsupported Claude hook');
       return {};
     },
@@ -187,7 +390,7 @@ export async function launchClaudeView(taskFile) {
     server = http.createServer((request, response) => {
       if (request.headers.origin || request.headers.authorization !== `Bearer ${hookToken}` || request.method !== 'POST' || request.url !== '/hook') { response.writeHead(403); response.end(); return; }
       const handle = async () => {
-        let text = ''; for await (const bytes of request) { text += bytes; if (Buffer.byteLength(text) > 4 * 1024 * 1024) throw new Error('Claude hook too large'); }
+        const text = await readClaudeHookText(request);
         const { input, transport } = JSON.parse(text);
         if (input.hook_event_name === 'SessionStart') atomicJson(store.checkedPath(path.join(directory, 'claude-session-start.json')), { sessionId: input.session_id, cwd: input.cwd, reportedModel: input.model ?? null, requestedModel: profile.model, requestedEffort: profile.effort ?? null, source: input.source ?? null });
         const result = await session.hook(input, transport);
@@ -215,7 +418,11 @@ export async function launchClaudeView(taskFile) {
     await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
     identity = { pid: child.pid, startedAt: processStart(child.pid), token: crypto.randomUUID() };
     store.setChildProcess(store.readJson(path.join(directory, 'run.json')), identity); // Proof survives a trust or registration failure.
-    session = createClaudeSession({ sessionId, model: profile.model, cwd: binding.executionRoot, pid: child.pid, post, terminate, resuming: Boolean(binding.sessionId) });
+    session = createClaudeSession({ sessionId, model: profile.model, cwd: binding.executionRoot, pid: child.pid, post, terminate, resuming: Boolean(binding.sessionId),
+      diagnose(record) {
+        const currentRun = store.read(binding).runNumber;
+        fs.appendFileSync(store.checkedPath(path.join(store.runDir(binding, currentRun), 'claude-input-checks.jsonl')), JSON.stringify(record) + '\n', { mode: 0o600 });
+      } });
     startup = setTimeout(() => fail(new Error('Claude did not register its native session; inspect the visible window')), 25000);
     code = await closed;
     if (pendingError) { const line = redact(pendingError); fs.appendFileSync(stderrPath, line); process.stderr.write(line); }

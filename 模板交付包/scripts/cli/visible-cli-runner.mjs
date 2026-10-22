@@ -3,12 +3,12 @@ import path from 'node:path';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { atomicJson, digest, sha256File, validIdentifier } from './cli-task-store.mjs';
-import { processStart, processIsGone } from './process-identity.mjs';
+import { processStart, processIsGone, nativeViewIsGone } from './process-identity.mjs';
 import { redact, stageInstruction } from './native-cli-runner.mjs';
-import { notifyWhenReady } from './cli-notify.mjs';
+import { notifyWhenReady, notifyOnAttention, attentionPaths } from './cli-notify.mjs';
 import { buildCliContext } from './cli-context.mjs';
 
-export async function runVisibleCli({ binding, run: firstRun, profile, prompt, store, managerIdentity, host, ready = () => {}, openWindow }) {
+export async function runVisibleCli({ binding, run: firstRun, profile, prompt, store, managerIdentity, host, ready = () => {}, openWindow, nativeExitCheckMs = 30000 }) {
   const directory = store.runDir(firstRun, firstRun.runNumber);
   const tokenPath = store.checkedPath(path.join(directory, 'remote-token'));
   const connectionPath = store.checkedPath(path.join(directory, `${profile.provider}-connection.json`));
@@ -18,7 +18,7 @@ export async function runVisibleCli({ binding, run: firstRun, profile, prompt, s
   fs.writeFileSync(tokenPath, token, { flag: 'wx', mode: 0o600 });
   const safe = value => redact(String(value).split(token).join('[REDACTED]'));
   let run = firstRun, sessionId = run.sessionId, native = null, active = true, detached = false, closing = false, closed = false, stopSent = false, channel = null, endpoint, watcher, startup;
-  let pendingCommand = null, commandIdleTimer = null, queue = Promise.resolve(), endLifetime;
+  let pendingCommand = null, commandIdleTimer = null, nativeExitTimer = null, nativeExitError = null, queue = Promise.resolve(), endLifetime;
   const lifetime = new Promise(resolve => { endLifetime = resolve; }), notifications = new Set();
   const persist = status => atomicJson(endpointPath, { ...endpoint, sessionId, status, server: native ?? managerIdentity });
   const log = item => fs.appendFileSync(store.checkedPath(path.join(store.runDir(run, run.runNumber), 'events.jsonl')), safe(JSON.stringify(item)) + '\n', { mode: 0o600 });
@@ -54,12 +54,42 @@ export async function runVisibleCli({ binding, run: firstRun, profile, prompt, s
       pendingCommand = null; command({ action: 'close' });
       return; // View's exit record ends the lifetime; no guessed process death.
     }
-    closed = true; watcher?.close();
+    closed = true; watcher?.close(); clearTimeout(nativeExitTimer);
     if (channel) { const response = channel; releaseChannel(response); answer(response, 410, { error: 'Native CLI owner closed' }); }
     server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
     persist('closed');
     for (const file of [tokenPath, connectionPath]) if (fs.existsSync(file)) fs.unlinkSync(file);
     endLifetime();
+  }
+  function observeNativeExit() {
+    // This is a lifetime check for this manager, not an idle timeout or a task
+    // scheduler. An alive CLI can remain idle indefinitely and is never killed.
+    nativeExitTimer = setTimeout(() => {
+      queue = queue.then(async () => {
+        if (closed || !native || profile.provider !== 'claude') return;
+        if (!nativeViewIsGone({ server: native, view: endpoint.view })) return;
+        const saved = store.readJson(endpointPath), state = store.currentRun(run);
+        if (saved.launchId !== launchId || digest(saved.manager) !== digest(managerIdentity)
+          || saved.projectId !== binding.projectId || saved.taskId !== binding.taskId
+          || digest(saved.server) !== digest(native) || digest(saved.view) !== digest(endpoint.view)
+          || saved.ownerThreadId !== binding.ownerThreadId || saved.sessionId !== sessionId || state.sessionId !== sessionId) {
+          throw new Error('Native CLI retirement identity changed');
+        }
+        if (fs.existsSync(run.resultPath) && store.readResult(run, run.runNumber).sessionId !== sessionId) {
+          throw new Error('Native CLI retirement result session mismatch');
+        }
+        log({ event: 'native-view-exit-confirmed', runNumber: run.runNumber, receiptMissing: !fs.existsSync(viewExitPath) });
+        await close({ viewExited: true, error: 'Verified native CLI and window exited without a stable response' });
+        nativeExitError = null;
+      }).catch(error => {
+        const message = safe(error.message);
+        if (message !== nativeExitError) {
+          nativeExitError = message;
+          try { log({ nativeExitError: message }); } catch { /* A failed diagnostic must not stop the task. */ }
+        }
+      }).finally(() => { if (!closed) observeNativeExit(); });
+    }, nativeExitCheckMs);
+    nativeExitTimer.unref?.();
   }
   function instruction(text) {
     const contract = run.effectiveContract ?? binding.contract;
@@ -98,6 +128,7 @@ export async function runVisibleCli({ binding, run: firstRun, profile, prompt, s
     }
     const handle = async () => {
       if (request.method !== 'POST') throw new Error('Unsupported Native CLI request');
+      request.setEncoding('utf8'); // Preserve multibyte prompt/result characters across HTTP chunks.
       let text = ''; for await (const bytes of request) { text += bytes; if (Buffer.byteLength(text) > 1024 * 1024) throw new Error('Native CLI request too large'); }
       const input = JSON.parse(text || '{}');
       if (closing && !['/event', '/ended'].includes(request.url)) throw new Error('Native CLI view is closing');
@@ -127,11 +158,43 @@ export async function runVisibleCli({ binding, run: firstRun, profile, prompt, s
         const status = input.status === 'completed' && !input.finalText.trim() ? 'failed' : input.status;
         log({ event: 'turn-ended', runNumber: run.runNumber, status }); finish(status, input.finalText, input.error);
         if (detached) { answer(response, 200, result); await close(); return; }
+      } else if (request.url === '/attention') {
+        if (profile.provider !== 'claude' || !native || input.sessionId !== sessionId || input.runNumber !== run.runNumber) throw new Error('Native CLI attention identity mismatch');
+        if (!active || fs.existsSync(run.resultPath)) throw new Error('Native CLI attention run already ended');
+        const legacy = input.code === 'permission-classifier-unavailable';
+        if (!['blocked', 'recovered'].includes(input.status) || !/^[\w.-]{1,128}$/.test(input.tool ?? '')
+          || (input.code === 'question-awaiting-answer' && input.tool !== 'AskUserQuestion')) throw new Error('Invalid Native CLI attention');
+        const attention = { code: input.code, ...(!legacy ? { itemId: input.itemId } : {}) };
+        const { evidencePath } = attentionPaths(store, run, attention);
+        if (input.status === 'recovered') {
+          if (fs.existsSync(evidencePath)) {
+            const previous = store.readJson(evidencePath);
+            if (previous.tool === input.tool && previous.code === input.code && previous.itemId === attention.itemId && !previous.recoveredAt) atomicJson(evidencePath, { ...previous, recoveredAt: new Date().toISOString() });
+          }
+        } else {
+          if (!Number.isSafeInteger(input.count) || input.count < (legacy ? 3 : 1) || !Number.isSafeInteger(input.firstOffset) || input.firstOffset < 0
+            || !Number.isSafeInteger(input.lastOffset) || input.lastOffset < input.firstOffset
+            || !path.isAbsolute(input.transcriptPath ?? '') || path.basename(input.transcriptPath) !== `${sessionId}.jsonl`) throw new Error('Invalid Native CLI attention evidence');
+          if (!fs.existsSync(evidencePath)) {
+            atomicJson(evidencePath, { schemaVersion: 1, projectId: run.projectId, taskId: run.taskId, ownerThreadId: run.ownerThreadId,
+              runNumber: run.runNumber, requestId: run.requestId, sessionId, ...attention, tool: input.tool, count: input.count,
+              transcriptPath: input.transcriptPath, firstOffset: input.firstOffset, lastOffset: input.lastOffset, observedAt: new Date().toISOString() });
+            if (host) {
+              const sourceEnd = (async () => { for (;;) { const source = host.currentSource(); await host.waitForSourceTurnEnd(source); if (host.currentSource().ownerTurnId === source.ownerTurnId) return; } })();
+              sourceEnd.catch(() => {});
+              const work = notifyOnAttention({ store, run, host, sourceEnd, attention }).catch(error => log({ attentionError: safe(error.message) }));
+              notifications.add(work); work.finally(() => notifications.delete(work));
+            }
+          }
+        }
       } else if (request.url === '/resume') {
         if (active || !native || !goalActive()) throw new Error('Native CLI session is not idle/active');
         if (digest(input.profile) !== digest(profile)) throw new Error('Live Native CLI profile changed; detach before changing configuration');
         const saved = store.readJson(path.join(store.runDir(input.run, input.run.runNumber), 'run.json'));
         if (digest(saved) !== digest(input.run) || saved.sessionId !== sessionId || store.read(binding).runNumber !== saved.runNumber) throw new Error('Native CLI resume run mismatch');
+        if (host?.refreshTransport) await host.refreshTransport(input.desktopTransport, saved);
+        else if (input.desktopTransport) throw new Error('Desktop transport refresh unavailable');
+        if (response.destroyed) throw new Error('Native resume caller disconnected before dispatch; retry the same request');
         run = saved; store.setProcess(run, managerIdentity); store.setChildProcess(run, native); active = true; stopSent = false; persist('running');
         command({ action: 'submit', runNumber: run.runNumber, prompt: instruction(input.prompt) }); result = { ...run, status: 'running', stateLocator: store.locator(run) };
       } else if (request.url === '/manual') {
@@ -166,6 +229,7 @@ export async function runVisibleCli({ binding, run: firstRun, profile, prompt, s
     });
     atomicJson(store.checkedPath(path.join(directory, 'cli-launch-intent.json')), { runNumber: run.runNumber, requestId: run.requestId });
     const view = openWindow(store, binding); endpoint.view = view; persist('starting');
+    if (profile.provider === 'claude') observeNativeExit();
     startup = setTimeout(() => { queue = queue.then(async () => { finish('unknown', '', 'Native CLI native view did not register; inspect the visible window before retrying'); await close(); }); }, 30000);
     ready({ stateLocator: store.locator(run), sessionId });
     await lifetime; await Promise.all(notifications);

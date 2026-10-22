@@ -198,8 +198,8 @@ test('source rules use one frozen final with a short-lived receipt and no experi
   assert.match(worker, /不调用`wait_threads`/);
   assert.match(worker, /回源目标只取当前平台任务包装提供的`source_thread_id`/);
   assert.match(worker, /当前Worker `threadId`不是回源目标/);
-  assert.match(worker, /从`ALL_TOOLS`发现规范工具`codex_app__send_message_to_thread`/);
-  assert.match(worker, /顶层未显示不等于工具不存在/);
+  assert.match(worker, /`send_message_to_thread`未在顶层直接显示时，从可用工具中发现规范入口并调用/);
+  assert.match(worker, /工具未显示不等于存在，也不搜索其他账号或旁路/);
   assert.match(worker, /执行一次`worker-result\.enqueue`/);
   assert.match(worker, /直接向唯一来源调用一次/);
   assert.match(worker, /只把已冻结的同一份final作为本轮最后一个动作输出/);
@@ -211,7 +211,7 @@ test('source rules use one frozen final with a short-lived receipt and no experi
   assert.match(worker, /检查点先按任务的`结果与验收 \+ 对象与边界`判断/);
   assert.match(worker, /实现、发布或后续动作明确不在本任务范围/);
   assert.match(worker, /才是非终态用户检查点/);
-  assert.match(pm, /Worker交付后必须作为`已完成`终态回到PM/);
+  assert.match(pm, /独立设计、原型、审查或报告已经满足任务验收且实现明确不在范围时正常收口/);
   assert.match(lifecycle, /工作台提交或删除失败时保留回执/);
   assert.doesNotMatch(agents, /send_message_to_thread|wait_threads/);
   for (const retired of ['terminal-provider', 'terminal-host-adapter', 'host-notify-dispatcher', 'installation-migration', 'codex-thread-delivery-provider']) {
@@ -240,8 +240,8 @@ test('premature return cannot claim completion or allow later Worker tools', () 
   assert.match(worker, /读取业务文件或调用业务工具前即停止业务动作/);
   assert.match(worker, /不执行`worker-result\.enqueue`/);
   assert.match(worker, /收到精确route后由同一Worker继续原任务/);
-  assert.match(lifecycle, /活动任务与结构化匹配回执是处理路径的主依据/);
-  assert.match(lifecycle, /不能因为Worker仍显示运行就把回调判成无效/);
+  assert.match(lifecycle, /活动任务与匹配回执是处理路径的主依据/);
+  assert.match(lifecycle, /`running \/ idle`只参与可见性竞态处理/);
   assert.match(lifecycle, /执行线程未形成正式结果/);
   assert.match(lifecycle, /`workbench\.pause`一次把业务任务记为`已暂停`/);
 });
@@ -299,54 +299,60 @@ test('an injected delegation cannot replace the active user request', () => {
   assert.match(pm, /任何回调都不得打断前台回答/);
   assert.match(pm, /final先完整回答老板请求的全部事项/);
   assert.match(pm, /多条回调不得覆盖或遗漏/);
-  assert.match(lifecycle, /一条或多条回调及其他`<codex_delegation>`注入PM正在回答老板请求的同一turn/);
-  assert.match(lifecycle, /不得丢弃、重启、截断或改写已经开始处理的请求/);
-  assert.match(lifecycle, /最终答复必须先给出老板该请求全部事项的完整结果或准确未完成说明/);
-  assert.match(lifecycle, /后一条回调不能覆盖前一条/);
+  assert.match(lifecycle, /一条或多条回调及其他`<codex_delegation>`注入PM正在回答老板的turn/);
+  assert.match(lifecycle, /不是老板撤回原目标或新的业务授权/);
+  assert.match(lifecycle, /保护前台请求，不广播、不确认往返、不等待刚续派的Worker/);
+  assert.match(lifecycle, /最终先完整回答老板/);
+  assert.match(lifecycle, /未处理的不能写成已收口/);
+  assert.match(lifecycle, /终态可以排队等待本轮完成，但不能被后来的消息覆盖/);
 });
 
-test('Worker completion always reports its PM while nonterminal supervision stays separate', () => {
+test('formal Worker completion preserves its receipt and authorized sole-source report while nonterminal progress stays separate', () => {
   const pm = read('模板交付包/skills/identity-pm/SKILL.md');
   const worker = read('模板交付包/skills/identity-worker/SKILL.md');
-  assert.match(worker, /Worker把正式任务做完后必须向唯一来源PM报告一次/);
-  assert.match(worker, /来源PM正在回答老板、暂时忙碌或可能延后处理，都不能成为跳过终态回执或原生回调的理由/);
-  assert.match(worker, /该路径不执行`worker-result\.enqueue`/);
-  assert.match(worker, /普通里程碑、方法选择和可自行闭环的问题在当前执行turn继续时留在Worker/);
-  assert.match(pm, /来源无回执时先读原Worker一次/);
-  assert.match(pm, /`进行中`按进展/);
+  assert.match(worker, /正式任务完成或真实暂停后保留终态持久化和唯一来源回报/);
+  assert.match(worker, /来源PM忙碌只影响何时处理，不改变下面固定的终态顺序/);
+  assert.match(worker, /没有授权时保留终态回执和准确未发送说明/);
+  assert.match(worker, /该记录不执行`worker-result\.enqueue`/);
+  assert.match(worker, /普通过程留在当前任务/);
+  assert.match(pm, /来源无回执时按reference核对本轮/);
+  assert.match(pm, /`进行中`只是进展，不做终态事务或ack/);
 });
 
-test('an unfinished Worker turn reports once and the PM continues the same task without terminal actions', () => {
+test('an unfinished Worker turn reports actionable events once and the PM continues only when authorized without terminal actions', () => {
   const pm = read('模板交付包/skills/identity-pm/SKILL.md');
   const worker = read('模板交付包/skills/identity-worker/SKILL.md');
   const lifecycle = read('模板交付包/skills/identity-pm/references/lifecycle-and-closeout.md');
   // Guard the previously contradictory entry/recovery clauses as well as the progress branch.
   // These are source-contract checks, not proof of model or Desktop behavior.
   assert.match(pm, /登记Worker回传（含非终态进展）/);
-  assert.match(lifecycle.split(/\r?\n/)[2], /执行回合结束后的非终态进展/);
+  assert.match(lifecycle.split(/\r?\n/)[2], /处理需要本PM行动的登记Worker回传/);
   assert.match(lifecycle, /本轮已经结束本身不构成失联/);
   assert.match(lifecycle, /不因缺少暂停或完成final改为暂停/);
   assert.match(lifecycle, /一手证据另行确认线程确实无法继续或不可访问、已阻断剩余任务/);
   assert.doesNotMatch(lifecycle, /普通进展、普通失败和任务内方法切换不读取/);
-  assert.match(worker, /正式任务尚未形成终态却实际结束当前执行turn/);
-  assert.match(worker, /不得把阶段说明当作本轮final并自行结束/);
-  assert.match(worker, /当前Worker本轮已结束但任务仍在进行中/);
-  assert.match(worker, /工具未直显时按第7节从`ALL_TOOLS`发现/);
-  assert.match(worker, /该路径不执行`worker-result\.enqueue`/);
-  assert.match(worker, /平台final必须直接以`进行中`作为第一行/);
-  assert.match(worker, /PM不得执行`worker-result\.ack`/);
-  assert.match(worker, /这次回源必须是本轮最后一次工具调用/);
-  assert.match(pm, /先读原Worker一次/);
+  assert.match(worker, /确需在非终态结束turn时，先稳定现场/);
+  assert.match(worker, /授权内仍有安全动作时继续当前结果，不能用阶段说明替代执行/);
+  assert.match(worker, /只有下列需要别人采取行动的事件才发送非终态通知/);
+  assert.match(worker, /平台执行边界已结束且没有后续回合或CLI通知责任承接/);
+  assert.match(worker, /需要原PM接续或裁决、且人类授权覆盖本任务回源时/);
+  assert.match(worker, /目标只取当前包装`source_thread_id`，调用`send_message_to_thread`一次/);
+  assert.match(worker, /从可用工具中发现规范入口并调用/);
+  assert.match(worker, /该记录不执行`worker-result\.enqueue`/);
+  assert.match(worker, /final以`进行中`开头/);
+  assert.match(worker, /不做`accept \/ pause \/ ack`/);
+  assert.match(worker, /该回源作为本轮最后一次工具调用/);
+  assert.match(lifecycle, /回调来源没有匹配回执时先定点读取原Worker一次/);
   assert.match(lifecycle, /仅当已经收到该登记Worker回调、本次回合仍显示运行且尚未确认最终输出结束时/);
   assert.match(lifecycle, /随后只再定点读取一次/);
   assert.match(lifecycle, /不能据旧的运行标记声称Worker仍在执行/);
   assert.match(pm, /按收口reference只执行一次`worker-result\.list`/);
-  assert.match(pm, /该来源不做终态事务/);
-  assert.match(pm, /无回执，禁止ack/);
-  assert.match(pm, /无需老板决定/);
-  assert.match(pm, /原Worker发一次继续或纠偏/);
-  assert.match(pm, /`进行中`按进展/);
-  assert.match(pm, /每轮结束按身份Skill回源/);
+  assert.match(pm, /不做终态事务或ack/);
+  assert.match(lifecycle, /不执行`accept \/ pause \/ ack`，不因状态字样自动续派/);
+  assert.match(pm, /只有剩余动作已获授权、需要本PM接续或裁决、没有用户检查点且没有现有执行责任时/);
+  assert.match(pm, /原Worker发一次有实质依据的继续或纠偏/);
+  assert.match(pm, /`进行中`只是进展/);
+  assert.match(pm, /必要事件与终态按身份Skill回源，普通回合不触发唤醒/);
   assert.doesNotMatch(pm + lifecycle, /立即结束(?:PM)?回合/);
   assert.match(pm, /没有剩余事项才结束PM回合/);
   assert.match(lifecycle, /结束该纠正动作，不等待其结果，继续老板当前请求及本轮其他已到达回调/);

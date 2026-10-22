@@ -15,6 +15,8 @@ const ACTIONS = new Set([
   'workbench.pause',
   'workbench.snapshot',
   'workbench.inspect',
+  'workbench.delivery-plan',
+  'workbench.revise-delivery',
   'workbench.accept',
   'workbench.accept-cli',
   'workbench.close',
@@ -106,10 +108,10 @@ function workbenchTransaction(config, operationId) {
   }
 }
 
-function inspectWorkbench(config, rawInput) {
+function inspectWorkbench(config, rawInput, { validateProject = true } = {}) {
   const input = object(rawInput, 'workbench inspection');
   const projectId = nonEmpty(input.projectId, 'projectId');
-  projectIdentity(config).validateControlProject(projectId);
+  if (validateProject) projectIdentity(config).validateControlProject(projectId);
   const filter = { projectId };
   if (input.taskId !== undefined) filter.taskId = nonEmpty(input.taskId, 'taskId');
   const pending = workerResults(config, { readOnly: true }).list(filter);
@@ -240,6 +242,34 @@ function inspectWorkbench(config, rawInput) {
 }
 
 function execute(action, request, config) {
+  if (action === 'workbench.delivery-plan') {
+    const input = object(request.input, 'delivery continuation inspection');
+    projectIdentity(config).validateControlProject(nonEmpty(input.projectId, 'projectId'));
+    return new WorkbenchTransactionStore({
+      runtimeRoot: config.workbenchRoot, viewPath: config.viewPath, historyRoot: config.historyRoot, readOnly: true,
+    }).deliveryPlan(input);
+  }
+  if (action === 'workbench.register' && Object.hasOwn(request.input ?? {}, 'deliveryContract')) {
+    projectIdentity(config).validateControlProject(nonEmpty(request.input.projectId, 'projectId'));
+    const contract = request.input.deliveryContract;
+    if (!config.ownerThreadId || contract?.acceptanceOwnerThreadId !== config.ownerThreadId) {
+      throw new Error('delivery registration must be made by its acceptance owner');
+    }
+  }
+  if (action === 'workbench.revise-delivery') {
+    const input = object(request.input, 'delivery contract revision');
+    projectIdentity(config).validateControlProject(nonEmpty(input.projectId, 'projectId'));
+    if (!config.ownerThreadId || input.changedBy !== config.ownerThreadId) {
+      throw new Error('delivery revision caller identity mismatch');
+    }
+    return workbench(config).reviseDeliveryContract(input);
+  }
+  if (action === 'workbench.accept') {
+    const task = activeWorkbenchTask(config, request.input?.taskId);
+    if (task?.deliveryContract && request.input?.acceptedBy !== config.ownerThreadId) {
+      throw new Error('delivery acceptance caller identity mismatch');
+    }
+  }
   if (action === 'workbench.register' && request.input?.execution?.kind === 'cli') {
     const input = object(request.input, 'CLI registration');
     projectIdentity(config).validateControlProject(nonEmpty(input.projectId, 'projectId'));
@@ -280,7 +310,17 @@ function execute(action, request, config) {
     return workerResults(config).list(input);
   }
   if (action === 'workbench.inspect') return inspectWorkbench(config, request.input);
-  if (action === 'worker-result.ack') return workerResults(config).acknowledge(object(request.input, 'Worker result receipt acknowledgement'));
+  if (action === 'worker-result.ack') {
+    return workerResults(config).acknowledge(object(request.input, 'Worker result receipt acknowledgement'), (receipt) => {
+      // Keep cleanup possible after project registration disappears. The durable
+      // workbench commit, not current routing, authorizes removal of this receipt.
+      const inspected = inspectWorkbench(config, { projectId: receipt.projectId, taskId: receipt.taskId }, { validateProject: false });
+      const matched = inspected.records.find((record) => record.receiptId === receipt.receiptId);
+      if (matched?.disposition !== 'ack-committed-receipt') {
+        throw new Error(`matching workbench operation is not committed: ${matched?.reason ?? 'receipt missing from inspection'}`);
+      }
+    });
+  }
   if (action === 'workbench.close') {
     const input = object(request.input, 'task closure');
     if ('cancelledReceipt' in input) throw new Error('cancelledReceipt is supplied only by the runtime');

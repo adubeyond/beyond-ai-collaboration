@@ -175,6 +175,152 @@ const windowsProcessIdentityFingerprints = [
     before: '649bd6e7106ea3f27f7bb99f35ff8d9d215d383aba4373363d1b7ff52cdff10a',
     after: 'ff56b97783e0386d29906b799532164ef4761b3efa43970a00ed7141322a98e6' },
 ];
+// Retain, do not reimplement, the reviewed HF in bf4feb722f6672744ab4b5946984443d1ca435ce.
+// Each parent hash is checked against the existing chain below; the original
+// baseline stays immutable. No other edit to these files is admitted.
+const retainedHotfixFingerprints = [
+  { path: product + 'scripts/cli/claude-client.mjs',
+    before: '11b889c69562eab7d3fba2bf1521ac8d94e847b022c797b167d6a237421fa32a',
+    after: 'ccea449ddec42949d9a5a0a2d35c56d713ce64abe8815be58c4282ed4580738e' },
+  { path: product + 'scripts/cli/claude-hook.mjs',
+    before: '623b46edf87f39316fe0b457b69fd3813cc86eb468c3e41d1b6bea7800b7f55d',
+    after: '4132270c0d779e25aa4c268d3c64281a82dcb88623a040a38e13f5ffeaac82ef' },
+  { path: product + 'scripts/cli/claude-version-compatibility.test.mjs',
+    before: 'e72ee3134cfec81b9700853c5af170d8ea37eef82e193f506f696a469c2d539c',
+    after: '5c0a0fcc3becff56b110f1a5c5d5de41be963d5070083774d4b54ea19318cd72' },
+  { path: product + 'scripts/cli/native-cli-runner.mjs',
+    before: 'df778c3b023a87b30bb40ac05717db2bced79ed34fd0b2895fd23ed99d0d8b71',
+    after: '8c9303cb5db35eb629d3c973c869ca5c1a82b4db82fbf1ebc1b338b55f2a69ba' },
+  { path: product + 'scripts/cli/visible-cli-runner.mjs',
+    before: '14f57f9d0e4ea4b0297e3cb90fa95697f48f2c9ea30b50cc8178a297e8221609',
+    after: 'bdcdb230032ef4e3988b0229ee06838836269a7895fd95a3eb0e90e2bb6ab6c7' },
+  { path: product + 'skills/identity-pm/references/lifecycle-and-closeout.md',
+    before: '1d7488ae62a81afb316a3377f6070d8d528bdb66bbdc41924067a6cf7af8afac',
+    after: '30e9da70b9925457c681d972b91449fcdd9e40f1f93c3bba383b33730615c4ca' },
+  { path: product + 'skills/identity-worker/SKILL.md',
+    before: '90df3379827811b20fda8959a22fca98a19643cc14a962572e1176377c46e9e3',
+    after: '3510210cb3f13c6d168ef5620c1d572e5c241ec4c189d6b722f4198b7bfb11c1' },
+];
+const retainedHotfixAdditions = [
+  { path: product + 'scripts/cli/claude-hook-stdin.test.mjs',
+    sha256: 'c2e528e808a233a7faf9ca176ac392cf284fcd863f0f9d0ff3fcc2914f8ea49e' },
+  { path: product + 'scripts/cli/cli-environment.test.mjs',
+    sha256: '9baf7e819e94bcaea5ab2f6e29fde1e6844636c8b83c4e11b48ee475bdb40013' },
+];
+// Authorized 2026-10-18 same-owner reconnect and nonterminal CLI attention repairs.
+// Pin only these seven reviewed complete contents to their normalized HEAD parents;
+// preserve every earlier hash, the original fixture and frozen directory membership.
+const cliReconnectAttentionFingerprints = [
+  { path: product + 'scripts/cli/claude-client.mjs',
+    before: 'ccea449ddec42949d9a5a0a2d35c56d713ce64abe8815be58c4282ed4580738e',
+    after: '5f2ae2c58a15d13a72c8a4031ef5342cdb9ff4e9d861b302869a97c121150f58' },
+  { path: product + 'scripts/cli/cli-bridge.mjs',
+    before: '3cbab8bd3d25f15bb5149c0cdbdf7e7c95f7a92e545765834efefc2322a76db8',
+    after: '13ad78ae02613cb31d4d754a0240ec8a186fcc6753799e6409ed0db651143086' },
+  { path: product + 'scripts/cli/cli-notify.mjs',
+    before: '9787ad1801cc18a943ef4e9f8742c69bebc795bde216b5866e70848e040782d9',
+    after: 'dd8f48cc36cb5ef0755a10df741386c0992e6fe00bcd207f7df6a1aa1e9125c6' },
+  { path: product + 'scripts/cli/desktop-host.mjs',
+    before: '1677d428b75b22f5bc64a4851c37adf07d4936162f4962d80f46396feb641eeb',
+    after: '41d706a89e0d579cff8114174a3c0809b90de3070603ad3d92bb1d5e20e34d6c' },
+  { path: product + 'scripts/cli/interactive-cli-runner.mjs',
+    before: 'adcb9e693fa127bd2fd62621474ee8d1ef227b00871e6d02ab882476892c8c74',
+    after: 'c0fbaa74dc88ab414883d573ccf347d5f182490ea8e9cf484ad5696051cef0cf' },
+  { path: product + 'scripts/cli/visible-cli-runner.mjs',
+    before: 'bdcdb230032ef4e3988b0229ee06838836269a7895fd95a3eb0e90e2bb6ab6c7',
+    after: 'fc1d9f9e70df9ee8b782eef4c94c39371830b95d336b2869cfa1132302b9c117' },
+  { path: cli,
+    before: '37f3e65d658d5f5cde328a04cc2645eb4bae5f5bed1af7aacc0ca91d33cb46ed',
+    after: 'cee5dc0899f122c52250d692db14086119fb0fb49b2ace58dda8513cd24e2136' },
+];
+// Reviewed 2026-10-19/20 maintenance composition, not a baseline refresh.
+// CLI waiting/orphan fixes come from retained CLI-WAITING REV2; bridge/store
+// retain the installed acceptedGoalRecovery repair, not the unshipped successor.
+// The final guide also contains the Codex path and manual-continuation correction.
+// The two runtime files are the reproduced premature-ack repair; lifecycle only
+// moves verified fact synchronization before the independent continuation choice.
+// Hashes use the same exact compatibility/retry normalization as the original freeze.
+const reviewedMaintenanceFingerprints = [
+  { path: cli,
+    before: 'cee5dc0899f122c52250d692db14086119fb0fb49b2ace58dda8513cd24e2136',
+    after: '6953d6bf75ae8cd93fa5039f2923e07fef0141a848cab3decee2299f2198cc1b' },
+  { path: product + 'scripts/cli/claude-client.mjs',
+    before: '5f2ae2c58a15d13a72c8a4031ef5342cdb9ff4e9d861b302869a97c121150f58',
+    after: '0648a39e6beffd2dc5e222d8e72feed0e1d7d657d5cf2c36eeb48423bc9a773f' },
+  { path: product + 'scripts/cli/cli-bridge.mjs',
+    before: '13ad78ae02613cb31d4d754a0240ec8a186fcc6753799e6409ed0db651143086',
+    after: '88d09a2f810cdbb3ccbbd62f7e90a24d20c1b42596437e41f13dbc2c9f376f0d' },
+  { path: product + 'scripts/cli/cli-notify.mjs',
+    before: 'dd8f48cc36cb5ef0755a10df741386c0992e6fe00bcd207f7df6a1aa1e9125c6',
+    after: '6d1d598b003db2a5da8af83fddca87cefe712e8814abf8559f329a990790cf89' },
+  { path: product + 'scripts/cli/cli-task-store.mjs',
+    before: '4dbb0a14d681ee7db3eb951e344e52c0df76e27f5aa7ee9fbb23cd92a8e8a770',
+    after: '2b234e1d89f15a38f29c0fb133c3660b306474ea1408b6fd1910caeb81193940' },
+  { path: product + 'scripts/cli/interactive-client.mjs',
+    before: '6e2c7ff9fb8e6a320246c50c4f7f8ee2c847bf873a9f074a26a81fc72271148d',
+    after: '0a1bc37d4fba11025dddd6fb9053dbc49b9dded59761c7ca0cfd1e62f77f3fcc' },
+  { path: product + 'scripts/cli/process-identity.mjs',
+    before: 'ff56b97783e0386d29906b799532164ef4761b3efa43970a00ed7141322a98e6',
+    after: 'a6af787dd5042572f7533dba147f1dffdb27ae5399da4f0e9ab959aee212f224' },
+  { path: product + 'scripts/cli/visible-cli-runner.mjs',
+    before: 'fc1d9f9e70df9ee8b782eef4c94c39371830b95d336b2869cfa1132302b9c117',
+    after: 'c9c984eac8189323c72ed2d463435186b8caf679befc975aa08c13c710d77cba' },
+  { path: product + 'scripts/runtime/control-runtime.mjs',
+    before: 'cef99605ad2a3f436085443275beb07908ebca85392ad84273171cca04986122',
+    after: 'e3075b239a98f643ca39633962fcf8adc41e891e1b38111f966df3192ef708ac' },
+  { path: receiptFile,
+    before: 'f4c2d54568b07fbe0872d5f1caaa19e3326ad8e438d638602bd75cef16f1c1e2',
+    after: '0890fdbe63f0b88792cbd0d0d6b3330124b7066e29728f2161ddc9987126e8af' },
+  { path: product + 'skills/identity-pm/references/lifecycle-and-closeout.md',
+    before: '30e9da70b9925457c681d972b91449fcdd9e40f1f93c3bba383b33730615c4ca',
+    after: 'e586f2f8f38e42cdb1c35bcd0d3b5b6c437451a5f4ec7808f19e654a7eac208e' },
+];
+const reviewedMaintenanceAdditions = [
+  { path: product + 'scripts/cli/claude-compaction-cwd.test.mjs',
+    sha256: '65a59bfea8403a2fc9494d2de55888c1c8af127da25726ff150012ca92223368' },
+  { path: product + 'scripts/cli/claude-orphan-retirement.test.mjs',
+    sha256: '6803564337287e6934786611373a0906b3630d42b80d6536b8ecabefd30bf445' },
+  { path: product + 'scripts/cli/claude-waiting-attention.test.mjs',
+    sha256: 'a73786c94fdbfce7ea00a8baa81bb1ed4b94d1a0a043cbe9731ca45e242ed3da' },
+];
+// Public source hashes used solely as rejected counterexamples, never allowlisted.
+const excludedSuccessorFingerprints = [
+  { path: product + 'scripts/cli/cli-bridge.mjs',
+    sha256: '71b07101428d3fc3e8cbb9a070195be6005fe19c00315225df3fc6227d2d28b1' },
+  { path: product + 'scripts/cli/cli-task-store.mjs',
+    sha256: '0fe5ac8811a8fc75954ceef41b250dfadfd83807690a85a5af93b6f430b193eb' },
+];
+// Reviewed collaboration/delivery candidate, promoted unchanged for 4.1.0.
+// These normalized pins were checked against the immutable tested candidate and
+// its preceding committed maintenance source. Keep every earlier freeze node.
+const collaborationDeliveryFingerprints = [
+  { path: cli, before: '6953d6bf75ae8cd93fa5039f2923e07fef0141a848cab3decee2299f2198cc1b', after: '55033fc8a28f781cb7f4bffe36c987f46ec72f495042323d35d26ea9abf27fe4' },
+  { path: product + 'scripts/cli/cli-bridge.mjs', before: '88d09a2f810cdbb3ccbbd62f7e90a24d20c1b42596437e41f13dbc2c9f376f0d', after: 'f71a1a4056977322fa1cdb92c771dd307186a5680a135f850b074ffe82de3f8c' },
+  { path: product + 'scripts/cli/cli-notify.mjs', before: '6d1d598b003db2a5da8af83fddca87cefe712e8814abf8559f329a990790cf89', after: '68b935d8ee7021b25d1754235ba353bdc156123c424d3d76a81b9c47fe06cdc4' },
+  { path: product + 'scripts/runtime/control-runtime.mjs', before: 'e3075b239a98f643ca39633962fcf8adc41e891e1b38111f966df3192ef708ac', after: 'd174ec56cd7f65361934547473de3bd92ad7f467f109b8cb71ed5e450f6f05e1' },
+  { path: product + 'scripts/runtime/workbench-transaction.mjs', before: '6554383e59f6dc6bbaec8128b1b75abbad06ebce50b0d972f5b3d15709616aa8', after: '84a4334d80e15d29058c485b1bc44b42d07730d53c727d689ff7204dcec273e5' },
+  { path: product + 'skills/identity-pm/references/lifecycle-and-closeout.md', before: 'e586f2f8f38e42cdb1c35bcd0d3b5b6c437451a5f4ec7808f19e654a7eac208e', after: '8b2fbfcb381ba5a6d9e7b0d4b68ac357ff1a2d4bc3850be8c84f089fa6bec973' },
+  { path: product + 'skills/identity-worker/SKILL.md', before: '3510210cb3f13c6d168ef5620c1d572e5c241ec4c189d6b722f4198b7bfb11c1', after: 'f7773816a510205442ba411e221dd3ef1cc9fbd6ec9702c020365058be948cbe' },
+  { path: product + 'skills/identity-worker/agents/openai.yaml', before: 'd15ff52e60d2a39bf2764f3a431a9adac59c949d650b6a4a600d954e505a8cd7', after: 'd2e5d1a2072f51ab46faaad412680cdf2a4aa72de3254208015797eb43d387a7' },
+  { path: product + 'skills/identity-worker/references/capability-correction-and-cost.md', before: '05a561ba345c61a1af7e343dce4735a027615cc49fec61b0ac9f5ab49cb34447', after: 'a13801f9b3424bf2611f0e3e46e23fef728d9381bf91d09f404885dfd98af0a0' },
+  { path: product + 'skills/identity-worker/references/collaboration-and-rework.md', before: '0bbcb50fd883d09ec2a4e4e28e479d2ebfe5ea0121444ac75a138297439563e2', after: '5aef12bbf095e81bc31ef661efa919553321773d4b4ed495d8279900f4fe18fb' },
+  { path: product + 'skills/identity-worker/references/lifecycle-and-recovery.md', before: '39eb1a6ae5af776097867797b11d08a9345ae3c02dd269ad31bc6849b07e965d', after: '8d96291bc04173acfb216331a9ee17c46046be2773894842a8e0bb507b72506f' },
+];
+const collaborationDeliveryAdditions = [
+  { path: product + 'scripts/runtime/delivery-policy.mjs', sha256: '0a8ff8392d15d8948b818a0405666026338d4701fdd93ad801837f98bb7970f7' },
+  // Only the synthetic fixture token's spelling changed to avoid a false
+  // secret-assignment alert; its runtime value and assertions are unchanged.
+  { path: product + 'scripts/runtime/workbench-delivery.test.mjs', sha256: '579da5599e2cd1be68e985800cdc92b2f77e4411f39a89cceaaefd9c2be05018' },
+  { path: product + 'scripts/cli/cli-notify.delivery-boundaries.test.mjs', sha256: '837f3fc28f12bbb199e4708f735092e3669d976b6480fe6db4e994c6e64b9715' },
+];
+const collaborationDeliveryPortions = [
+  { path: pm, start: '## 5. 状态与执行边界',
+    before: 'eeaadd9d8cd218a9e65a6912b3e17556d92fa424ffd8aa303f255fc7cba425a1',
+    after: 'e8994c7535992e50d678c7aa69c03daeda879f2d3109ef64e25840e5642678d0' },
+];
+const latestCliRepairHash = (file, previous) => collaborationDeliveryFingerprints.find(item => item.path === file)?.after
+  ?? reviewedMaintenanceFingerprints.find(item => item.path === file)?.after
+  ?? cliReconnectAttentionFingerprints.find(item => item.path === file)?.after ?? previous;
 function normalizeClaudeCompatibility(file, text) {
   for (const change of claudeCompatibilityEdits.filter(item => item.path === file)) {
     if (text.split(change.after).length !== 2) return null;
@@ -183,6 +329,26 @@ function normalizeClaudeCompatibility(file, text) {
   return text;
 }
 function matchesFrozenFingerprint(item, currentHash) {
+  const collaboration = collaborationDeliveryFingerprints.find(change => change.path === item.path);
+  if (collaboration) {
+    if (currentHash !== collaboration.after) return false;
+    currentHash = collaboration.before;
+  }
+  const maintenance = reviewedMaintenanceFingerprints.find(change => change.path === item.path);
+  if (maintenance) {
+    if (currentHash !== maintenance.after) return false;
+    currentHash = maintenance.before;
+  }
+  const reconnectAttention = cliReconnectAttentionFingerprints.find(change => change.path === item.path);
+  if (reconnectAttention) {
+    if (currentHash !== reconnectAttention.after) return false;
+    currentHash = reconnectAttention.before;
+  }
+  const retained = retainedHotfixFingerprints.find(change => change.path === item.path);
+  if (retained) {
+    if (currentHash !== retained.after) return false;
+    currentHash = retained.before;
+  }
   const processIdentity = windowsProcessIdentityFingerprints.find(change => change.path === item.path);
   if (processIdentity) {
     if (currentHash !== processIdentity.after) return false;
@@ -276,14 +442,30 @@ function frozenFailures(source = read) {
     }
     catch { errors.push(item.path + ': missing or unreadable'); }
   }
+  for (const item of [...retainedHotfixAdditions, ...reviewedMaintenanceAdditions, ...collaborationDeliveryAdditions]) {
+    try { if (sha256(source(item.path)) !== item.sha256) errors.push(item.path); }
+    catch { errors.push(item.path + ': missing or unreadable'); }
+  }
   for (const item of fixture.portions) {
     const text = source(item.path);
     const start = text.indexOf(item.start);
     const end = item.end ? text.indexOf(item.end, start + item.start.length) : text.length;
-    if (start < 0 || end < start || sha256(text.slice(start, end)) !== item.sha256)
+    const change = collaborationDeliveryPortions.find(change => change.path === item.path && change.start === item.start);
+    if ((change && change.before !== item.sha256) || start < 0 || end < start || sha256(text.slice(start, end)) !== (change?.after ?? item.sha256))
       errors.push(item.path + ': ' + item.start);
   }
   return errors;
+}
+
+function frozenDirectoryMembers(directory) {
+  const earlierAdditions = directory === product + 'scripts/cli'
+    ? ['cli-context', 'codex-executable', 'manager-launch'].map(name => product + 'scripts/cli/' + name + '.mjs') : [];
+  return [...fixture.files, ...retainedHotfixAdditions, ...reviewedMaintenanceAdditions, ...collaborationDeliveryAdditions].filter(item => item.path.startsWith(directory + '/'))
+    .map(item => item.path).concat(earlierAdditions).sort();
+}
+
+function checkFrozenDirectory(directory, actual = filesBelow(directory)) {
+  assert.deepEqual(actual, frozenDirectoryMembers(directory), 'frozen directory membership changed: ' + directory);
 }
 
 test('PM, design, development failure and CLI consumers reach the actual owner', () => {
@@ -314,24 +496,26 @@ test('approval has a specific scope and revision, without turning discussion int
     '确认须对应需求/设计的路径、章节、修订和实现范围',
     '可追溯的用户原话或消息入口',
     '用户只批准设计时仍不开发',
-    '确认前只在授权内调查、写设计',
-    '不能借实验开发正式功能',
+    '确认前只在授权内调查、设计或制作已获准的原型',
+    '不能借原型开发正式业务功能',
     '旧批准不能覆盖新范围',
     '不重复索要同一批准',
     '记录其指定的适用范围与条件',
     '本次例外不自行泛化为长期默认',
     '明确的跨任务授权也不逐任务重问',
   ]);
-  contains(pm, ['未确认不派开发', '已确认需求与设计的路径/章节/修订、确认来源']);
+  contains(pm, ['新的业务开发任务，PM在派单前完整读取`task-design/SKILL.md`', '复用已有文档记录需求、技术设计及确认依据', '已确认需求与设计的路径/章节/修订、确认来源']);
   contains(agents, ['只读问答、状态查询和精确文件操作不套业务设计流程']);
   contains(design, ['用户要求只讨论或不写文件时仅在回复中给草案，不落盘、不开发']);
 });
 
 test('implementation and testing consume approved documentation, not an untraceable PM summary', () => {
   contains(rule, [
-    '执行者开始前实际读取任务所指当前正文与必要直接依赖，不能只读派单摘要',
+    '开始前实际读取当前需求、技术设计与必要直接依赖',
+    '有原型时实际操作对应修订',
+    '不能只读派单摘要或看截图',
     '修订不匹配时仅核实受影响差异',
-    '共享正文保持明确写入者',
+    '同一文件当次只由一个写入者维护',
     '不能靠把文档改成错误实现来消除失败',
     '其他不冲突工作继续',
     '未满足项如实保留',
@@ -391,7 +575,11 @@ const reviewedBoundaries = [
     '普通低风险、可逆且范围明确的实施细节不因此增加审查、文档、子智能体、新对话或等待点',
     '但不能据此跳过新业务任务的需求与设计确认及默认独立审查',
   ] },
-  { file: pm, fragments: ['已定及否决决策理由'] },
+  // Decision rationale now lives with the engineering owner, not the PM hot path.
+  { file: product + 'docs/AI编程协同机制/模板/阶段方案与关键决策模板.md', fragments: [
+    '**选择与理由**：采用什么、为什么，与目标和约束如何对应',
+    '若替代旧方案，写明被替代内容、原因和当前入口',
+  ] },
   { file: rule, fragments: [
     '按是否改变已批准的业务范围、公开契约、验收、权限或关键技术路线判断',
     '不按按钮、字段或代码量判断',
@@ -403,8 +591,8 @@ const reviewedBoundaries = [
     '不能把“开始开发”默认为免审查',
     '由用户明确选择单模型路径并按第0节记录适用范围',
     '同一文件当次只由一个写入者维护',
-    'PM将获准设计交给Worker后不并写',
-    '其他人的修订交当前写入者合入',
+    '项目 PM 维护整体目标与跨模块取舍，产品交互负责人维护需求、原型及其确认来源，模块负责人随实现更新技术设计、契约和必要实施记录',
+    '交接后其他人的修订由当前写入者合入',
     '不靠分章节掩盖同文件冲突',
     '汇报说明身份核实边界',
     '缺少返回标识时只称已请求该模型，不称已证实异模型审查',
@@ -444,9 +632,7 @@ test('protected source is frozen except the precise authorized receipt and CLI r
     assert.match(item.sha256, /^[a-f0-9]{64}$/);
   }
   for (const directory of fixture.directories) {
-    const additions = directory === product + 'scripts/cli' ? ['cli-context', 'codex-executable', 'manager-launch'].map(name => product + 'scripts/cli/' + name + '.mjs') : [];
-    assert.deepEqual(filesBelow(directory), [...fixture.files.filter(item => item.path.startsWith(directory + '/')).map(item => item.path), ...additions].sort(),
-      'frozen directory membership changed: ' + directory);
+    checkFrozenDirectory(directory);
   }
   assert.deepEqual(frozenFailures(), [], 'frozen source changed; do not refresh this fixture to silence a regression');
 });
@@ -524,9 +710,11 @@ test('CLI stage continuation pins exactly six reviewed files and rejects rollbac
     const documents = cliDocumentContextFingerprints.find(item => item.path === change.path);
     const executable = codexExecutableFingerprints.find(item => item.path === change.path);
     const manager = cliManagerLifetimeFingerprints.find(item => item.path === change.path);
-    assert.equal(sha256(normalizeClaudeCompatibility(change.path, read(change.path))), manager?.after ?? executable?.after ?? documents?.after ?? change.after);
+    const retained = retainedHotfixFingerprints.find(item => item.path === change.path);
+    const latest = latestCliRepairHash(change.path, retained?.after ?? manager?.after ?? executable?.after ?? documents?.after ?? change.after);
+    assert.equal(sha256(normalizeClaudeCompatibility(change.path, read(change.path))), latest);
     assert.equal(matchesFrozenFingerprint(original, change.before), false, 'rollback to the preceding repair must not pass');
-    assert.equal(matchesFrozenFingerprint(original, manager?.after ?? executable?.after ?? documents?.after ?? change.after), true);
+    assert.equal(matchesFrozenFingerprint(original, latest), true);
     for (const mutate of [text => text + '\nextra content', text => text.slice(1)]) {
       assert.ok(frozenFailures(file => file === change.path ? mutate(read(file)) : read(file)).includes(change.path));
     }
@@ -560,9 +748,11 @@ test('document loading pins only three runners and their guide, keeping earlier 
     assert.equal(change.before, previous.after);
     const executable = codexExecutableFingerprints.find(item => item.path === change.path);
     const manager = cliManagerLifetimeFingerprints.find(item => item.path === change.path);
-    assert.equal(sha256(normalizeClaudeCompatibility(change.path, read(change.path))), manager?.after ?? executable?.after ?? change.after);
+    const retained = retainedHotfixFingerprints.find(item => item.path === change.path);
+    const latest = latestCliRepairHash(change.path, retained?.after ?? manager?.after ?? executable?.after ?? change.after);
+    assert.equal(sha256(normalizeClaudeCompatibility(change.path, read(change.path))), latest);
     assert.equal(matchesFrozenFingerprint(original, change.before), false);
-    assert.equal(matchesFrozenFingerprint(original, manager?.after ?? executable?.after ?? change.after), true);
+    assert.equal(matchesFrozenFingerprint(original, latest), true);
     assert.ok(frozenFailures(file => file === change.path ? read(file) + '\nchanged' : read(file)).includes(change.path));
   }
   for (const name of ['cli-notify', 'desktop-host', 'claude-client', 'cli-task-store', 'cli-bridge']) {
@@ -580,9 +770,10 @@ test('Codex executable repair pins only the bridge and guide, preserving the pri
     const previous = [...cliDocumentContextFingerprints, ...cliStageContinuationFingerprints].find(item => item.path === change.path);
     assert.equal(change.before, previous.after);
     const manager = cliManagerLifetimeFingerprints.find(item => item.path === change.path);
-    assert.equal(sha256(normalizeClaudeCompatibility(change.path, read(change.path))), manager?.after ?? change.after);
+    const latest = latestCliRepairHash(change.path, manager?.after ?? change.after);
+    assert.equal(sha256(normalizeClaudeCompatibility(change.path, read(change.path))), latest);
     assert.equal(matchesFrozenFingerprint(original, change.before), false);
-    assert.equal(matchesFrozenFingerprint(original, manager?.after ?? change.after), true);
+    assert.equal(matchesFrozenFingerprint(original, latest), true);
     assert.ok(frozenFailures(file => file === change.path ? read(file) + '\nchanged' : read(file)).includes(change.path));
   }
 });
@@ -592,9 +783,10 @@ test('independent manager launch pins only bridge and guide without changing not
   for (const change of cliManagerLifetimeFingerprints) {
     const original = fixture.files.find(item => item.path === change.path);
     assert.equal(change.before, codexExecutableFingerprints.find(item => item.path === change.path).after);
-    assert.equal(sha256(normalizeClaudeCompatibility(change.path, read(change.path))), change.after);
+    const latest = latestCliRepairHash(change.path, change.after);
+    assert.equal(sha256(normalizeClaudeCompatibility(change.path, read(change.path))), latest);
     assert.equal(matchesFrozenFingerprint(original, change.before), false);
-    assert.equal(matchesFrozenFingerprint(original, change.after), true);
+    assert.equal(matchesFrozenFingerprint(original, latest), true);
     assert.ok(frozenFailures(file => file === change.path ? read(file) + '\nchanged' : read(file)).includes(change.path));
   }
   for (const name of ['cli-notify', 'desktop-host', 'cli-task-store', 'claude-client']) {
@@ -613,10 +805,27 @@ test('Windows process identity repair pins one exact file and rejects rollback o
   assert.ok(original);
   assert.equal(change.before, original.sha256, 'the original frozen baseline is not refreshed');
   const current = read(change.path);
-  assert.equal(sha256(current), change.after);
-  assert.equal(matchesFrozenFingerprint(original, change.after), true);
+  const latest = latestCliRepairHash(change.path, change.after);
+  assert.equal(sha256(current), latest);
+  assert.equal(matchesFrozenFingerprint(original, latest), true);
   assert.equal(matchesFrozenFingerprint(original, change.before), false, 'the old cmdlet implementation must not pass');
-  const rollback = current.replace([
+  // Reconstruct the exact earlier node before testing its original rollback.
+  // This retains the old assertion instead of comparing an intermediate node
+  // with a final file that also contains the independently reviewed exit proof.
+  const earlier = current
+    .replace('export function processStart(pid, { timeoutMs } = {}) {', 'export function processStart(pid) {')
+    .replace('windowsHide: true, timeout: timeoutMs });', 'windowsHide: true });')
+    .replace([
+      '// A lost exit receipt is not proof of exit. Both saved identities must be gone;',
+      '// missing proof and access failures deliberately remain errors, not permission to retire.',
+      'export function nativeViewIsGone(record, options = { readStart: pid => processStart(pid, { timeoutMs: 2000 }) }) {',
+      '  return processIsGone(record.server, options)',
+      '    && processIsGone({ pid: record.view?.windowPid, startedAt: record.view?.windowStartedAt }, options);',
+      '}', '', '',
+    ].join('\n'), '');
+  assert.equal(sha256(earlier), change.after, 'the full previous process-identity node remains reproducible');
+  assert.equal(matchesFrozenFingerprint(original, sha256(earlier)), false, 'rollback of the exit proof must not pass');
+  const rollback = earlier.replace([
     '    // Query the same Process.StartTime directly. The Get-Process cmdlet path can',
     '    // stall in a minimal host even when the underlying .NET query is available.',
     "    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `[System.Diagnostics.Process]::GetProcessById(${pid}).StartTime.ToUniversalTime().Ticks`], { encoding: 'utf8', windowsHide: true });",
@@ -670,6 +879,183 @@ test('Claude compatibility exception rejects version gate restoration and protoc
   assert.equal(matchesFrozenFingerprint(original, sha256(read(change.path))), true);
   for (const mutate of [text => text + '\nextra', text => text.slice(1)]) {
     assert.ok(frozenFailures(file => file === change.path ? mutate(read(file)) : read(file)).includes(change.path));
+  }
+});
+
+test('retained hotfix pins follow only the seven reviewed predecessor nodes and reject rollback', () => {
+  const predecessors = [
+    ['scripts/cli/claude-client.mjs', cliContractTurnCompletionFingerprints],
+    ['scripts/cli/claude-hook.mjs', fixture.files],
+    ['scripts/cli/claude-version-compatibility.test.mjs', claudeCompatibilityTestFingerprints],
+    ['scripts/cli/native-cli-runner.mjs', cliDocumentContextFingerprints],
+    ['scripts/cli/visible-cli-runner.mjs', cliDocumentContextFingerprints],
+    ['skills/identity-pm/references/lifecycle-and-closeout.md', fixture.files],
+    ['skills/identity-worker/SKILL.md', fixture.files],
+  ];
+  assert.deepEqual(retainedHotfixFingerprints.map(item => item.path).sort(), predecessors.map(([path]) => product + path).sort());
+  for (const [relative, prior] of predecessors) {
+    const path = product + relative;
+    const change = retainedHotfixFingerprints.find(item => item.path === path);
+    const predecessor = prior.find(item => item.path === path);
+    const original = fixture.files.find(item => item.path === path);
+    assert.deepEqual(Object.keys(change).sort(), ['after', 'before', 'path']);
+    assert.equal(change.before, predecessor.after ?? predecessor.sha256);
+    const latest = latestCliRepairHash(path, change.after);
+    assert.equal(sha256(read(path)), latest, path);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false, path + ': rejects rollback');
+    assert.equal(matchesFrozenFingerprint(original, latest), true, path);
+    for (const mutate of [text => text + '\nextra', text => text.slice(1), () => '']) {
+      assert.ok(frozenFailures(file => file === path ? mutate(read(file)) : read(file)).includes(path), path);
+    }
+    assert.ok(frozenFailures(file => { if (file === path) throw new Error('missing'); return read(file); }).includes(path + ': missing or unreadable'));
+  }
+});
+
+test('reconnect and attention pins follow exactly seven predecessor nodes and reject rollback or extra edits', () => {
+  const predecessors = [
+    ['scripts/cli/claude-client.mjs', retainedHotfixFingerprints],
+    ['scripts/cli/cli-bridge.mjs', cliManagerLifetimeFingerprints],
+    ['scripts/cli/cli-notify.mjs', fixture.files],
+    ['scripts/cli/desktop-host.mjs', fixture.files],
+    ['scripts/cli/interactive-cli-runner.mjs', cliDocumentContextFingerprints],
+    ['scripts/cli/visible-cli-runner.mjs', retainedHotfixFingerprints],
+    ['docs/AI编程协同机制/机制/04-CLI目标协作机制.md', cliManagerLifetimeFingerprints],
+  ];
+  assert.deepEqual(cliReconnectAttentionFingerprints.map(item => item.path).sort(), predecessors.map(([file]) => product + file).sort());
+  for (const [relative, prior] of predecessors) {
+    const file = product + relative;
+    const change = cliReconnectAttentionFingerprints.find(item => item.path === file);
+    const predecessor = prior.find(item => item.path === file);
+    const original = fixture.files.find(item => item.path === file);
+    assert.ok(original && predecessor, file);
+    assert.deepEqual(Object.keys(change).sort(), ['after', 'before', 'path']);
+    assert.equal(change.before, predecessor.after ?? predecessor.sha256, file + ': exact predecessor retained');
+    const latest = latestCliRepairHash(file, change.after);
+    assert.equal(sha256(normalizeClaudeCompatibility(file, read(file))), latest, file);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false, file + ': rollback rejected');
+    assert.equal(matchesFrozenFingerprint(original, latest), true, file);
+    for (const mutate of [text => text + '\nextra', text => text.slice(1), () => '']) {
+      assert.ok(frozenFailures(candidate => candidate === file ? mutate(read(candidate)) : read(candidate)).includes(file), file);
+    }
+    assert.ok(frozenFailures(candidate => { if (candidate === file) throw new Error('missing'); return read(candidate); }).includes(file + ': missing or unreadable'));
+  }
+  for (const item of fixture.portions) assert.ok(!cliReconnectAttentionFingerprints.some(change => change.path === item.path));
+});
+
+test('reviewed maintenance pins extend exact historical nodes without refreshing the baseline', () => {
+  const predecessors = [
+    ['docs/AI编程协同机制/机制/04-CLI目标协作机制.md', cliReconnectAttentionFingerprints],
+    ['scripts/cli/claude-client.mjs', cliReconnectAttentionFingerprints],
+    ['scripts/cli/cli-bridge.mjs', cliReconnectAttentionFingerprints],
+    ['scripts/cli/cli-notify.mjs', cliReconnectAttentionFingerprints],
+    ['scripts/cli/cli-task-store.mjs', cliStageContinuationFingerprints],
+    ['scripts/cli/interactive-client.mjs', fixture.files],
+    ['scripts/cli/process-identity.mjs', windowsProcessIdentityFingerprints],
+    ['scripts/cli/visible-cli-runner.mjs', cliReconnectAttentionFingerprints],
+    ['scripts/runtime/control-runtime.mjs', fixture.files],
+    ['scripts/runtime/worker-result-receipts.mjs', fixture.files],
+    ['skills/identity-pm/references/lifecycle-and-closeout.md', retainedHotfixFingerprints],
+  ];
+  assert.deepEqual(reviewedMaintenanceFingerprints.map(item => item.path).sort(), predecessors.map(([file]) => product + file).sort());
+  for (const [relative, prior] of predecessors) {
+    const file = product + relative;
+    const change = reviewedMaintenanceFingerprints.find(item => item.path === file);
+    const predecessor = prior.find(item => item.path === file);
+    const original = fixture.files.find(item => item.path === file);
+    assert.ok(original && predecessor, file);
+    assert.deepEqual(Object.keys(change).sort(), ['after', 'before', 'path']);
+    assert.equal(change.before, predecessor.after ?? predecessor.sha256, file + ': exact predecessor retained');
+    let current = normalizeClaudeCompatibility(file, read(file));
+    assert.notEqual(current, null);
+    if (file === receiptFile) {
+      assert.equal(current.split(receiptRenameAfter).length, 2, 'the prior bounded retry is retained exactly once');
+      current = current.replace(receiptRenameAfter, receiptRenameBefore);
+    }
+    const latest = latestCliRepairHash(file, change.after);
+    assert.equal(sha256(current), latest, file);
+    assert.equal(matchesFrozenFingerprint(original, latest), true, file);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false, file + ': reviewed fix rollback rejected');
+    assert.equal(matchesFrozenFingerprint(original, original.sha256), false, file + ': initial baseline rollback rejected');
+    for (const mutate of [text => text + '\nextra', text => text.slice(1), () => '']) {
+      assert.ok(frozenFailures(candidate => candidate === file ? mutate(read(candidate)) : read(candidate)).includes(file), file);
+    }
+    assert.ok(frozenFailures(candidate => { if (candidate === file) throw new Error('missing'); return read(candidate); }).includes(file + ': missing or unreadable'));
+  }
+  for (const item of fixture.portions) assert.ok(!reviewedMaintenanceFingerprints.some(change => change.path === item.path));
+});
+
+test('maintenance admits only the three retained regression files and rejects unknown membership', () => {
+  assert.deepEqual(reviewedMaintenanceAdditions.map(item => item.path).sort(),
+    ['claude-compaction-cwd', 'claude-orphan-retirement', 'claude-waiting-attention'].map(name => product + 'scripts/cli/' + name + '.test.mjs').sort());
+  for (const item of reviewedMaintenanceAdditions) {
+    assert.deepEqual(Object.keys(item).sort(), ['path', 'sha256']);
+    assert.equal(sha256(read(item.path)), item.sha256);
+    for (const mutate of [text => text + '\nextra', text => text.slice(1), () => '']) {
+      assert.ok(frozenFailures(file => file === item.path ? mutate(read(file)) : read(file)).includes(item.path));
+    }
+    assert.ok(frozenFailures(file => { if (file === item.path) throw new Error('missing'); return read(file); }).includes(item.path + ': missing or unreadable'));
+    const directory = product + 'scripts/cli';
+    const current = filesBelow(directory);
+    assert.throws(() => checkFrozenDirectory(directory, current.filter(file => file !== item.path)), /membership changed/);
+    assert.throws(() => checkFrozenDirectory(directory, [...current, directory + '/unreviewed.test.mjs'].sort()), /membership changed/);
+  }
+});
+
+test('maintenance retains accepted-goal recovery and excludes the separate successor implementation', () => {
+  assert.deepEqual(excludedSuccessorFingerprints.map(item => item.path).sort(),
+    ['cli-bridge', 'cli-task-store'].map(name => product + 'scripts/cli/' + name + '.mjs').sort());
+  for (const item of excludedSuccessorFingerprints) {
+    assert.deepEqual(Object.keys(item).sort(), ['path', 'sha256']);
+    const file = item.path;
+    const original = fixture.files.find(item => item.path === file);
+    assert.equal(matchesFrozenFingerprint(original, item.sha256), false, file + ': unshipped branch is not a maintenance exception');
+    assert.ok(read(file).includes('acceptedGoalRecovery'), file + ': preserve the installed recovery path');
+    assert.ok(!read(file).includes('sessionFrom') && !read(file).includes('createSuccessor'), file);
+  }
+  assert.ok(!read(cli).includes('sessionFrom'), 'the guide must describe the actual packaged path');
+});
+
+test('retained hotfix regression files require exact contents and frozen directory membership', () => {
+  assert.deepEqual(retainedHotfixAdditions.map(item => item.path).sort(),
+    ['claude-hook-stdin', 'cli-environment'].map(name => product + 'scripts/cli/' + name + '.test.mjs').sort());
+  for (const item of retainedHotfixAdditions) {
+    assert.deepEqual(Object.keys(item).sort(), ['path', 'sha256']);
+    assert.equal(sha256(read(item.path)), item.sha256);
+    for (const mutate of [text => text + '\nextra', text => text.slice(1), () => '']) {
+      assert.ok(frozenFailures(file => file === item.path ? mutate(read(file)) : read(file)).includes(item.path));
+    }
+    assert.ok(frozenFailures(file => { if (file === item.path) throw new Error('missing'); return read(file); }).includes(item.path + ': missing or unreadable'));
+  }
+  for (const directory of fixture.directories) {
+    const current = filesBelow(directory);
+    checkFrozenDirectory(directory, current);
+    assert.throws(() => checkFrozenDirectory(directory, current.slice(1)), /membership changed/);
+    assert.throws(() => checkFrozenDirectory(directory, [...current, directory + '/unexpected.mjs'].sort()), /membership changed/);
+  }
+});
+
+test('collaboration delivery pins the reviewed successor and rejects rollback, extra edits and unknown files', () => {
+  assert.equal(collaborationDeliveryFingerprints.length, 11);
+  for (const change of collaborationDeliveryFingerprints) {
+    const original = fixture.files.find(item => item.path === change.path);
+    const predecessor = reviewedMaintenanceFingerprints.find(item => item.path === change.path)
+      ?? retainedHotfixFingerprints.find(item => item.path === change.path);
+    assert.ok(original);
+    assert.equal(change.before, predecessor?.after ?? original.sha256);
+    assert.equal(matchesFrozenFingerprint(original, change.after), true);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false);
+    for (const mutate of [text => text + '\nextra', text => text.slice(1), () => '']) {
+      assert.ok(frozenFailures(file => file === change.path ? mutate(read(file)) : read(file)).includes(change.path));
+    }
+  }
+  for (const item of collaborationDeliveryAdditions) {
+    assert.equal(sha256(read(item.path)), item.sha256);
+    assert.ok(frozenFailures(file => file === item.path ? read(file) + '\nextra' : read(file)).includes(item.path));
+    assert.ok(frozenFailures(file => { if (file === item.path) throw Error('missing'); return read(file); }).includes(item.path + ': missing or unreadable'));
+  }
+  assert.equal(collaborationDeliveryPortions.length, 1);
+  for (const item of collaborationDeliveryPortions) {
+    assert.equal(item.before, fixture.portions.find(original => original.path === item.path && original.start === item.start).sha256);
   }
 });
 

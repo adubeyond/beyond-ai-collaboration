@@ -1,5 +1,7 @@
 # BEYOND 3.2 Architecture Overview
 
+> Version note: this document retains runtime architecture and PM-to-Worker examples. For 4.1.0 role responsibilities, small-outcome composition, and direct-recipient notifications, use the [4.1.0 notes](releases/v4.1.0.md), package root entry, and identity Skills. Module owners may implement directly; older organization examples are not mandatory dispatch steps.
+
 **English** | [简体中文完整版](../系统架构与运行机制.md)
 
 BEYOND turns Codex into a PM-led agent team. Its purpose is to complete real business work quickly and accurately while keeping production, data, and irreversible actions safe.

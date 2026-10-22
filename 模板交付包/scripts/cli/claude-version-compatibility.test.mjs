@@ -121,6 +121,7 @@ test('same-session resume registers once and delivers each managed prompt once',
   await f.session.command({ action: 'submit', runNumber: 1, prompt: 'first original instruction' });
   await f.hook('UserPromptSubmit', { prompt: 'first original instruction' });
   assert.equal((await f.hook('UserPromptSubmit', { prompt: 'first original instruction' })).decision, 'block');
+  assert.equal((await f.hook('UserPromptSubmit', { prompt: 'another instruction while busy' })).decision, 'block');
   await f.hook('Stop', { last_assistant_message: 'first answer' });
   await f.hook('Stop', { last_assistant_message: 'duplicate stop' });
   assert.equal(f.calls.filter(c => c.route === '/event').length, 1);
@@ -185,4 +186,53 @@ test('unconfirmed delivery stays unknown and terminates its owned child', async 
   await f.session.command({ action: 'submit', runNumber: 1, prompt: 'original work' });
   assert.equal(f.calls.find(c => c.route === '/event').value.status, 'unknown');
   assert.equal(f.terminated, 1);
+});
+
+test('first rejected input finishes once without manual replay or changing session', async () => {
+  const f = sessionFixture();
+  await f.hook('SessionStart', { source: 'resume' });
+  await f.session.command({ action: 'submit', runNumber: 1, prompt: 'approved secret business input' });
+  for (const prompt of ['corrupted input', 'approved secret business input', 'another input'])
+    assert.equal((await f.hook('UserPromptSubmit', { prompt })).decision, 'block');
+  await f.hook('StopFailure'); await f.hook('Stop', { last_assistant_message: 'late final' });
+  const results = () => f.calls.filter(c => c.route === '/event');
+  assert.equal(results().length, 1); assert.equal(results()[0].value.status, 'failed');
+  assert.doesNotMatch(JSON.stringify(results()), /secret|corrupted/);
+  assert.equal(f.calls.some(c => c.route === '/manual'), false);
+  assert.equal(f.terminated, 0);
+  await f.session.command({ action: 'submit', runNumber: 2, prompt: 'owner resume' });
+  await f.hook('StopFailure'); // A late failure cannot finish a not-yet-started new run.
+  assert.equal(results().length, 1);
+  await f.hook('UserPromptSubmit', { prompt: 'owner resume' });
+  await f.hook('Stop', { last_assistant_message: 'resumed' });
+  assert.deepEqual(results().map(c => [c.value.runNumber, c.value.status, c.value.sessionId]),
+    [[1, 'failed', 'original-session'], [2, 'completed', 'original-session']]);
+});
+
+test('stopping input is blocked without prematurely turning the run into failed', async () => {
+  const f = sessionFixture(); await f.hook('SessionStart', { source: 'resume' });
+  await f.session.command({ action: 'submit', runNumber: 1, prompt: 'approved' });
+  await f.session.command({ action: 'stop', runNumber: 1 });
+  assert.equal((await f.hook('UserPromptSubmit', { prompt: 'damaged' })).decision, 'block');
+  assert.equal(f.calls.filter(c => c.route === '/event').length, 0);
+  await f.session.nativeEnded();
+  assert.equal(f.calls.find(c => c.route === '/event').value.status, 'stopped');
+});
+
+test('late delivery error cannot settle or terminate a subsequent run', async () => {
+  let rejectFirst, terminated = 0; const events = [];
+  const session = createClaudeSession({ sessionId: 'saved', model: 'm', cwd: os.tmpdir(), pid: process.pid,
+    post: async (route, value) => { events.push({ route, value }); return {}; },
+    deliver: async (_transport, prompt) => { if (prompt === 'first') await new Promise((_resolve, reject) => { rejectFirst = reject; }); },
+    terminate: () => { terminated++; } });
+  const hook = (event, extra = {}) => session.hook({ session_id: 'saved', hook_event_name: event, ...extra });
+  await session.hook({ session_id: 'saved', hook_event_name: 'SessionStart', model: 'm', cwd: os.tmpdir() }, { pipe: '\\\\.\\pipe\\test', token: 'fixture' });
+  const first = session.command({ action: 'submit', runNumber: 1, prompt: 'first' });
+  await hook('UserPromptSubmit', { prompt: 'damaged' });
+  await session.command({ action: 'submit', runNumber: 2, prompt: 'second' });
+  rejectFirst(new Error('late delivery error')); await first;
+  assert.equal(terminated, 0);
+  await hook('UserPromptSubmit', { prompt: 'second' });
+  await hook('Stop', { last_assistant_message: 'done' });
+  assert.deepEqual(events.filter(e => e.route === '/event').map(e => e.value.status), ['failed', 'completed']);
 });

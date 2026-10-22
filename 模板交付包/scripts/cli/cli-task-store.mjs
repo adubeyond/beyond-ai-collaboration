@@ -236,7 +236,54 @@ export class CliTaskStore {
       return clone(cancelled);
     });
   }
-  beginRun(identity, { requestId, prompt, expectedRunNumber, expectedSessionId, ownerTurnId, profile, configuration, initialSessionRecovery, contract, authorizationLocator, stage, continuationId, faultAt = null }) {
+  verifyAcceptedGoalRecovery(identity, { acceptedGoalRecovery: proof, contract, authorizationLocator, ownerTurnId, profile, configuration }) {
+    const state = this.read(identity);
+    const hashes = ['stateSha256', 'resultSha256', 'reviewSha256', 'archiveRecordSha256'];
+    if (!proof || typeof proof !== 'object' || Array.isArray(proof)
+      || Object.keys(proof).some(key => ![...hashes, 'reason'].includes(key))
+      || hashes.some(key => !/^[a-f0-9]{64}$/.test(proof[key] ?? ''))
+      || typeof proof.reason !== 'string' || !proof.reason.trim()) throw new Error('CLI accepted-goal recovery requires exact fingerprints and reason');
+    if (state.taskMode !== 'assist' || state.status !== 'completed' || !state.sessionId || !state.runNumber
+      || digest(state) !== proof.stateSha256) throw new Error('CLI accepted-goal recovery state mismatch');
+    validIdentifier(ownerTurnId);
+    validContract(contract);
+    if (contract.goal.trim() === (state.effectiveContract ?? state.contract).goal.trim()) throw new Error('CLI accepted-goal recovery requires a newly authorized goal');
+    const result = this.readResult(identity, state.runNumber), review = this.readReview(identity, state.runNumber);
+    const { file: reviewFile } = this.#reviewPaths(identity, state.runNumber);
+    if (result.status !== 'completed' || review?.decision !== 'accept'
+      || sha256File(state.currentResultPath) !== proof.resultSha256
+      || sha256File(reviewFile) !== proof.reviewSha256
+      || review.resultSha256 !== proof.resultSha256) throw new Error('CLI accepted-goal recovery evidence mismatch');
+    if ((state.continuations ?? []).some(item => item.status === 'pending')) throw new Error('CLI accepted-goal recovery has a pending continuation');
+    if (state.processIdentity && !processIsGone(state.processIdentity)) throw new Error('CLI accepted-goal recovery manager still exists');
+    const endpointFile = this.checkedPath(path.join(this.taskDir(identity), 'interactive.json'));
+    if (fs.existsSync(endpointFile)) {
+      const endpoint = this.readJson(endpointFile); sameIdentity(endpoint, identity);
+      if (endpoint.sessionId !== state.sessionId || endpoint.status !== 'closed' || endpoint.activeTurnId
+        || (endpoint.manager && !processIsGone(endpoint.manager)) || (endpoint.server && !processIsGone(endpoint.server))) throw new Error('CLI accepted-goal recovery requires the original closed native session');
+    }
+    if (!path.isAbsolute(authorizationLocator ?? '') || !fs.statSync(authorizationLocator).isFile()
+      || !fs.statSync(authorizationLocator).size || fs.statSync(authorizationLocator).size > 65536) throw new Error('CLI accepted-goal recovery requires a readable authorization file');
+    const previous = this.readJson(path.join(this.runDir(identity, state.runNumber), 'run.json'));
+    if ((profile !== undefined && !isDeepStrictEqual(profile, previous.profile))
+      || (configuration !== undefined && !isDeepStrictEqual(configuration, state.configuration))) throw new Error('CLI accepted-goal recovery must preserve the original profile and configuration');
+    return { ...Object.fromEntries(['projectId', 'taskId', 'ownerThreadId'].map(key => [key, state[key]])),
+      ...clone(proof), fromRunNumber: state.runNumber, runNumber: state.runNumber + 1, sessionId: state.sessionId,
+      ownerTurnId, authorizationLocator, authorizationSha256: sha256File(authorizationLocator), contractSha256: digest(contract) };
+  }
+  readAcceptedGoalRecovery(identity) {
+    const state = this.read(identity), recovery = state.acceptedGoalRecovery;
+    if (!recovery) return null;
+    sameIdentity(recovery, identity);
+    if (recovery.sessionId !== state.sessionId || recovery.runNumber !== recovery.fromRunNumber + 1 || recovery.runNumber > state.runNumber) throw new Error('CLI accepted-goal recovery binding mismatch');
+    const run = this.readJson(path.join(this.runDir(identity, recovery.runNumber), 'run.json'));
+    const review = this.readReview(identity, recovery.fromRunNumber), { file: reviewFile } = this.#reviewPaths(identity, recovery.fromRunNumber);
+    if (digest(run.acceptedGoalRecovery) !== digest(recovery) || digest(run.effectiveContract) !== recovery.contractSha256
+      || review?.decision !== 'accept' || sha256File(reviewFile) !== recovery.reviewSha256
+      || sha256File(path.join(this.runDir(identity, recovery.fromRunNumber), 'result.json')) !== recovery.resultSha256) throw new Error('CLI accepted-goal recovery history mismatch');
+    return clone(recovery);
+  }
+  beginRun(identity, { requestId, prompt, expectedRunNumber, expectedSessionId, ownerTurnId, profile, configuration, initialSessionRecovery, acceptedGoalRecovery, contract, authorizationLocator, stage, continuationId, faultAt = null }) {
     validIdentifier(requestId);
     if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('CLI prompt required');
     if (ownerTurnId !== undefined) validIdentifier(ownerTurnId);
@@ -254,7 +301,7 @@ export class CliTaskStore {
         if (ownerTurnId === undefined) throw new Error('CLI contract update owner turn required');
         if (initialSessionRecovery !== undefined) throw new Error('CLI contract update cannot accompany initial session recovery');
       }
-      const fingerprint = digest({ requestId, prompt, expectedRunNumber, expectedSessionId, ...(profile ? { profile } : {}), ...(configuration ? { configuration } : {}), ...(initialSessionRecovery !== undefined ? { initialSessionRecovery } : {}), ...(updatesContract ? { contract, authorizationLocator } : {}), ...(stage !== undefined ? { stage } : {}), ...(continuationId !== undefined ? { continuationId } : {}) });
+      const fingerprint = digest({ requestId, prompt, expectedRunNumber, expectedSessionId, ...(profile ? { profile } : {}), ...(configuration ? { configuration } : {}), ...(initialSessionRecovery !== undefined ? { initialSessionRecovery } : {}), ...(acceptedGoalRecovery !== undefined ? { acceptedGoalRecovery } : {}), ...(updatesContract ? { contract, authorizationLocator } : {}), ...(stage !== undefined ? { stage } : {}), ...(continuationId !== undefined ? { continuationId } : {}) });
       let run;
       if (fs.existsSync(requestFile)) {
         const previous = this.readJson(requestFile);
@@ -284,11 +331,16 @@ export class CliTaskStore {
       }
       const recovery = initialSessionRecovery !== undefined
         ? this.#verifyInitialSessionRecovery(identity, state, initialSessionRecovery, prompt, profile, stage) : null;
+      // An explicit new owner goal can reuse the native context without changing
+      // the accepted result, its review, or its workbench archive.
+      if (acceptedGoalRecovery !== undefined && (!updatesContract || recovery || continuationId !== undefined)) throw new Error('CLI accepted-goal recovery requires an explicit new contract');
+      const acceptedRecovery = acceptedGoalRecovery !== undefined
+        ? this.verifyAcceptedGoalRecovery(identity, { acceptedGoalRecovery, contract, authorizationLocator, ownerTurnId, profile, configuration }) : null;
       let review;
       if (state.runNumber && !recovery) {
         if (!state.sessionId) throw new Error('CLI session missing; explicit recovery required');
         review = this.readReview(identity, state.runNumber);
-        if (review?.decision !== 'continue') throw new Error('CLI continuation review required');
+        if (review?.decision !== 'continue' && !acceptedRecovery) throw new Error('CLI continuation review required');
         if (updatesContract && (review.runNumber !== state.runNumber || review.resultSha256 !== sha256File(state.currentResultPath))) throw new Error('CLI contract update result fingerprint mismatch');
       }
       // The start contract and prior runs remain history; only an explicit owner-authorized
@@ -296,9 +348,10 @@ export class CliTaskStore {
       const effectiveContract = clone(updatesContract ? contract : state.effectiveContract ?? state.contract);
       const contractUpdate = updatesContract ? { authorizationLocator, previousRunNumber: state.runNumber, previousContractSha256: digest(state.effectiveContract ?? state.contract), reviewSha256: digest(review) } : null;
       const number = state.runNumber + 1, dir = this.checkedPath(this.runDir(identity, number), { createDirectory: true });
-      run ??= { ...Object.fromEntries(['projectId', 'taskId', 'ownerThreadId'].map(k => [k, identity[k]])), runNumber: number, requestId, sessionId: state.sessionId, ownerTurnId: ownerTurnId ?? state.ownerTurnId, status: 'starting', resultPath: path.join(dir, 'result.json'), effectiveContract, ...(contractUpdate ? { contractUpdate } : {}), ...(profile ? { profile: clone(profile) } : {}), ...(recovery ? { initialSessionRecovery: recovery } : {}), ...(stage !== undefined ? { stage: clone(stage) } : {}), ...(continuationId !== undefined ? { continuationId } : {}) };
+      run ??= { ...Object.fromEntries(['projectId', 'taskId', 'ownerThreadId'].map(k => [k, identity[k]])), runNumber: number, requestId, sessionId: state.sessionId, ownerTurnId: ownerTurnId ?? state.ownerTurnId, status: 'starting', resultPath: path.join(dir, 'result.json'), effectiveContract, ...(contractUpdate ? { contractUpdate } : {}), ...(profile ? { profile: clone(profile) } : {}), ...(recovery ? { initialSessionRecovery: recovery } : {}), ...(acceptedRecovery ? { acceptedGoalRecovery: acceptedRecovery } : {}), ...(stage !== undefined ? { stage: clone(stage) } : {}), ...(continuationId !== undefined ? { continuationId } : {}) };
       if (run.runNumber !== number || run.sessionId !== state.sessionId) throw new Error('CLI replay intent mismatch');
       if (recovery && digest(run.initialSessionRecovery) !== digest(recovery)) throw new Error('CLI initial session recovery evidence changed');
+      if (acceptedRecovery && digest(run.acceptedGoalRecovery) !== digest(acceptedRecovery)) throw new Error('CLI accepted-goal recovery evidence changed');
       if (updatesContract && (digest(run.effectiveContract) !== digest(effectiveContract) || digest(run.contractUpdate) !== digest(contractUpdate))) throw new Error('CLI contract update evidence changed');
       const immutable = (file, value) => { if (fs.existsSync(file)) { if (digest(this.readJson(file)) !== digest(value)) throw new Error('CLI run intent conflict'); } else atomicJson(file, value); };
       this.checkedPath(path.dirname(requestFile), { createDirectory: true });
@@ -309,7 +362,7 @@ export class CliTaskStore {
       immutable(path.join(dir, 'input.json'), { prompt, fingerprint });
       if (faultAt === 'afterInput') throw new Error('injected fault afterInput');
       const updatedAt = now();
-      atomicJson(this.locator(identity), { ...state, effectiveContract: clone(run.effectiveContract ?? state.contract), ...(configuration ? { configuration: clone(configuration) } : {}), ...(continuationId !== undefined ? { continuations: state.continuations.map(item => item === pending ? { ...item, status: 'consumed', targetRunNumber: number, consumedAt: updatedAt } : item) } : {}), runNumber: number, status: 'starting', ownerTurnId: run.ownerTurnId, currentResultPath: null, managerPid: null, processIdentity: null, updatedAt });
+      atomicJson(this.locator(identity), { ...state, effectiveContract: clone(run.effectiveContract ?? state.contract), ...(acceptedRecovery ? { acceptedGoalRecovery: clone(acceptedRecovery) } : {}), ...(configuration ? { configuration: clone(configuration) } : {}), ...(continuationId !== undefined ? { continuations: state.continuations.map(item => item === pending ? { ...item, status: 'consumed', targetRunNumber: number, consumedAt: updatedAt } : item) } : {}), runNumber: number, status: 'starting', ownerTurnId: run.ownerTurnId, currentResultPath: null, managerPid: null, processIdentity: null, updatedAt });
       return run;
     });
   }
