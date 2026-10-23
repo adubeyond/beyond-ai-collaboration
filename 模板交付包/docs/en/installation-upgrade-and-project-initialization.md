@@ -1,6 +1,6 @@
 # BEYOND Installation, Upgrade, and Project Initialization
 
-> **Complete BEYOND 4.1.0 installation guide.** Use the matching official release assets after installation into the target project is authorized. Publication does not upgrade existing projects or resume business work.
+> **Complete BEYOND 4.1.1 installation guide.** Use the matching official release assets after installation into the target project is authorized. Publication does not upgrade existing projects or resume business work.
 
 > This is an operator guide, not a second runtime-rule owner. Follow the target release package, project-root `AGENTS.md`, identity Skills, and fixed-script results if anything conflicts.
 
@@ -24,37 +24,37 @@ prepare the target package and seven Skills
 
 The standard BEYOND path does not install an identity Hook and does not require `/hooks` or a guard probe. Use a new ordinary conversation without an identity Skill for installation maintenance so an active PM or Worker does not replace its own project entry while doing business work. Wait for active tasks to stop before replacing the root entry or Skills; after installation, restart Codex and verify the loaded version from a new process.
 
-Version 4.1.0 retains the existing runtime and adds no terminal-result Hook, notify branch, persistent background service, or extra Codex CLI. The optional CLI route uses an existing local CLI with finite per-dispatch background execution and notification; see the [CLI goal-collaboration mechanism](../AI编程协同机制/机制/04-CLI目标协作机制.md). It does not configure authentication or replace the native Worker route. Formal results remain in user-visible Codex Worker tasks. Only the [Worker identity rules](../../skills/identity-worker/SKILL.md) own terminal formation and the native callback; only [PM pause, resume, and closeout](../../skills/identity-pm/references/lifecycle-and-closeout.md) owns matching, acceptance, pause, and receipt consumption. This installation guide describes what to install and verify; it does not copy the pending-scan, Worker-read, or workbench-transaction algorithm. A subsequently authorized upgrade replaces the control repository and seven Skills, then verifies the loaded version after restart. The upgrade maintenance path backs up and removes only a legacy BEYOND notify branch, without changing other plugins or user-owned notify configuration.
+Version 4.1.1 retains the existing runtime and adds no terminal-result Hook, notify branch, persistent background service, or extra Codex CLI. The optional CLI route uses an existing local CLI with finite per-dispatch background execution and notification; see the [CLI goal-collaboration mechanism](../AI编程协同机制/机制/04-CLI目标协作机制.md). It does not configure authentication or replace the native Worker route. Formal results remain in user-visible Codex Worker tasks. Only the [Worker identity rules](../../skills/identity-worker/SKILL.md) own terminal formation and the native callback; only [PM pause, resume, and closeout](../../skills/identity-pm/references/lifecycle-and-closeout.md) owns matching, acceptance, pause, and receipt consumption. This installation guide describes what to install and verify; it does not copy the pending-scan, Worker-read, or workbench-transaction algorithm. A subsequently authorized upgrade replaces the control repository and seven Skills, then verifies the loaded version after restart. The upgrade maintenance path backs up and removes only a legacy BEYOND notify branch, without changing other plugins or user-owned notify configuration.
 
 ## 2. Prepare the target release
 
-Use the complete BEYOND 4.1.0 release; do not mix product files or Skills from different versions:
+Use the complete BEYOND 4.1.1 release; do not mix product files or Skills from different versions:
 
-- Release: <https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v4.1.0>
-- Package: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.0/BEYOND-4.1.0.zip>
-- Optional SHA-256 file: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.0/BEYOND-4.1.0.zip.sha256>
+- Release: <https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v4.1.1>
+- Package: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.1/BEYOND-4.1.1.zip>
+- Optional SHA-256 file: <https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.1/BEYOND-4.1.1.zip.sha256>
 
 Windows download and verification example. If the optional checksum file is already present beside the ZIP, verify it without using a web UI for Git operations:
 
 ```powershell
-curl.exe -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.0/BEYOND-4.1.0.zip" -o "BEYOND-4.1.0.zip"
-$checksumPath = ".\BEYOND-4.1.0.zip.sha256"
+curl.exe -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.1/BEYOND-4.1.1.zip" -o "BEYOND-4.1.1.zip"
+$checksumPath = ".\BEYOND-4.1.1.zip.sha256"
 if (Test-Path -LiteralPath $checksumPath) {
   $expectedHash = ((Get-Content -LiteralPath $checksumPath -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
-  $actualHash = (Get-FileHash -LiteralPath ".\BEYOND-4.1.0.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
-  if ($actualHash -ne $expectedHash) { throw "BEYOND-4.1.0.zip SHA-256 mismatch" }
+  $actualHash = (Get-FileHash -LiteralPath ".\BEYOND-4.1.1.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actualHash -ne $expectedHash) { throw "BEYOND-4.1.1.zip SHA-256 mismatch" }
 } else {
   Write-Warning "Optional SHA-256 file not supplied; continue and complete the in-package and installed-content checks"
 }
-Expand-Archive -LiteralPath ".\BEYOND-4.1.0.zip" -DestinationPath ".\BEYOND-4.1.0-install"
+Expand-Archive -LiteralPath ".\BEYOND-4.1.1.zip" -DestinationPath ".\BEYOND-4.1.1-install"
 ```
 
 Linux or macOS example:
 
 ```bash
-curl -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.0/BEYOND-4.1.0.zip" -o BEYOND-4.1.0.zip
-if [ -f BEYOND-4.1.0.zip.sha256 ]; then sha256sum -c BEYOND-4.1.0.zip.sha256 || exit 1; else echo "optional SHA-256 file not supplied; continuing to in-package verification"; fi
-unzip BEYOND-4.1.0.zip -d BEYOND-4.1.0-install
+curl -L "https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.1/BEYOND-4.1.1.zip" -o BEYOND-4.1.1.zip
+if [ -f BEYOND-4.1.1.zip.sha256 ]; then sha256sum -c BEYOND-4.1.1.zip.sha256 || exit 1; else echo "optional SHA-256 file not supplied; continuing to in-package verification"; fi
+unzip BEYOND-4.1.1.zip -d BEYOND-4.1.1-install
 ```
 
 The remaining instructions apply only to an explicitly authorized target project. The ZIP is required; the external SHA-256 file is optional verification material. A missing or unavailable checksum file does not block installation, but a supplied checksum that does not match must stop it. With or without the external checksum, verify the in-package content manifest and the final installed content. Extraction produces one complete `beyond-control/` directory. Put that directory under the business-project root instead of scattering package files over the project.
@@ -83,7 +83,7 @@ After obtaining the complete release and installation approval, use this mainten
 
 ```text
 This is BEYOND installation maintenance. Do not create a PM, Worker, or business task.
-Install or upgrade the current project's beyond-control directory and seven global Skills from the explicitly approved complete BEYOND 4.1.0 release; do not mix in older content. If that ZIP's optional SHA-256 file is present beside it, verify it; if it is absent, do not block installation, but still complete the in-package manifest and final installed-content checks.
+Install or upgrade the current project's beyond-control directory and seven global Skills from the explicitly approved complete BEYOND 4.1.1 release; do not mix in older content. If that ZIP's optional SHA-256 file is present beside it, verify it; if it is absent, do not block installation, but still complete the in-package manifest and final installed-content checks.
 The project may be non-Git. Resolve its root from the current Codex project directory and root AGENTS.md; do not run or depend on a git rev-parse gate.
 The fixed entry discovers only the project root itself and exact Git roots that are direct children. Pass every confirmed formal repository that is deeper or outside the project root through --repository-roots. Do not copy beyond-control into each business repository and do not create a worktree for installation.
 For cross-root, multi-repository, or existing-worktree use, obtain the actual hostId and Codex projectId from the current Codex project and pass --host-id and --codex-project-id during first fusion; never guess them. Later upgrades preserve registered external roots and platform bindings when those flags are omitted. Stop and request a decision if a path, exact Git root, or origin remote has drifted.

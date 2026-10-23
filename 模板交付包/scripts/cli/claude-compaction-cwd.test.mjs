@@ -138,12 +138,38 @@ test('compaction keeps the original active round and reports its result once', a
   await f.hook({ hook_event_name: 'UserPromptSubmit', prompt: 'isolated approved instruction' });
   await f.hook({ source: 'compact', cwd: f.nested, model: undefined });
   assert.deepEqual(f.delivered, ['isolated approved instruction']);
-  assert.equal(f.posts.length, 1);
+  assert.equal(f.registrations().length, 1);
+  // This hook-only fixture omits transcript_path. That gap is now reported,
+  // without rebinding or settling the original run during compaction.
+  assert.deepEqual(f.posts.filter(item => item.route === '/attention').map(item => item.data.code), ['attention-observer-unavailable']);
+  assert.equal(f.posts.some(item => item.route === '/event'), false);
   await f.hook({ hook_event_name: 'Stop', last_assistant_message: 'isolated result', background_tasks: [], session_crons: [] });
   assert.deepEqual(f.posts.filter(item => item.route === '/event'), [{ route: '/event', data: {
     sessionId: f.sessionId, runNumber: 7, status: 'completed', finalText: 'isolated result', error: null,
   } }]);
   assert.equal(f.registrations().length, 1);
+});
+
+test('hook evidence scan registers background work without awaiting unrelated attention delivery', async t => {
+  const f = fixture(t), transcriptPath = path.join(f.tempRoot, `${f.sessionId}.jsonl`), background = [];
+  fs.writeFileSync(transcriptPath, '');
+  let release;
+  const pendingSignal = new Promise(resolve => { release = resolve; });
+  const observer = watchClaudeFailures({ transcriptPath, sessionId: f.sessionId, cwd: f.root,
+    onSignal: () => pendingSignal, onBackground: task => background.push(task) });
+  f.closers.push(() => { release(); observer.close(); });
+  const records = [question('pending-attention'),
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'background-tool', name: 'PowerShell', input: { command: 'fixture' } }] } },
+    { type: 'user', toolUseResult: { backgroundTaskId: 'background-task' }, message: { content: [{ type: 'tool_result', tool_use_id: 'background-tool', content: 'fixture' }] } },
+  ];
+  fs.appendFileSync(transcriptPath, records.map(row => JSON.stringify({ sessionId: f.sessionId, cwd: f.root, isSidechain: false, ...row })).join('\n') + '\n');
+  await observer.flush({ waitForDelivery: false });
+  assert.deepEqual(background, [{ taskId: 'background-task', toolUseId: 'background-tool' }]);
+  let completed = false;
+  const complete = observer.flush().then(() => { completed = true; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(completed, false);
+  release(); await complete;
 });
 
 test('nested transcript questions notify and answers recover, while preceding history stays excluded', async t => {

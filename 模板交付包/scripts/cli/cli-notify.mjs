@@ -2,10 +2,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { atomicJson, sha256File, digest } from './cli-task-store.mjs';
 
+// These notices are evidenced by an authenticated native lifecycle hook, not a
+// fabricated transcript offset. They retain the same owner/run notification path.
+export const nativeHookAttentionKinds = Object.freeze({
+  'session-cron-awaiting-owner': Object.freeze({ itemId: 'session-crons', tool: 'CronCreate', hookEvent: 'Stop',
+    description: '原会话仍有定时任务，本轮尚无最终结果；受管入口不会自动放行定时提示，请核对已有授权并决定如何在原会话继续。' }),
+  'attention-observer-unavailable': Object.freeze({ itemId: 'transcript-observer', tool: 'ClaudeTranscript', hookEvent: 'UserPromptSubmit',
+    description: '原会话的增量记录观察入口不可用，后台任务登记或问题提醒可能不完整；请核对原会话，不能据此判断执行仍在推进。' }),
+  'background-state-unavailable': Object.freeze({ itemId: 'background-state', tool: 'ClaudeBackground', hookEvent: 'Stop',
+    description: '原会话返回的后台任务状态无法确认，本轮未被当作完成；请核对原会话的实际待处理工作。' }),
+});
+
 export function attentionPaths(store, run, { code = 'permission-classifier-unavailable', itemId } = {}) {
   const directory = store.runDir(run, run.runNumber);
   const legacy = code === 'permission-classifier-unavailable';
-  if (!legacy && (!['question-awaiting-answer', 'permission-denied'].includes(code) || !/^[\w.-]{1,128}$/.test(itemId ?? ''))) throw new Error('Invalid CLI attention identity');
+  if (!legacy && ((!['question-awaiting-answer', 'permission-denied'].includes(code) && !Object.hasOwn(nativeHookAttentionKinds, code))
+    || !/^[\w.-]{1,128}$/.test(itemId ?? '') || (Object.hasOwn(nativeHookAttentionKinds, code) && itemId !== nativeHookAttentionKinds[code].itemId))) throw new Error('Invalid CLI attention identity');
   const stem = legacy ? 'attention' : `attention-${digest([code, itemId])}`;
   return { evidencePath: store.checkedPath(path.join(directory, `${stem}.json`)), markerPath: store.checkedPath(path.join(directory, `${stem}-notification.json`)) };
 }
@@ -127,7 +139,8 @@ export async function notifyOnAttention({ store, run, host, sourceEnd, attention
       const capability = await host.checkCapability();
       if (!capability.available) outcome = { status: 'unavailable', error: capability.reason };
       else {
-        const description = attention.code === 'question-awaiting-answer'
+        const description = Object.hasOwn(nativeHookAttentionKinds, attention.code) ? nativeHookAttentionKinds[attention.code].description
+          : attention.code === 'question-awaiting-answer'
           ? '原会话提出了需要回答的问题；请核对是否仍在等待，不能把运行中当作正在推进。'
           : attention.code === 'permission-denied'
             ? '原会话遇到明确权限拒绝；请核对其影响和当前是否仍受阻，不能自动批准或绕过拒绝。'

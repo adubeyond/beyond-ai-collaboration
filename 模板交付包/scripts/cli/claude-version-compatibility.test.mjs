@@ -164,6 +164,9 @@ test('background work postpones Stop and empty answers remain failed', async () 
   await f.hook('UserPromptSubmit', { prompt: 'original work' });
   await f.hook('Stop', { background_tasks: ['pending'], last_assistant_message: 'waiting' });
   assert.equal(f.calls.filter(c => c.route === '/event').length, 0);
+  assert.equal(f.calls.filter(c => c.route === '/attention' && c.value.code === 'background-state-unavailable').length, 1);
+  await f.hook('Stop', { background_tasks: ['pending'], last_assistant_message: 'still waiting' });
+  assert.equal(f.calls.filter(c => c.route === '/attention' && c.value.code === 'background-state-unavailable').length, 1);
   await f.hook('Stop', { last_assistant_message: '' });
   assert.equal(f.calls.find(c => c.route === '/event').value.status, 'failed');
 });

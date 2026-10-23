@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [4.1.1] - 2026-10-23
+
+### Fixed
+
+- Require the initiating owner to collect necessary internal-helper results before ending a turn whose delivery depends on them. Native completion events may be awaited without polling; an ended parent turn is not assumed to wake automatically. Authorized CLI or formal-task routes remain the options for cross-turn return, subject to current user pauses and checkpoints.
+- Bind Claude native background completion to structured task/tool associations observed after the current accepted instruction in the same session and project. Handle completion before the first Stop and new-session transcript creation without admitting historical, foreign, duplicate, unpaired, or command-bearing notifications.
+- Stop treating completed background records as indefinitely active. Surface unknown background state, unavailable observation, and a session cron awaiting its owner through the existing owner-scoped attention path, independently of final results.
+
+### Boundaries and validation
+
+- Keep formal Worker terminal callbacks, the model matrix, original CLI sessions, same-session continuation, and owner notification serialization unchanged. Attention does not grant execution permission, run scheduled prompts, accept a result, or resume a paused task.
+- Add isolated regression coverage with mocked native-model and Desktop peers. Release validation results belong to the matching source snapshot and release JSON; no online model/Desktop end-to-end pass, existing-process hot reload, project installation, or business acceptance is claimed. See [release notes](docs/en/releases/v4.1.1.md) and [validation scope](docs/releases/v4.1.1-validation.md).
+
 ## [4.1.0] - 2026-10-22
 
 ### Changed

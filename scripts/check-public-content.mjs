@@ -284,6 +284,8 @@ function validateText(path, text) {
         ['collaborationDeliveryFingerprints', 22, 'before|after'],
         ['collaborationDeliveryAdditions', 3, 'sha256'],
         ['collaborationDeliveryPortions', 2, 'before|after'],
+        ['claudeBackgroundReturnFingerprints', 12, 'before|after'],
+        ['claudeBackgroundReturnAdditions', 1, 'sha256'],
       ]) {
         const sectionPattern = new RegExp('^const ' + block + ' = \\[[\\s\\S]*?^\\];$', 'm');
         const fieldPattern = new RegExp('\\b(' + fields + "): '[0-9a-f]{64}'", 'g');
@@ -362,17 +364,28 @@ function validateDetectorRegressions() {
   probe(checker, source + '\n' + privatePath, [windowsLabel]);
   for (const block of ['retainedHotfixFingerprints', 'retainedHotfixAdditions', 'cliReconnectAttentionFingerprints',
     'reviewedMaintenanceFingerprints', 'reviewedMaintenanceAdditions', 'excludedSuccessorFingerprints',
-    'collaborationDeliveryFingerprints', 'collaborationDeliveryAdditions', 'collaborationDeliveryPortions']) {
+    'collaborationDeliveryFingerprints', 'collaborationDeliveryAdditions', 'collaborationDeliveryPortions',
+    'claudeBackgroundReturnFingerprints', 'claudeBackgroundReturnAdditions']) {
     const section = source.match(new RegExp('^const ' + block + ' = \\[[\\s\\S]*?^\\];$', 'm'))?.[0];
     if (!section) throw new Error('missing public pin block: ' + block);
-    probe(checker, source.replace(section, section.replace(/[0-9a-f]{64}/, '<missing-pin>')), [hashLabel]);
+    // A one-pin block has no remaining hash after removal; the freeze test owns
+    // missing contents. Uppercase stays detectable but is not an allowed pin.
+    const invalidPin = block === 'claudeBackgroundReturnAdditions'
+      ? section.replace(/[0-9a-f]{64}/, hash => hash.toUpperCase())
+      : section.replace(/[0-9a-f]{64}/, '<missing-pin>');
+    probe(checker, source.replace(section, invalidPin), [hashLabel]);
     probe(checker, source.replace(section, section.replace('\n];', "\n  other: '" + syntheticHash + "'\n];")), [hashLabel]);
     probe('scripts/not-an-exempt-checker.mjs', section, [hashLabel]);
     if (['cliReconnectAttentionFingerprints', 'reviewedMaintenanceFingerprints', 'reviewedMaintenanceAdditions', 'excludedSuccessorFingerprints',
-      'collaborationDeliveryFingerprints', 'collaborationDeliveryAdditions', 'collaborationDeliveryPortions'].includes(block)) {
+      'collaborationDeliveryFingerprints', 'collaborationDeliveryAdditions', 'collaborationDeliveryPortions',
+      'claudeBackgroundReturnFingerprints', 'claudeBackgroundReturnAdditions'].includes(block)) {
       const field = /(?:before|after):/.test(section) ? 'before' : 'sha256';
       probe(checker, source.replace(section, section.replace('\n];', "\n  " + field + ": '" + syntheticHash + "'\n];")), [hashLabel]);
       probe(checker, source.replace(section, section.replace(block, 'unreviewedSourceFingerprints')), [hashLabel]);
+    }
+    if (['claudeBackgroundReturnFingerprints', 'claudeBackgroundReturnAdditions'].includes(block)) {
+      probe(checker, source.replace(section, section.replace('\n];', '\n  ' + syntheticSecret + '\n];')), [secretLabel]);
+      probe(checker, source.replace(section, section.replace('\n];', '\n  ' + privatePath + '\n];')), [windowsLabel]);
     }
   }
   return count;
