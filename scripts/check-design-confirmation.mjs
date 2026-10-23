@@ -318,7 +318,35 @@ const collaborationDeliveryPortions = [
     before: 'eeaadd9d8cd218a9e65a6912b3e17556d92fa424ffd8aa303f255fc7cba425a1',
     after: 'e8994c7535992e50d678c7aa69c03daeda879f2d3109ef64e25840e5642678d0' },
 ];
-const latestCliRepairHash = (file, previous) => collaborationDeliveryFingerprints.find(item => item.path === file)?.after
+// Reviewed 4.1.1 Claude background-return repair, chained from d55de052.
+// Only these three adapters, their guide and two existing regression files
+// advance; the original baseline, Formal Worker delivery and Skills stay pinned.
+const claudeBackgroundReturnFingerprints = [
+  { path: cli,
+    before: '55033fc8a28f781cb7f4bffe36c987f46ec72f495042323d35d26ea9abf27fe4',
+    after: '4d3342dd4a0f078b020d8d09b98bfc2d0fc2538ada35407f48ee28dfe2d0e8a7' },
+  { path: product + 'scripts/cli/claude-client.mjs',
+    before: '0648a39e6beffd2dc5e222d8e72feed0e1d7d657d5cf2c36eeb48423bc9a773f',
+    after: '782a161d255fa0685bea4e00750adad3f10e7a8a09a47e27ea0441292824fe24' },
+  { path: product + 'scripts/cli/cli-notify.mjs',
+    before: '68b935d8ee7021b25d1754235ba353bdc156123c424d3d76a81b9c47fe06cdc4',
+    after: '519cdc7b014d4e89984e792f4989973fedf4a26b6d01dd36f08446fe53718c20' },
+  { path: product + 'scripts/cli/visible-cli-runner.mjs',
+    before: 'c9c984eac8189323c72ed2d463435186b8caf679befc975aa08c13c710d77cba',
+    after: 'c19cee90ebdd44cb30a21dd83d6b595c102b33ffb2a1f272546f32cb86c07b1d' },
+  { path: product + 'scripts/cli/claude-version-compatibility.test.mjs',
+    before: '5c0a0fcc3becff56b110f1a5c5d5de41be963d5070083774d4b54ea19318cd72',
+    after: '65f5ba32a0950ab478c3b7acb44f1fbae5a64bedaba1dbe438485191293507a0' },
+  { path: product + 'scripts/cli/claude-compaction-cwd.test.mjs',
+    before: '65a59bfea8403a2fc9494d2de55888c1c8af127da25726ff150012ca92223368',
+    after: '5f915348886ad2328253307ead78b1256ef2b5560f37d7508a048d7e37971e75' },
+];
+const claudeBackgroundReturnAdditions = [
+  { path: product + 'scripts/cli/claude-background-return.test.mjs',
+    sha256: 'be8cdf9e7f27a409378a87d4d3aef2d0f522c7d60ba1b05b188e554c7db47c5c' },
+];
+const latestCliRepairHash = (file, previous) => claudeBackgroundReturnFingerprints.find(item => item.path === file)?.after
+  ?? collaborationDeliveryFingerprints.find(item => item.path === file)?.after
   ?? reviewedMaintenanceFingerprints.find(item => item.path === file)?.after
   ?? cliReconnectAttentionFingerprints.find(item => item.path === file)?.after ?? previous;
 function normalizeClaudeCompatibility(file, text) {
@@ -329,6 +357,11 @@ function normalizeClaudeCompatibility(file, text) {
   return text;
 }
 function matchesFrozenFingerprint(item, currentHash) {
+  const backgroundReturn = claudeBackgroundReturnFingerprints.find(change => change.path === item.path);
+  if (backgroundReturn) {
+    if (currentHash !== backgroundReturn.after) return false;
+    currentHash = backgroundReturn.before;
+  }
   const collaboration = collaborationDeliveryFingerprints.find(change => change.path === item.path);
   if (collaboration) {
     if (currentHash !== collaboration.after) return false;
@@ -442,8 +475,8 @@ function frozenFailures(source = read) {
     }
     catch { errors.push(item.path + ': missing or unreadable'); }
   }
-  for (const item of [...retainedHotfixAdditions, ...reviewedMaintenanceAdditions, ...collaborationDeliveryAdditions]) {
-    try { if (sha256(source(item.path)) !== item.sha256) errors.push(item.path); }
+  for (const item of [...retainedHotfixAdditions, ...reviewedMaintenanceAdditions, ...collaborationDeliveryAdditions, ...claudeBackgroundReturnAdditions]) {
+    try { if (!matchesFrozenFingerprint(item, sha256(source(item.path)))) errors.push(item.path); }
     catch { errors.push(item.path + ': missing or unreadable'); }
   }
   for (const item of fixture.portions) {
@@ -460,7 +493,7 @@ function frozenFailures(source = read) {
 function frozenDirectoryMembers(directory) {
   const earlierAdditions = directory === product + 'scripts/cli'
     ? ['cli-context', 'codex-executable', 'manager-launch'].map(name => product + 'scripts/cli/' + name + '.mjs') : [];
-  return [...fixture.files, ...retainedHotfixAdditions, ...reviewedMaintenanceAdditions, ...collaborationDeliveryAdditions].filter(item => item.path.startsWith(directory + '/'))
+  return [...fixture.files, ...retainedHotfixAdditions, ...reviewedMaintenanceAdditions, ...collaborationDeliveryAdditions, ...claudeBackgroundReturnAdditions].filter(item => item.path.startsWith(directory + '/'))
     .map(item => item.path).concat(earlierAdditions).sort();
 }
 
@@ -989,7 +1022,9 @@ test('maintenance admits only the three retained regression files and rejects un
     ['claude-compaction-cwd', 'claude-orphan-retirement', 'claude-waiting-attention'].map(name => product + 'scripts/cli/' + name + '.test.mjs').sort());
   for (const item of reviewedMaintenanceAdditions) {
     assert.deepEqual(Object.keys(item).sort(), ['path', 'sha256']);
-    assert.equal(sha256(read(item.path)), item.sha256);
+    const latest = latestCliRepairHash(item.path, item.sha256);
+    assert.equal(sha256(read(item.path)), latest);
+    assert.equal(matchesFrozenFingerprint(item, latest), true);
     for (const mutate of [text => text + '\nextra', text => text.slice(1), () => '']) {
       assert.ok(frozenFailures(file => file === item.path ? mutate(read(file)) : read(file)).includes(item.path));
     }
@@ -1042,7 +1077,9 @@ test('collaboration delivery pins the reviewed successor and rejects rollback, e
       ?? retainedHotfixFingerprints.find(item => item.path === change.path);
     assert.ok(original);
     assert.equal(change.before, predecessor?.after ?? original.sha256);
-    assert.equal(matchesFrozenFingerprint(original, change.after), true);
+    const latest = latestCliRepairHash(change.path, change.after);
+    assert.equal(matchesFrozenFingerprint(original, latest), true);
+    if (latest !== change.after) assert.equal(matchesFrozenFingerprint(original, change.after), false);
     assert.equal(matchesFrozenFingerprint(original, change.before), false);
     for (const mutate of [text => text + '\nextra', text => text.slice(1), () => '']) {
       assert.ok(frozenFailures(file => file === change.path ? mutate(read(file)) : read(file)).includes(change.path));
@@ -1056,6 +1093,70 @@ test('collaboration delivery pins the reviewed successor and rejects rollback, e
   assert.equal(collaborationDeliveryPortions.length, 1);
   for (const item of collaborationDeliveryPortions) {
     assert.equal(item.before, fixture.portions.find(original => original.path === item.path && original.start === item.start).sha256);
+  }
+});
+
+test('Claude background return advances exactly six reviewed predecessor nodes and rejects rollback or edits', () => {
+  const predecessors = [
+    [cli, collaborationDeliveryFingerprints],
+    [product + 'scripts/cli/claude-client.mjs', reviewedMaintenanceFingerprints],
+    [product + 'scripts/cli/cli-notify.mjs', collaborationDeliveryFingerprints],
+    [product + 'scripts/cli/visible-cli-runner.mjs', reviewedMaintenanceFingerprints],
+    [product + 'scripts/cli/claude-version-compatibility.test.mjs', retainedHotfixFingerprints],
+    [product + 'scripts/cli/claude-compaction-cwd.test.mjs', reviewedMaintenanceAdditions],
+  ];
+  assert.deepEqual(claudeBackgroundReturnFingerprints.map(item => item.path).sort(), predecessors.map(([file]) => file).sort());
+  for (const [file, prior] of predecessors) {
+    const change = claudeBackgroundReturnFingerprints.find(item => item.path === file);
+    const predecessor = prior.find(item => item.path === file);
+    const original = [...fixture.files, ...reviewedMaintenanceAdditions].find(item => item.path === file);
+    assert.ok(original && predecessor, file);
+    assert.deepEqual(Object.keys(change).sort(), ['after', 'before', 'path']);
+    assert.equal(change.before, predecessor.after ?? predecessor.sha256, file + ': exact previous version retained');
+    assert.match(change.after, /^[a-f0-9]{64}$/);
+    assert.equal(sha256(normalizeClaudeCompatibility(file, read(file))), change.after, file);
+    assert.equal(matchesFrozenFingerprint(original, change.after), true, file);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false, file + ': previous version rejected');
+    assert.equal(matchesFrozenFingerprint(original, original.sha256), false, file + ': original version rejected');
+    for (const mutate of [text => text + '\nextra', text => text.slice(1), () => '']) {
+      assert.ok(frozenFailures(candidate => candidate === file ? mutate(read(candidate)) : read(candidate)).includes(file), file);
+    }
+    assert.ok(frozenFailures(candidate => { if (candidate === file) throw Error('missing'); return read(candidate); }).includes(file + ': missing or unreadable'));
+  }
+});
+
+test('Claude background return adds only its exact regression file and rejects missing or unknown members', () => {
+  assert.deepEqual(claudeBackgroundReturnAdditions.map(item => item.path), [product + 'scripts/cli/claude-background-return.test.mjs']);
+  const item = claudeBackgroundReturnAdditions[0];
+  assert.deepEqual(Object.keys(item).sort(), ['path', 'sha256']);
+  assert.match(item.sha256, /^[a-f0-9]{64}$/);
+  assert.equal(sha256(read(item.path)), item.sha256);
+  for (const mutate of [text => text + '\nextra', text => text.slice(1), () => '']) {
+    assert.ok(frozenFailures(file => file === item.path ? mutate(read(file)) : read(file)).includes(item.path));
+  }
+  assert.ok(frozenFailures(file => { if (file === item.path) throw Error('missing'); return read(file); }).includes(item.path + ': missing or unreadable'));
+  for (const directory of fixture.directories) {
+    const current = filesBelow(directory);
+    checkFrozenDirectory(directory, current);
+    const protectedMember = directory === product + 'scripts/cli' ? item.path : current[0];
+    assert.throws(() => checkFrozenDirectory(directory, current.filter(file => file !== protectedMember)), /membership changed/);
+    for (const extra of ['/unreviewed.test.mjs', '/unknown-directory/unreviewed.mjs']) {
+      assert.throws(() => checkFrozenDirectory(directory, [...current, directory + extra].sort()), /membership changed/);
+    }
+  }
+});
+
+test('Claude background return does not advance Formal Worker runtime, Skills or model policy pins', () => {
+  const protectedFiles = fixture.files.filter(item => item.path.startsWith(product + 'scripts/runtime/')
+    || item.path.startsWith(product + 'skills/') || item.path === product + 'scripts/beyond-control.mjs');
+  assert.ok(protectedFiles.length > 0);
+  for (const item of protectedFiles) {
+    assert.ok(![...claudeBackgroundReturnFingerprints, ...claudeBackgroundReturnAdditions].some(change => change.path === item.path));
+    assert.ok(frozenFailures(file => file === item.path ? read(file) + '\nextra' : read(file)).includes(item.path));
+  }
+  for (const item of fixture.portions) {
+    assert.ok(!claudeBackgroundReturnFingerprints.some(change => change.path === item.path));
+    assert.ok(frozenFailures(file => file === item.path ? read(file).replace(item.start, item.start + ' changed') : read(file)).includes(item.path + ': ' + item.start));
   }
 });
 
