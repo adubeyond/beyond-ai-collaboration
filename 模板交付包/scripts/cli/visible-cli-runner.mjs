@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { atomicJson, digest, sha256File, validIdentifier } from './cli-task-store.mjs';
 import { processStart, processIsGone, nativeViewIsGone } from './process-identity.mjs';
 import { redact, stageInstruction } from './native-cli-runner.mjs';
-import { notifyWhenReady, notifyOnAttention, attentionPaths } from './cli-notify.mjs';
+import { notifyWhenReady, notifyOnAttention, attentionPaths, nativeHookAttentionKinds } from './cli-notify.mjs';
 import { buildCliContext } from './cli-context.mjs';
 
 export async function runVisibleCli({ binding, run: firstRun, profile, prompt, store, managerIdentity, host, ready = () => {}, openWindow, nativeExitCheckMs = 30000 }) {
@@ -162,8 +162,12 @@ export async function runVisibleCli({ binding, run: firstRun, profile, prompt, s
         if (profile.provider !== 'claude' || !native || input.sessionId !== sessionId || input.runNumber !== run.runNumber) throw new Error('Native CLI attention identity mismatch');
         if (!active || fs.existsSync(run.resultPath)) throw new Error('Native CLI attention run already ended');
         const legacy = input.code === 'permission-classifier-unavailable';
+        const hookKind = Object.hasOwn(nativeHookAttentionKinds, input.code) ? nativeHookAttentionKinds[input.code] : null;
         if (!['blocked', 'recovered'].includes(input.status) || !/^[\w.-]{1,128}$/.test(input.tool ?? '')
           || (input.code === 'question-awaiting-answer' && input.tool !== 'AskUserQuestion')) throw new Error('Invalid Native CLI attention');
+        if (hookKind && (input.evidenceKind !== 'native-hook' || input.hookEvent !== hookKind.hookEvent
+          || input.itemId !== hookKind.itemId || input.tool !== hookKind.tool || input.status !== 'blocked')) throw new Error('Invalid Native CLI hook attention');
+        if (!hookKind && input.evidenceKind === 'native-hook') throw new Error('Invalid Native CLI hook attention');
         const attention = { code: input.code, ...(!legacy ? { itemId: input.itemId } : {}) };
         const { evidencePath } = attentionPaths(store, run, attention);
         if (input.status === 'recovered') {
@@ -172,13 +176,15 @@ export async function runVisibleCli({ binding, run: firstRun, profile, prompt, s
             if (previous.tool === input.tool && previous.code === input.code && previous.itemId === attention.itemId && !previous.recoveredAt) atomicJson(evidencePath, { ...previous, recoveredAt: new Date().toISOString() });
           }
         } else {
-          if (!Number.isSafeInteger(input.count) || input.count < (legacy ? 3 : 1) || !Number.isSafeInteger(input.firstOffset) || input.firstOffset < 0
+          if (!Number.isSafeInteger(input.count) || input.count < (legacy ? 3 : 1)) throw new Error('Invalid Native CLI attention evidence');
+          if (!hookKind && (!Number.isSafeInteger(input.firstOffset) || input.firstOffset < 0
             || !Number.isSafeInteger(input.lastOffset) || input.lastOffset < input.firstOffset
-            || !path.isAbsolute(input.transcriptPath ?? '') || path.basename(input.transcriptPath) !== `${sessionId}.jsonl`) throw new Error('Invalid Native CLI attention evidence');
+            || !path.isAbsolute(input.transcriptPath ?? '') || path.basename(input.transcriptPath) !== `${sessionId}.jsonl`)) throw new Error('Invalid Native CLI attention evidence');
           if (!fs.existsSync(evidencePath)) {
             atomicJson(evidencePath, { schemaVersion: 1, projectId: run.projectId, taskId: run.taskId, ownerThreadId: run.ownerThreadId,
               runNumber: run.runNumber, requestId: run.requestId, sessionId, ...attention, tool: input.tool, count: input.count,
-              transcriptPath: input.transcriptPath, firstOffset: input.firstOffset, lastOffset: input.lastOffset, observedAt: new Date().toISOString() });
+              ...(hookKind ? { evidenceKind: 'native-hook', hookEvent: input.hookEvent }
+                : { transcriptPath: input.transcriptPath, firstOffset: input.firstOffset, lastOffset: input.lastOffset }), observedAt: new Date().toISOString() });
             if (host) {
               const sourceEnd = (async () => { for (;;) { const source = host.currentSource(); await host.waitForSourceTurnEnd(source); if (host.currentSource().ownerTurnId === source.ownerTurnId) return; } })();
               sourceEnd.catch(() => {});

@@ -10,6 +10,7 @@ import { processStart, processIsGone } from './process-identity.mjs';
 import { cliEnvironment, redact } from './native-cli-runner.mjs';
 import { readClaudeProfile, claudeArguments } from './claude-profile.mjs';
 import { claudeHookEvents, readClaudeHookText } from './claude-hook.mjs';
+import { nativeHookAttentionKinds } from './cli-notify.mjs';
 
 export function createClaudeControlTransport({ url, token, signal, diagnosticPath, fetchImpl = fetch }) {
   const fixedRoutes = new Set(['/command', '/register', '/manual', '/event', '/attention', '/ended']);
@@ -58,22 +59,31 @@ export function sendClaudePrompt(transport, prompt) {
   });
 }
 
-// Correlate a native terminal notification with a task observed in this run's Stop.
+// Correlate a native terminal notification with this run's native tool evidence.
 // Older native hooks omit source: this is not authentication of arbitrary prompt text.
 function backgroundCompletion(input) {
   if (input.source != null && input.source !== 'system') return null;
-  const match = /^<task-notification>\s*<task-id>([A-Za-z0-9_-]+)<\/task-id>\s*(?:<tool-use-id>[^<>]+<\/tool-use-id>\s*)?(?:<task-type>[^<>]+<\/task-type>\s*)?(?:<output-file>[^<>]+<\/output-file>\s*)?<status>(completed|failed|killed|stopped)<\/status>\s*<summary>[^<>]+<\/summary>\s*(?:<note>[^<>]+<\/note>\s*)?<\/task-notification>$/.exec(input.prompt.trim());
-  return match?.[1] ?? null;
+  const match = /^<task-notification>\s*<task-id>([A-Za-z0-9_-]+)<\/task-id>\s*(?:<tool-use-id>([^<>]+)<\/tool-use-id>\s*)?(?:<task-type>[^<>]+<\/task-type>\s*)?(?:<output-file>[^<>]+<\/output-file>\s*)?<status>(completed|failed|killed|stopped)<\/status>\s*<summary>[^<>]+<\/summary>\s*(?:<note>[^<>]+<\/note>\s*)?<\/task-notification>$/.exec(input.prompt.trim());
+  return match ? { taskId: match[1], toolUseId: match[2] } : null;
 }
 
 // Observe only bytes appended after an accepted instruction, in its exact native
 // transcript. No timeout guesses, transcript discovery, permission changes or stops.
-export function watchClaudeFailures({ transcriptPath, sessionId, cwd, onSignal, diagnose = () => {} }) {
+export function watchClaudeFailures({ transcriptPath, sessionId, cwd, onSignal, onBackground = () => {}, diagnose = () => {}, allowMissingTranscript = false }) {
   if (!path.isAbsolute(transcriptPath ?? '') || path.basename(transcriptPath) !== `${sessionId}.jsonl`) throw new Error('Claude attention transcript identity mismatch');
-  const stat = fs.lstatSync(transcriptPath);
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Claude attention transcript is not a regular file');
-  const physical = fs.realpathSync(transcriptPath), root = fs.realpathSync(cwd);
-  let offset = stat.size, pending = Buffer.alloc(0), closed = false, watcher, delivery = Promise.resolve(), alerted = false;
+  const directory = fs.realpathSync(path.dirname(transcriptPath)), root = fs.realpathSync(cwd);
+  const expected = path.join(directory, path.basename(transcriptPath));
+  let physical = null, fileIdentity = null, offset = 0;
+  try {
+    const stat = fs.lstatSync(transcriptPath);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Claude attention transcript is not a regular file');
+    physical = fs.realpathSync(transcriptPath); fileIdentity = [stat.dev, stat.ino]; offset = stat.size;
+  } catch (error) {
+    // Native UserPromptSubmit precedes creation of a new transcript. Watch only
+    // its existing parent directory; do not discover another file or scan history.
+    if (error.code !== 'ENOENT' || !allowMissingTranscript) throw error;
+  }
+  let pending = Buffer.alloc(0), closed = false, watcher, delivery = Promise.resolve(), alerted = false;
   let desired = null, inFlight = null, scheduled = false, alertedTool = null, attemptedTool = null;
   const tools = new Map(), toolInputs = new Map(), seen = new Set(), failures = new Map();
   // Explicit questions/denials are independent incidents within a native turn.
@@ -170,6 +180,12 @@ export function watchClaudeFailures({ transcriptPath, sessionId, cwd, onSignal, 
       seen.add(block.tool_use_id); if (seen.size > 1024) seen.delete(seen.values().next().value);
       if (tool === 'AskUserQuestion') resolveIncident(`question-awaiting-answer:${block.tool_use_id}`);
       if (!block.is_error) {
+        // This is native structured result metadata, not a task id mentioned in
+        // shell output. The matching tool invocation was observed after run start.
+        const taskId = row.toolUseResult?.backgroundTaskId;
+        if (['PowerShell', 'Bash'].includes(tool) && content.filter(item => item.type === 'tool_result').length === 1
+          && typeof taskId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(taskId))
+          onBackground({ taskId, toolUseId: block.tool_use_id });
         // A different PowerShell command succeeding does not resolve a refused
         // deployment. Only identical tool input can cancel that reminder.
         if (inputDigest) for (const [key, item] of incidents)
@@ -205,8 +221,13 @@ export function watchClaudeFailures({ transcriptPath, sessionId, cwd, onSignal, 
     const beforeOffset = offset;
     let fd;
     try {
-      const next = fs.lstatSync(transcriptPath);
-      if (!next.isFile() || next.isSymbolicLink() || fs.realpathSync(transcriptPath) !== physical || next.size < offset) throw new Error('Claude attention transcript changed');
+      let next;
+      try { next = fs.lstatSync(transcriptPath); }
+      catch (error) { if (!physical && error.code === 'ENOENT') return; throw error; }
+      const actual = fs.realpathSync(transcriptPath);
+      if (!next.isFile() || next.isSymbolicLink() || actual !== (physical ?? expected) || next.size < offset
+        || (fileIdentity && (next.dev !== fileIdentity[0] || next.ino !== fileIdentity[1]))) throw new Error('Claude attention transcript changed');
+      physical ??= actual; fileIdentity ??= [next.dev, next.ino];
       fd = fs.openSync(transcriptPath, 'r');
       while (offset < next.size) {
         const bytes = Buffer.alloc(Math.min(65536, next.size - offset)), length = fs.readSync(fd, bytes, 0, bytes.length, offset);
@@ -225,25 +246,60 @@ export function watchClaudeFailures({ transcriptPath, sessionId, cwd, onSignal, 
     finally { if (fd !== undefined) fs.closeSync(fd); }
   }
   function close() { closed = true; watcher?.close(); }
-  watcher = fs.watch(path.dirname(physical), (_event, file) => { if (!file || String(file) === path.basename(physical)) scan(); });
+  watcher = fs.watch(directory, (_event, file) => { if (!file || String(file) === path.basename(transcriptPath)) scan(); });
   watcher.on('error', () => { close(); diagnostic('attention-observer-unavailable'); });
   scan();
-  return { close, async flush() { scan(); for (;;) { const currentDelivery = delivery; await currentDelivery; if (currentDelivery === delivery) return; } } };
+  return { close, async flush({ waitForDelivery = true } = {}) {
+    scan();
+    // Hook identity checks need the synchronous task registration, not a wait
+    // for unrelated attention HTTP delivery within the native hook deadline.
+    if (!waitForDelivery) return;
+    for (;;) { const currentDelivery = delivery; await currentDelivery; if (currentDelivery === delivery) return; }
+  } };
 }
 
 // One live native session, one foreground instruction. Hooks carry evidence, not acceptance.
 export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming = false, deliver = sendClaudePrompt, terminate, diagnose = () => {}, observeFailures = watchClaudeFailures }) {
-  let registered = false, transport, transcriptPath, observation, current = null, stopped = false, ended = false, rejectedSubmission = false;
+  let registered = false, transport, transcriptPath, observation, current = null, stopped = false, ended = false, rejectedSubmission = false, observedInstruction = false;
   const sameSession = input => { if (input.session_id !== sessionId) throw new Error('Claude session identity changed'); };
   const observerDiagnostic = record => { try { diagnose(record); } catch { /* Optional observation must not stop execution. */ } };
+  async function hookAttention(job, code, hookEvent, count = 1) {
+    if (current !== job || stopped || ended || job.attention?.has(code)) return;
+    (job.attention ??= new Set()).add(code);
+    const { itemId, tool } = nativeHookAttentionKinds[code];
+    try {
+      await post('/attention', { sessionId, runNumber: job.runNumber, status: 'blocked', code,
+        itemId, tool, count, evidenceKind: 'native-hook', hookEvent });
+    } catch {
+      job.attention.delete(code);
+      observerDiagnostic({ event: 'attention-delivery-unavailable', runNumber: job.runNumber });
+    }
+  }
+  function observerUnavailable(job, event = 'attention-observer-unavailable') {
+    job.observerUnavailable = true;
+    observerDiagnostic({ event, runNumber: job.runNumber });
+    void hookAttention(job, 'attention-observer-unavailable', 'UserPromptSubmit');
+  }
   function observe(job, input) {
     observation?.close(); observation = null;
+    // A missing resumed transcript could later be restored with old same-session
+    // records. Only a newly launched session's first instruction starts at zero.
+    const allowMissingTranscript = !resuming && !observedInstruction;
+    observedInstruction = true;
     const file = input.transcript_path ?? transcriptPath;
-    if (!file) { observerDiagnostic({ event: 'attention-transcript-unavailable', runNumber: job.runNumber }); return; }
+    if (!file) { observerUnavailable(job, 'attention-transcript-unavailable'); return; }
     try {
-      observation = observeFailures({ transcriptPath: file, sessionId, cwd, diagnose: observerDiagnostic,
+      observation = observeFailures({ transcriptPath: file, sessionId, cwd, allowMissingTranscript,
+        diagnose: record => record.event === 'attention-observer-unavailable' ? observerUnavailable(job) : observerDiagnostic(record),
+        // Registration is synchronous with scanning. A hook flush sees the same
+        // native evidence even when fs.watch has not delivered its callback yet.
+        onBackground: ({ taskId, toolUseId }) => {
+          if (current !== job || stopped || ended) return;
+          (job.background ??= new Set()).add(taskId);
+          (job.backgroundTools ??= new Map()).set(taskId, toolUseId);
+        },
         onSignal: signal => current === job && !stopped && !ended ? post('/attention', { sessionId, runNumber: job.runNumber, ...signal }) : undefined });
-    } catch { observerDiagnostic({ event: 'attention-observer-unavailable', runNumber: job.runNumber }); }
+    } catch { observerUnavailable(job); }
   }
   async function report(status, text = '', error = null) {
     if (!current) return;
@@ -299,9 +355,15 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
           promptMatches: current ? input.prompt === current.prompt : null });
         if (rejectedSubmission) return { decision: 'block', reason: 'Managed input was rejected; the owner must review and resume this session.' };
         if (current) {
-          const taskId = current.seen && !stopped && backgroundCompletion(input);
-          if (taskId && current.background?.has(taskId) && !current.delivered?.has(taskId)) {
-            (current.delivered ??= new Set()).add(taskId);
+          const job = current;
+          if (job.seen && !stopped) await observation?.flush({ waitForDelivery: false });
+          if (current !== job || ended) return { decision: 'block', reason: 'The managed instruction changed while checking native evidence.' };
+          if (job.observerUnavailable) void hookAttention(job, 'attention-observer-unavailable', 'UserPromptSubmit');
+          const completion = job.seen && !stopped && backgroundCompletion(input);
+          const taskId = completion?.taskId, toolUseId = job.backgroundTools?.get(taskId);
+          if (taskId && job.background?.has(taskId) && !job.delivered?.has(taskId)
+            && (!toolUseId || completion.toolUseId == null || completion.toolUseId === toolUseId)) {
+            (job.delivered ??= new Set()).add(taskId);
             return {}; // Continue the original native run; only a later Stop reports a result.
           }
           if (stopped) return { decision: 'block', reason: 'The current managed instruction is stopping.' };
@@ -325,9 +387,20 @@ export function createClaudeSession({ sessionId, model, cwd, pid, post, resuming
       } else if (input.hook_event_name === 'Stop') {
         if (!current) return {};
         if (!current.seen) throw new Error('Claude completion lacks prompt-start evidence');
+        const job = current;
+        await observation?.flush({ waitForDelivery: false });
+        if (current !== job || stopped || ended) return {};
         // A response may merely be waiting for background work; do not announce finality then.
-        current.background = new Set((input.background_tasks ?? []).filter(task => task && typeof task.id === 'string' && ['running', 'pending'].includes(task.status)).map(task => task.id));
-        if (input.background_tasks?.length || input.session_crons?.length) return {};
+        const tasks = input.background_tasks ?? [];
+        const knownTasks = Array.isArray(tasks) && tasks.every(task => task && typeof task.id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(task.id)
+          && ['running', 'pending', 'completed', 'failed', 'killed', 'stopped'].includes(task.status));
+        if (!knownTasks) { await hookAttention(job, 'background-state-unavailable', 'Stop'); return {}; }
+        job.background = new Set(tasks.filter(task => ['running', 'pending'].includes(task.status)).map(task => task.id));
+        if (input.session_crons?.length) {
+          await hookAttention(job, 'session-cron-awaiting-owner', 'Stop', input.session_crons.length);
+          return {};
+        }
+        if (job.background.size) return {};
         const text = typeof input.last_assistant_message === 'string' ? input.last_assistant_message : '';
         await report(text.trim() ? 'completed' : 'failed', text, text.trim() ? null : 'Claude ended without an answer');
       } else if (input.hook_event_name === 'StopFailure') {

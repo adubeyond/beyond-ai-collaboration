@@ -1,6 +1,8 @@
-# BEYOND 4.1.0 Quick Start
+# BEYOND 4.1.1 Quick Start
 
 > Version 4.1.0 supports project PMs, product-interaction owners, and module owners who can implement directly. The PM-to-Worker fixture below remains one supported route, not a mandatory organization for every task. See [4.1.0 notes](releases/v4.1.0.md).
+
+Version 4.1.1 clarifies same-turn collection of internal-helper results and repairs Claude native background notifications. The formal Worker callbacks and model policy used below are unchanged. See [4.1.1 release notes](releases/v4.1.1.md).
 
 This page is for the minimal fixture. For real-project installation, upgrades, new/existing-project initialization, and copy-ready prompts, use the [Installation, Upgrade, and Project Initialization Guide](../../模板交付包/docs/en/installation-upgrade-and-project-initialization.md) instead of assembling an adoption sequence from this example.
 

@@ -573,6 +573,9 @@ requireText("正式产物回到现有所有者", agents, "需要保留的成果�
 requireText("文档入口拒绝过程材料自动建档", documentEntry, "不会因为名称正式就自动成为项目文档");
 forbidText("根入口不复制Worker回源工具", agents, "send_message_to_thread");
 forbidText("根入口不复制PM等待算法", agents, "wait_threads");
+requireText("内部助手收取结果后再结束依赖它的本轮交付", agents, "本回合承诺交付的结果依赖内部助手时，先收取并核验必要结果再结束；可等待原生完成事件，不轮询过程");
+requireText("内部助手不承诺空闲父回合自动唤醒或自动迁移", agents, "父回合结束后不假定助手完成会自动开启新回合；确需跨回合自动回传并触发接续时，使用已获授权的CLI或正式任务路径，不自动迁移现有助手或补建任务");
+requireText("内部助手结果收取不覆盖暂停或正式派单边界", agents, "老板当前问题、暂停要求和检查点优先，这不改变正式Worker派单后不陪跑的规则");
 forbidText("根入口不复制初始化脚本步骤", agents, "inspect-project");
 // The approved role split replaces historical line-count caps with owner boundaries.
 requireText("根入口保持规则所有者边界", agents, "正式Worker终态的唤醒、扫描、验收和工作台事务回到身份入口，根入口不维护第二份协议");
@@ -710,11 +713,11 @@ requireText("00入口读取项目身份与路由", documentEntry, "确认当前�
 requireText("00入口读取全部当前主事实", documentEntry, "登记的全部当前主事实正文");
 requireText("初始化不进入普通任务热路径", agents, "不进入普通任务热路径");
 requireText("升级先核对当前直接事实", agents, "初始化优先复用现有`AGENTS.md`、代码、Git和Markdown事实");
-requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 4.1.0");
+requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 4.1.1");
 requireText("项目覆盖有专用边界", agents, "BEGIN BEYOND PROJECT OVERRIDES");
 requireText("安装逐文件对账六个Skill", installVerifier, "安装Skill内容不一致");
 requireText("安装核对项目完整运行内核", installVerifier, "项目入口的BEYOND运行内核与控制仓候选不一致");
-requireText("安装清单声明当前版本", releaseManifest, "\"releaseVersion\": \"4.1.0\"");
+requireText("安装清单声明当前版本", releaseManifest, "\"releaseVersion\": \"4.1.1\"");
 requireText("个人路径不读取团队共享区", agents, "普通项目接手、正式Worker任务、Action Skill切换和个人任务不读取共享区");
 requireText("团队协同不替代正式Worker", agents, "不替代当前成员自己的正式Worker");
 requireText("PM初始化与协同权限严格限域", pmDispatch, "两者都不扩张到业务源码、测试、仓库配置、成员权限、环境、数据或发布");

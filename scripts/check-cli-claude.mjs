@@ -18,7 +18,9 @@ import { callInteractive } from '../模板交付包/scripts/cli/interactive-clie
 
 async function until(check) { const end = Date.now() + 12000; while (!check()) { if (Date.now() > end) throw new Error('Claude fixture timeout'); await new Promise(resolve => setTimeout(resolve, 10)); } }
 const transport = { pipe: '\\\\.\\pipe\\fixture-claude', token: crypto.randomUUID() };
-function fixture(t, stage, { documents = false, corruptFirstPrompt = false, splitUnicodePosts = false, transcript = false, attentionPostFails = false } = {}) {
+// Normal native sessions provide their transcript. Missing-transcript behavior
+// has dedicated regression coverage and must not leak into result-count checks.
+function fixture(t, stage, { documents = false, corruptFirstPrompt = false, splitUnicodePosts = false, transcript = true, attentionPostFails = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-claude-unit-'));
   const profile = { schemaVersion: 1, provider: 'claude', mode: 'interactive', ui: 'window', model: 'test-model', permissionMode: 'dontAsk', runner: { command: process.execPath, args: [] } };
   const profilePath = path.join(root, 'profile.json'); atomicJson(profilePath, profile);
