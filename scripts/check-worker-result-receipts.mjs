@@ -988,3 +988,183 @@ test('fixed beyond-control CLI exposes workbench.inspect without mutating contro
   assert.equal(inspected.result.records[0].disposition, 'review-active-task');
   assert.deepEqual([stateFile, viewFile, pendingFile].map((file) => fs.readFileSync(file, 'utf8')), before);
 });
+
+function separatedRequestFixture(name, action = 'worker-result.enqueue', input = receipt({ workerThreadId: 'worker-a' })) {
+  const root = createTestWorkspace(`beyond-request-cleanup-${name}-`);
+  const controlRoot = path.join(root, 'beyond-control');
+  const sourceScripts = path.join(import.meta.dirname, '..', '模板交付包', 'scripts');
+  fs.mkdirSync(path.join(controlRoot, 'scripts'), { recursive: true });
+  for (const directory of ['runtime', 'cli']) {
+    fs.cpSync(path.join(sourceScripts, directory), path.join(controlRoot, 'scripts', directory), { recursive: true });
+  }
+  const entry = path.join(controlRoot, 'scripts', 'beyond-control.mjs');
+  fs.copyFileSync(path.join(sourceScripts, 'beyond-control.mjs'), entry);
+  registerProject(controlRoot);
+  registerActiveTask(controlRoot);
+  const requestFile = path.join(root, 'request.json');
+  const requestBytes = Buffer.from(JSON.stringify({ schemaVersion: 1, requestId: `separated-${name}`, action, input }));
+  fs.writeFileSync(requestFile, requestBytes);
+  const store = new WorkerResultReceiptStore({ runtimeRoot: path.join(controlRoot, 'local/runtime/worker-results') });
+  const calls = [], spawns = [];
+  const snapshot = () => ({
+    state: fs.readFileSync(path.join(controlRoot, 'local/runtime/workbench/workbench-state.json')),
+    view: fs.readFileSync(path.join(controlRoot, 'local/当前工作台.md')),
+    receipts: store.list({ projectId: 'local-project-a' }).records.map(record => ({
+      receiptId: record.receiptId, finalText: record.finalText,
+      bytes: fs.readFileSync(store.receiptPath(record.projectId, record.taskId)),
+    })),
+  });
+  const invoke = (file, operation) => {
+    spawns.push(operation);
+    const result = spawnSync(process.execPath, [entry, 'runtime', '--request', file], {
+      cwd: projectRootFor(controlRoot), encoding: 'utf8', windowsHide: true,
+    });
+    let output;
+    try { output = JSON.parse(result.stdout); } catch { output = null; }
+    return { kind: result.status === 0 && output?.ok ? 'committed' : 'runtime-rejected', result, output };
+  };
+  // This seam models refusal before a tool starts, not an exception from runtime.
+  // It does not exercise Codex's real policy engine or send any notification.
+  const tool = (name, rejected, execute) => {
+    calls.push(name);
+    return rejected ? { kind: 'policy-rejected', reason: 'blocked by policy', started: false } : execute();
+  };
+  const run = ({ rejectRegistration = false, rejectCleanup = false, mixed = false, loseRegistrationResponse = false } = {}) => {
+    const register = () => {
+      const result = invoke(requestFile, action);
+      if (!loseRegistrationResponse) return result;
+      // Lose only the tool response after a real commit. This is fault injection,
+      // not a Codex policy-engine or model-behavior test.
+      assert.equal(result.kind, 'committed', result.result.stderr || result.result.stdout);
+      return { kind: 'result-unknown', reason: 'tool response lost', started: true };
+    };
+    const cleanup = () => { fs.unlinkSync(requestFile); return { kind: 'removed' }; };
+    if (mixed) {
+      // Historical "runtime ...; Remove-Item ... -Force" shape: the entire
+      // invocation is rejected, so neither step is executed (no force deletion).
+      return { registration: tool('register+forced-cleanup', true, () => { register(); return cleanup(); }) };
+    }
+    const registration = tool('register', rejectRegistration, register);
+    if (registration.kind !== 'committed') return { registration, cleanup: { kind: 'not-attempted' } };
+    const beforeCleanup = snapshot();
+    return { registration, beforeCleanup, cleanup: tool('cleanup', rejectCleanup, cleanup) };
+  };
+  const inspect = () => {
+    const file = path.join(root, 'inspect.json');
+    fs.writeFileSync(file, JSON.stringify({ schemaVersion: 1, action: 'workbench.inspect', input: {
+      projectId: 'local-project-a', taskId: 'task-a',
+    } }));
+    const inspected = invoke(file, 'workbench.inspect');
+    assert.equal(inspected.kind, 'committed', inspected.result.stderr || inspected.result.stdout);
+    return inspected.output.result;
+  };
+  return { requestFile, requestBytes, calls, spawns, snapshot, run, inspect };
+}
+
+test('separate request cleanup: normal registration persists one receipt before ordinary cleanup', () => {
+  const f = separatedRequestFixture('normal');
+  const out = f.run();
+  assert.equal(out.registration.kind, 'committed');
+  assert.equal(out.cleanup.kind, 'removed');
+  assert.deepEqual(f.calls, ['register', 'cleanup']);
+  assert.equal(fs.existsSync(f.requestFile), false);
+  assert.equal(out.beforeCleanup.receipts.length, 1);
+  assert.deepEqual(f.snapshot(), out.beforeCleanup);
+  assert.equal(f.inspect().records[0].disposition, 'review-active-task');
+  assert.deepEqual(f.spawns, ['worker-result.enqueue', 'workbench.inspect']);
+});
+
+test('separate request cleanup: rejected registration starts no process and preserves the request', () => {
+  const f = separatedRequestFixture('registration-policy');
+  const before = f.snapshot();
+  const out = f.run({ rejectRegistration: true });
+  assert.equal(out.registration.kind, 'policy-rejected');
+  assert.equal(out.registration.started, false);
+  assert.equal(out.cleanup.kind, 'not-attempted');
+  assert.deepEqual(f.calls, ['register']);
+  assert.deepEqual(f.spawns, []);
+  assert.deepEqual(fs.readFileSync(f.requestFile), f.requestBytes);
+  assert.deepEqual(f.snapshot(), before);
+  assert.equal(before.receipts.length, 0);
+});
+
+test('separate request cleanup: refused cleanup does not replay registration or change frozen evidence', () => {
+  const f = separatedRequestFixture('cleanup-policy');
+  const out = f.run({ rejectCleanup: true });
+  assert.equal(out.registration.kind, 'committed');
+  assert.equal(out.cleanup.kind, 'policy-rejected');
+  assert.equal(out.cleanup.started, false);
+  assert.deepEqual(f.calls, ['register', 'cleanup']);
+  assert.deepEqual(f.spawns, ['worker-result.enqueue']);
+  assert.deepEqual(fs.readFileSync(f.requestFile), f.requestBytes);
+  assert.equal(out.beforeCleanup.receipts.length, 1);
+  assert.equal(out.beforeCleanup.receipts[0].finalText, receipt().finalText);
+  assert.deepEqual(f.snapshot(), out.beforeCleanup);
+  assert.equal(f.inspect().records[0].receiptId, out.beforeCleanup.receipts[0].receiptId);
+  assert.deepEqual(f.spawns, ['worker-result.enqueue', 'workbench.inspect']);
+  assert.deepEqual(f.snapshot(), out.beforeCleanup);
+});
+
+test('separate request cleanup: actual runtime validation failure is not policy refusal and retains input', () => {
+  const f = separatedRequestFixture('invalid-request', 'worker-result.enqueue', receipt({ businessState: '进行中' }));
+  const before = f.snapshot();
+  const out = f.run();
+  assert.equal(out.registration.kind, 'runtime-rejected');
+  assert.notEqual(out.registration.result.status, 0);
+  assert.match(out.registration.result.stderr + out.registration.result.stdout, /businessState/);
+  assert.equal(out.cleanup.kind, 'not-attempted');
+  assert.deepEqual(f.calls, ['register']);
+  assert.deepEqual(f.spawns, ['worker-result.enqueue']);
+  assert.deepEqual(fs.readFileSync(f.requestFile), f.requestBytes);
+  assert.deepEqual(f.snapshot(), before);
+});
+
+test('separate request cleanup: lost response after commit is recovered by inspection without replay or cleanup', () => {
+  const f = separatedRequestFixture('registration-response-lost');
+  const out = f.run({ loseRegistrationResponse: true });
+  assert.equal(out.registration.kind, 'result-unknown');
+  assert.equal(out.registration.started, true);
+  assert.equal(out.registration.output, undefined);
+  assert.equal(out.cleanup.kind, 'not-attempted');
+  assert.deepEqual(f.calls, ['register']);
+  assert.deepEqual(f.spawns, ['worker-result.enqueue']);
+  assert.deepEqual(fs.readFileSync(f.requestFile), f.requestBytes);
+  const committed = f.snapshot();
+  assert.equal(committed.receipts.length, 1);
+  assert.equal(committed.receipts[0].finalText, receipt().finalText);
+  const inspected = f.inspect();
+  assert.equal(inspected.records.length, 1);
+  assert.equal(inspected.records[0].receiptId, committed.receipts[0].receiptId);
+  assert.equal(inspected.records[0].disposition, 'review-active-task');
+  assert.deepEqual(f.spawns, ['worker-result.enqueue', 'workbench.inspect']);
+  assert.deepEqual(f.calls, ['register']);
+  assert.deepEqual(fs.readFileSync(f.requestFile), f.requestBytes);
+  assert.deepEqual(f.snapshot(), committed);
+});
+
+test('separate request cleanup: historical combined invocation rejection prevents registration entirely', () => {
+  const f = separatedRequestFixture('mixed-policy');
+  const before = f.snapshot();
+  const out = f.run({ mixed: true });
+  assert.equal(out.registration.kind, 'policy-rejected');
+  assert.deepEqual(f.calls, ['register+forced-cleanup']);
+  assert.deepEqual(f.spawns, []);
+  assert.deepEqual(fs.readFileSync(f.requestFile), f.requestBytes);
+  assert.deepEqual(f.snapshot(), before);
+});
+
+test('separate request cleanup: committed workbench update survives refused cleanup without replay', () => {
+  const f = separatedRequestFixture('workbench-cleanup', 'workbench.update', {
+    operationId: 'separated-update', taskId: 'task-a', expectedStatus: '进行中', status: '进行中',
+    progress: '已核对本轮交付', pause: '无', result: 'fixture://result', updatedAt: '2026-08-23T16:01:00+08:00',
+  });
+  const out = f.run({ rejectCleanup: true });
+  assert.equal(out.registration.kind, 'committed', out.registration.result.stderr || out.registration.result.stdout);
+  assert.equal(out.cleanup.kind, 'policy-rejected');
+  assert.deepEqual(f.spawns, ['workbench.update']);
+  assert.deepEqual(fs.readFileSync(f.requestFile), f.requestBytes);
+  assert.deepEqual(f.snapshot(), out.beforeCleanup);
+  const state = JSON.parse(out.beforeCleanup.state);
+  assert.equal(state.tasks['task-a'].progress, '已核对本轮交付');
+  assert.equal(Object.keys(state.operations).filter(id => id === 'separated-update').length, 1);
+});

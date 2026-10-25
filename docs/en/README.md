@@ -29,7 +29,8 @@ These documents explain the public product, its operating model, and the first r
 | Previous release | [v3.1.7 Upgrade Guide](releases/v3.1.7.md) | Restore platform terminal delivery, protect a busy PM, and activate entry or Skill replacement after restart |
 | Previous release | [v3.2.0 Upgrade Guide](releases/v3.2.0.md) | Use the formal Worker final, one native wakeup, and idempotent workbench transactions for lossless non-interrupting terminal closeout |
 | Previous release | [v3.2.1 Upgrade Guide](releases/v3.2.1.md) | Prevent post-wakeup Worker activity and recursive copies of generated test caches or local backups |
-| Current release | [v4.1.1 Release Notes](releases/v4.1.1.md) | Collect required internal-helper results before ending a turn; recognize same-run Claude native background notifications without expanding authority |
+| Current release | [v4.1.2 Release Notes](releases/v4.1.2.md) | Separate request registration and cleanup; distinguish refusal, execution failure and unknown results without replaying committed operations |
+| Previous release | [v4.1.1 Release Notes](releases/v4.1.1.md) | Collect required internal-helper results before ending a turn; recognize same-run Claude native background notifications without expanding authority |
 | Previous release | [v4.1.0 Upgrade Guide](releases/v4.1.0.md) | Three responsibilities, composable outcomes, prototypes and engineering contracts, direct-owner notifications and archived queries |
 | Previous release | [v4.0.1 Upgrade Guide](releases/v4.0.1.md) | Retained-session CLI stages, refreshed document context, executable discovery and independent Windows manager lifetime |
 | Previous release | [v4.0.0 Upgrade Guide](releases/v4.0.0.md) | Separate tasks and engineering documents, preserve current designs, and check actual CLI compatibility |

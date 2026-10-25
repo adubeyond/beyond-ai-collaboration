@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [4.1.2] - 2026-10-25
+
+### Fixed
+
+- Separate managed-request preparation, execution and result verification, and temporary-file cleanup into distinct tool calls. Do not bundle registration with deletion, default ordinary deletion to `-Force`, or discard a request after a refusal or unconfirmed result.
+- Distinguish confirmed pre-start refusal, failure after execution starts, and an unknown result. Read back existing evidence after a lost response instead of blindly replaying a potentially committed operation; do not infer a specific cause from `blocked by policy` alone.
+- Keep cleanup residues separate from transaction success. Workers preserve the frozen final and perform any cleanup before the existing final notification; PMs do not repeat acceptance, acknowledgement, or dispatch because cleanup failed.
+
+### Boundaries and validation
+
+- No runtime, formal Worker callback, model-policy, or retained CLI implementation changes. The patch does not bypass platform refusals, change approval settings, expand access, install into projects, or resume work.
+- Add isolated failure-injection cases around the real local runtime, including registration refusal, cleanup refusal, invalid runtime input, and committed results with lost responses. These are not live Codex policy-engine or model-compliance tests. Some generic policy refusals remain unexplained; release evidence belongs to the matching validation asset and CI. See [release notes](docs/en/releases/v4.1.2.md) and [validation scope](docs/releases/v4.1.2-validation.md).
+
 ## [4.1.1] - 2026-10-23
 
 ### Fixed

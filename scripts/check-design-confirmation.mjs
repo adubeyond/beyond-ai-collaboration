@@ -345,7 +345,18 @@ const claudeBackgroundReturnAdditions = [
   { path: product + 'scripts/cli/claude-background-return.test.mjs',
     sha256: 'be8cdf9e7f27a409378a87d4d3aef2d0f522c7d60ba1b05b188e554c7db47c5c' },
 ];
-const latestCliRepairHash = (file, previous) => claudeBackgroundReturnFingerprints.find(item => item.path === file)?.after
+// Reviewed 4.1.2 request-file handling only. These two Skill paragraphs advance
+// from their exact prior contents; callback runtimes and CLI pins do not change.
+const requestCleanupFingerprints = [
+  { path: product + 'skills/identity-pm/references/lifecycle-and-closeout.md',
+    before: '8b2fbfcb381ba5a6d9e7b0d4b68ac357ff1a2d4bc3850be8c84f089fa6bec973',
+    after: '6d90a2c29569667b8be20c8d88ba07840fe3afbf402a0661659606e63bfb1675' },
+  { path: product + 'skills/identity-worker/SKILL.md',
+    before: 'f7773816a510205442ba411e221dd3ef1cc9fbd6ec9702c020365058be948cbe',
+    after: '5c8ecb870b0b86750884d775a4cf7b538756bd52baca1927991073222e4ebcec' },
+];
+const latestCliRepairHash = (file, previous) => requestCleanupFingerprints.find(item => item.path === file)?.after
+  ?? claudeBackgroundReturnFingerprints.find(item => item.path === file)?.after
   ?? collaborationDeliveryFingerprints.find(item => item.path === file)?.after
   ?? reviewedMaintenanceFingerprints.find(item => item.path === file)?.after
   ?? cliReconnectAttentionFingerprints.find(item => item.path === file)?.after ?? previous;
@@ -357,6 +368,11 @@ function normalizeClaudeCompatibility(file, text) {
   return text;
 }
 function matchesFrozenFingerprint(item, currentHash) {
+  const requestCleanup = requestCleanupFingerprints.find(change => change.path === item.path);
+  if (requestCleanup) {
+    if (currentHash !== requestCleanup.after) return false;
+    currentHash = requestCleanup.before;
+  }
   const backgroundReturn = claudeBackgroundReturnFingerprints.find(change => change.path === item.path);
   if (backgroundReturn) {
     if (currentHash !== backgroundReturn.after) return false;
@@ -1156,6 +1172,45 @@ test('Claude background return does not advance Formal Worker runtime, Skills or
   }
   for (const item of fixture.portions) {
     assert.ok(!claudeBackgroundReturnFingerprints.some(change => change.path === item.path));
+    assert.ok(frozenFailures(file => file === item.path ? read(file).replace(item.start, item.start + ' changed') : read(file)).includes(item.path + ': ' + item.start));
+  }
+});
+
+test('request cleanup advances only two exact Skill paragraphs and rejects rollback or extra edits', () => {
+  const additions = new Map([
+    [product + 'skills/identity-pm/references/lifecycle-and-closeout.md', '回执与工作台请求文件均按根入口分开调用与清理；控制事务是否成功只看受管结果，临时文件残留不触发重复验收、ack或续派。'],
+    [product + 'skills/identity-worker/SKILL.md', '请求文件按根入口分开调用与清理；清理残留在回源前单独说明，不改已冻结final，不把它误报为回执保存失败，也不在回源后补做清理。'],
+  ]);
+  assert.deepEqual(requestCleanupFingerprints.map(item => item.path).sort(), [...additions.keys()].sort());
+  for (const change of requestCleanupFingerprints) {
+    const file = change.path;
+    const original = fixture.files.find(item => item.path === file);
+    const predecessor = collaborationDeliveryFingerprints.find(item => item.path === file);
+    assert.ok(original && predecessor, file);
+    assert.deepEqual(Object.keys(change).sort(), ['after', 'before', 'path']);
+    assert.equal(change.before, predecessor.after, file + ': exact previous version retained');
+    const current = read(file);
+    const addition = additions.get(file);
+    assert.equal(current.split(addition).length, 2, file + ': one reviewed paragraph addition');
+    assert.equal(sha256(current.replace(addition, '')), change.before, file + ': no other content changed');
+    assert.equal(sha256(current), change.after, file);
+    assert.equal(matchesFrozenFingerprint(original, change.after), true);
+    assert.equal(matchesFrozenFingerprint(original, change.before), false, file + ': rollback rejected');
+    assert.equal(matchesFrozenFingerprint(original, original.sha256), false, file + ': initial baseline rejected');
+    for (const mutate of [text => text + '\nextra', text => text.slice(1), () => '', text => text.replace(addition, '')]) {
+      assert.ok(frozenFailures(candidate => candidate === file ? mutate(current) : read(candidate)).includes(file), file);
+    }
+    assert.ok(frozenFailures(candidate => { if (candidate === file) throw Error('missing'); return read(candidate); }).includes(file + ': missing or unreadable'));
+  }
+});
+
+test('request cleanup does not exempt runtime, CLI, model policy or other frozen Skills', () => {
+  const authorized = new Set(requestCleanupFingerprints.map(item => item.path));
+  for (const item of fixture.files.filter(item => !authorized.has(item.path))) {
+    assert.ok(frozenFailures(file => file === item.path ? read(file) + '\nextra' : read(file)).includes(item.path), item.path);
+  }
+  for (const item of fixture.portions) {
+    assert.ok(!authorized.has(item.path));
     assert.ok(frozenFailures(file => file === item.path ? read(file).replace(item.start, item.start + ' changed') : read(file)).includes(item.path + ': ' + item.start));
   }
 });

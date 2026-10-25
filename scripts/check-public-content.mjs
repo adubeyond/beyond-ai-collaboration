@@ -286,6 +286,7 @@ function validateText(path, text) {
         ['collaborationDeliveryPortions', 2, 'before|after'],
         ['claudeBackgroundReturnFingerprints', 12, 'before|after'],
         ['claudeBackgroundReturnAdditions', 1, 'sha256'],
+        ['requestCleanupFingerprints', 4, 'before|after'],
       ]) {
         const sectionPattern = new RegExp('^const ' + block + ' = \\[[\\s\\S]*?^\\];$', 'm');
         const fieldPattern = new RegExp('\\b(' + fields + "): '[0-9a-f]{64}'", 'g');
@@ -365,7 +366,7 @@ function validateDetectorRegressions() {
   for (const block of ['retainedHotfixFingerprints', 'retainedHotfixAdditions', 'cliReconnectAttentionFingerprints',
     'reviewedMaintenanceFingerprints', 'reviewedMaintenanceAdditions', 'excludedSuccessorFingerprints',
     'collaborationDeliveryFingerprints', 'collaborationDeliveryAdditions', 'collaborationDeliveryPortions',
-    'claudeBackgroundReturnFingerprints', 'claudeBackgroundReturnAdditions']) {
+    'claudeBackgroundReturnFingerprints', 'claudeBackgroundReturnAdditions', 'requestCleanupFingerprints']) {
     const section = source.match(new RegExp('^const ' + block + ' = \\[[\\s\\S]*?^\\];$', 'm'))?.[0];
     if (!section) throw new Error('missing public pin block: ' + block);
     // A one-pin block has no remaining hash after removal; the freeze test owns
@@ -378,12 +379,12 @@ function validateDetectorRegressions() {
     probe('scripts/not-an-exempt-checker.mjs', section, [hashLabel]);
     if (['cliReconnectAttentionFingerprints', 'reviewedMaintenanceFingerprints', 'reviewedMaintenanceAdditions', 'excludedSuccessorFingerprints',
       'collaborationDeliveryFingerprints', 'collaborationDeliveryAdditions', 'collaborationDeliveryPortions',
-      'claudeBackgroundReturnFingerprints', 'claudeBackgroundReturnAdditions'].includes(block)) {
+      'claudeBackgroundReturnFingerprints', 'claudeBackgroundReturnAdditions', 'requestCleanupFingerprints'].includes(block)) {
       const field = /(?:before|after):/.test(section) ? 'before' : 'sha256';
       probe(checker, source.replace(section, section.replace('\n];', "\n  " + field + ": '" + syntheticHash + "'\n];")), [hashLabel]);
       probe(checker, source.replace(section, section.replace(block, 'unreviewedSourceFingerprints')), [hashLabel]);
     }
-    if (['claudeBackgroundReturnFingerprints', 'claudeBackgroundReturnAdditions'].includes(block)) {
+    if (['claudeBackgroundReturnFingerprints', 'claudeBackgroundReturnAdditions', 'requestCleanupFingerprints'].includes(block)) {
       probe(checker, source.replace(section, section.replace('\n];', '\n  ' + syntheticSecret + '\n];')), [secretLabel]);
       probe(checker, source.replace(section, section.replace('\n];', '\n  ' + privatePath + '\n];')), [windowsLabel]);
     }
