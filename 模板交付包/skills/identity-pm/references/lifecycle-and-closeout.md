@@ -8,7 +8,7 @@
 
 正式终态仍先保存冻结final的`worker-result`短期待处理快照，再向唯一来源发送一次已获人类授权的原生通知，最后输出正式final；不能把普通消息去噪变成丢弃终态。结果记录、通知和启动下一动作分别判断，通知不是新业务授权。没有跨对话发送授权或通知不可用时如实保留待处理结果与缺口，不假造自动唤醒。快照只用于补齐平台恢复回合的空响应或不可读，不保存过程消息、不形成历史、不轮询，不引入新的后台调度器。
 
-所有`worker-result`固定调用都让`runtime --request`读取JSON请求文件，不把JSON正文当路径传入。文件外层固定为`{"schemaVersion":1,"action":"worker-result.enqueue|list|ack","input":{…}}`；`enqueue`的input使用`projectId / taskId / sourceThreadId / businessState / finalText`及任务包确有的`projectRoute`，`list`至少用`projectId`限定当前项目，`ack`固定带`projectId / taskId / receiptId`。字段名不使用`operation / status / final`等猜测别名；这三类动作的`requestId`可省略并由运行内核生成。
+所有`worker-result`固定调用都让`runtime --request`读取JSON请求文件，不把JSON正文当路径传入。文件外层固定为`{"schemaVersion":1,"action":"worker-result.enqueue|list|ack","input":{…}}`；`enqueue`的input使用`projectId / taskId / sourceThreadId / businessState / finalText`及任务包确有的`projectRoute`，`list`至少用`projectId`限定当前项目，`ack`固定带`projectId / taskId / receiptId`。字段名不使用`operation / status / final`等猜测别名；这三类动作的`requestId`可省略并由运行内核生成。回执与工作台请求文件均按根入口分开调用与清理；控制事务是否成功只看受管结果，临时文件残留不触发重复验收、ack或续派。
 
 唤醒只表示有待处理输入，不证明Worker已经结束，也不命令PM向所有任务传话。收到登记Worker的终态或需要裁决、接续的事件后，先通过固定`runtime`入口执行一次`worker-result.list`读取当前项目待处理回执；`sourceThreadId`与当前PM核对，`workerThreadId`与工作台登记Worker核对，两者不互相比较。再按`projectId + taskId + sourceThreadId`匹配当前PM和活动任务，附带`workerThreadId`时核对该字段。活动任务与匹配回执是处理路径的主依据；回调文字只做一致性核对，`running / idle`只参与可见性竞态处理。纯确认、无新事实的重复转述不再发起扫描或续派；同一轮已有列表则复用，但不同未处理结果不能丢弃。只处理本PM有控制关系的结果，不扫描无关Worker。
 

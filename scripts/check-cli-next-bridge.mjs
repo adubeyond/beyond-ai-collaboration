@@ -49,6 +49,20 @@ async function until(check, timeout = 15000) {
   }
 }
 
+function committedFixtureResult(store, binding, number) {
+  const lock = path.join(store.taskDir(binding), '.lock');
+  const file = path.join(store.runDir(binding, number), 'result.json');
+  if (fs.existsSync(lock) || !fs.existsSync(file)) return null;
+  const result = store.readResult(binding, number), state = store.read(binding);
+  // finishRun publishes result.json before committing task.json and releasing
+  // its lock. The fixture may review only the completed transaction, not that
+  // intermediate file. Read/identity failures remain visible to the test.
+  if (state.runNumber !== number || state.currentResultPath !== file
+    || state.sessionId !== result.sessionId || state.status !== result.status
+    || fs.existsSync(lock)) return null;
+  return result;
+}
+
 function fixture(t, { notifications = false, entryPoint = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beyond-cli-next-bridge-'));
   const controlRoot = path.join(root, 'control'), executionRoot = path.join(root, 'project');
@@ -208,7 +222,7 @@ process.on('beforeExit', () => report({phase: 'beforeExit', resources: process.g
   }
   async function finish(number) {
     release(number);
-    const value = await until(() => result(number));
+    const value = await until(() => committedFixtureResult(store, binding, number));
     assert.equal(value.status, 'completed', 'fixture manager must finish successfully: ' + JSON.stringify(value));
     return value;
   }
@@ -238,6 +252,39 @@ process.on('beforeExit', () => report({phase: 'beforeExit', resources: process.g
   });
   return { root, binding, identity, context, store, profile, profilePath, request, send, sendEntry, start, finish, capture, captures, result, reviewInput, queue, callbackRows, event };
 }
+
+test('fixture finish barrier requires the same committed run and released write lock', async t => {
+  const f = fixture(t);
+  f.store.create(f.binding);
+  const first = f.store.beginRun(f.binding, { requestId: 'barrier-first', prompt: 'isolated transaction proof',
+    expectedRunNumber: 0, expectedSessionId: null, profile: f.profile });
+  f.store.bindSession(first, 'same-native-session');
+  const probe = number => committedFixtureResult(f.store, f.binding, number);
+  assert.equal(probe(1), null, 'no result is not a finished transaction');
+  assert.throws(() => f.store.finishRun(first, { status: 'completed', finalText: 'first stable result' },
+    { faultAt: 'afterResult' }), /injected fault afterResult/);
+  assert.equal(f.result(1).status, 'completed');
+  assert.equal(f.store.read(f.binding).currentResultPath, null);
+  assert.equal(probe(1), null, 'a published result with uncommitted task state cannot release finish');
+  f.store.reconcileResult(f.binding, digest(f.store.read(f.binding)));
+  const completed = f.result(1), bytes = fs.readFileSync(first.resultPath);
+  f.store.withLock(f.binding, () => {
+    assert.equal(f.store.read(f.binding).currentResultPath, first.resultPath);
+    assert.equal(probe(1), null, 'even matching committed state must wait for the writer lock');
+  });
+  assert.deepEqual(probe(1), completed, 'commit plus lock release satisfies the barrier');
+  fs.writeFileSync(first.resultPath, '{');
+  assert.throws(() => probe(1), SyntaxError, 'malformed persisted evidence is not swallowed as pending');
+  fs.writeFileSync(first.resultPath, bytes);
+  f.store.recordReview({ ...f.identity, ...f.reviewInput() });
+  const second = f.store.beginRun(f.binding, { requestId: 'barrier-second', prompt: 'next isolated transaction',
+    expectedRunNumber: 1, expectedSessionId: 'same-native-session', profile: f.profile });
+  assert.equal(probe(1), null, 'the retained prior result cannot finish a different current run');
+  f.store.finishRun(second, { status: 'completed', finalText: 'second stable result' });
+  assert.equal(probe(1), null, 'a later committed run is not proof that the requested run is current');
+  assert.equal(probe(2).runNumber, 2);
+  assert.deepEqual(fs.readFileSync(first.resultPath), bytes, 'prior evidence stays unchanged');
+});
 
 function preservedRun(f, number) {
   return Object.fromEntries(['run.json', 'input.json', 'result.json'].map(name => [name, fs.readFileSync(path.join(f.store.runDir(f.binding, number), name), 'utf8')]));

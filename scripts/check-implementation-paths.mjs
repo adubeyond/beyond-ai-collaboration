@@ -567,6 +567,13 @@ requireText("根入口禁止无主文件和文档", agents, "没有明确消费�
 requireText("工作区顶层禁止任务产物扩散", agents, "不在工作区根目录或正式项目父目录随手建立测试项目、临时clone、候选、备份、证据或安装验证目录");
 requireText("短期现场进入系统临时目录", agents, "短期现场使用操作系统临时目录并在任务结束时清理");
 requireText("清理拒绝保留真实残留", agents, "清理被权限或策略拒绝时如实保留残留，不声称已清理");
+requireText("受管请求准备执行清理隔离工具调用", agents, "三步使用不同工具调用，不能合进同一shell、管道或`finally`");
+requireText("登记拒绝或未确认保留请求", agents, "登记被拒或结果未确认时保留请求");
+requireText("清理失败不重放已成功控制动作", agents, "不把清理失败当作登记失败、重跑已成功登记或重发既有通知");
+requireText("普通清理不默认强制删除", agents, "普通删除不默认加`-Force`");
+requireText("强制删除保留审批与其他Force用途", agents, "确需强制操作走平台允许的审批，不一刀切移除其他用途的`-Force`");
+requireText("Worker清理不改变冻结final和最后回源顺序", worker, "清理残留在回源前单独说明，不改已冻结final，不把它误报为回执保存失败，也不在回源后补做清理");
+requireText("PM清理残留不重复验收ack或续派", read("模板交付包/skills/identity-pm/references/lifecycle-and-closeout.md"), "临时文件残留不触发重复验收、ack或续派");
 requireText("清理失败只在真实验收或安全影响时阻断", agents, "只有残留影响当前验收或安全，或清理本身就是老板要求的交付目标时，才阻断对应步骤");
 requireText("无关清理失败不阻断业务", agents, "否则继续未受影响的业务工作");
 requireText("正式产物回到现有所有者", agents, "需要保留的成果进入当前项目已有正式位置或已登记的统一产物入口");
@@ -624,6 +631,10 @@ requireText("权限与策略拒绝不冒充普通失败", agents, "明确的权�
 requireText("策略拒绝不换入口绕过", agents, "不得换shell、工具或脚本绕过");
 requireText("拒绝归因不超过证据", agents, "保留原始拒绝，归因只到已有证据支持的层级");
 requireText("策略拒绝不虚构具体原因", agents, "不把`blocked by policy`自动解释为用户未授权、Windows权限失败或自动审批拒绝");
+requireText("工具失败区分是否已执行", agents, "按本次工具返回区分启动前拒绝、启动后失败和结果未知");
+requireText("工具结果未知不盲目重放", agents, "只有明确未启动才能报告未执行，结果未知时先定点核对已有结果，不盲目重放可能已产生副作用的动作");
+requireText("审批语义不把never当放行或自动审查", agents, "审批判断只依据当前生效上下文：`never`是不弹审批，不是全部放行，也不表示经过自动审查");
+requireText("完全访问不替代平台规则", agents, "完全访问或管理员权限不覆盖平台明确禁止，不能为消除报错自行修改审批、安全规则或扩大访问范围");
 requireText("标准调用失败不遍历替代资源", agents, "不遍历全机、缓存、其他安装器、模型工具或网络搜索");
 requireText("简单单路径不启助手", worker, "前后端紧密耦合时可由本负责人直接完成全链路，不必须启动助手");
 requireText("旧长任务包先收敛业务契约", worker, "旧任务包或上游说明过长时，先收敛为上述六个问题再执行");
@@ -713,11 +724,11 @@ requireText("00入口读取项目身份与路由", documentEntry, "确认当前�
 requireText("00入口读取全部当前主事实", documentEntry, "登记的全部当前主事实正文");
 requireText("初始化不进入普通任务热路径", agents, "不进入普通任务热路径");
 requireText("升级先核对当前直接事实", agents, "初始化优先复用现有`AGENTS.md`、代码、Git和Markdown事实");
-requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 4.1.1");
+requireText("项目入口携带运行版本", agents, "BEYOND-RUNTIME-VERSION: 4.1.2");
 requireText("项目覆盖有专用边界", agents, "BEGIN BEYOND PROJECT OVERRIDES");
 requireText("安装逐文件对账六个Skill", installVerifier, "安装Skill内容不一致");
 requireText("安装核对项目完整运行内核", installVerifier, "项目入口的BEYOND运行内核与控制仓候选不一致");
-requireText("安装清单声明当前版本", releaseManifest, "\"releaseVersion\": \"4.1.1\"");
+requireText("安装清单声明当前版本", releaseManifest, "\"releaseVersion\": \"4.1.2\"");
 requireText("个人路径不读取团队共享区", agents, "普通项目接手、正式Worker任务、Action Skill切换和个人任务不读取共享区");
 requireText("团队协同不替代正式Worker", agents, "不替代当前成员自己的正式Worker");
 requireText("PM初始化与协同权限严格限域", pmDispatch, "两者都不扩张到业务源码、测试、仓库配置、成员权限、环境、数据或发布");
