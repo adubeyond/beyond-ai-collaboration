@@ -13,9 +13,9 @@ Use one PM for the whole project or several PMs for explicit scopes. With a user
 
 It is built for people already using Codex on real repositories who are tired of repeated context loss, finished Workers that never return to the PM, stage-heavy workflows that require constant “continue” prompts, ambiguous claims such as “tests passed” versus “released,” and conflicting writes across parallel tasks.
 
-[Download BEYOND v4.1.2](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v4.1.2) · [Gitee mirror](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90-second real case](docs/en/real-case-and-90-second-demo.md) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [4.1.2 Release Notes](docs/en/releases/v4.1.2.md) · [Architecture](docs/en/architecture.md)
+[Download BEYOND v4.1.3](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v4.1.3) · [Gitee mirror](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90-second real case](docs/en/real-case-and-90-second-demo.md) · [Installation](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) · [Quick Start](docs/en/quick-start.md) · [4.1.3 Release Notes](docs/en/releases/v4.1.3.md) · [Architecture](docs/en/architecture.md)
 
-Version 4.1.2 separates request preparation, registration, and cleanup into distinct tool calls, and distinguishes pre-start policy refusal, execution failure, and an unknown result. A cleanup failure must not replay a committed receipt or notification. The runtime, formal Worker callbacks, model policy, and retained CLI fixes are unchanged; platform safety settings are not relaxed.
+Version 4.1.3 refines prototype design: remove redundant copy, fix unclear layout and interaction, consider user/developer/AI-agent experience together, and preserve necessary guidance and existing behavior. Runtime, callbacks, model policy, and retained CLI fixes remain unchanged.
 
 ## What BEYOND changes
 
@@ -121,8 +121,8 @@ The PM understands objectives, analyzes problems, designs tasks, and corrects co
 
 ### 1. Download the official release
 
-- [BEYOND-4.1.2.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.2/BEYOND-4.1.2.zip)
-- [BEYOND-4.1.2.zip.sha256 (optional checksum)](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.2/BEYOND-4.1.2.zip.sha256)
+- [BEYOND-4.1.3.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.3/BEYOND-4.1.3.zip)
+- [BEYOND-4.1.3.zip.sha256 (optional checksum)](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.3/BEYOND-4.1.3.zip.sha256)
 
 The ZIP is sufficient for installation. A missing or unavailable `.sha256` file does not block installation; if a checksum file is supplied and does not match, stop. See the [Installation, Upgrade, and Project Initialization Guide](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) for exact commands.
 
@@ -132,7 +132,7 @@ Open a new ordinary Codex task in the target project and send this prompt withou
 
 ```text
 This is BEYOND installation maintenance. Do not create a PM, Worker, or business task.
-Use the verified official BEYOND 4.1.2 package I downloaded to install or upgrade this project's beyond-control directory and seven global Skills.
+Use the verified official BEYOND 4.1.3 package I downloaded to install or upgrade this project's beyond-control directory and seven global Skills.
 Create a precise backup first. Preserve native project rules and real content under local, projects, and shared; never replace them with empty templates.
 Fuse the project entry, run installation verification, then stop and wait for me to restart Codex. Do not start, resume, or modify business tasks.
 ```
@@ -145,7 +145,7 @@ task-design      task-dev
 task-test        task-ops
 ```
 
-BEYOND 4.1.2 does not install an identity Hook, notify branch, persistent daemon, or extra Codex CLI. The optional route uses an existing local CLI with finite per-dispatch background execution and notification; it does not replace the default Desktop route.
+BEYOND 4.1.3 does not install an identity Hook, notify branch, persistent daemon, or extra Codex CLI. The optional route uses an existing local CLI with finite per-dispatch background execution and notification; it does not replace the default Desktop route.
 
 ### 3. Restart and adopt the project
 
@@ -197,8 +197,8 @@ It is not currently a good fit for:
 
 ## Current boundaries
 
-- The current stable release is `v4.1.2`, primarily for local Codex Desktop projects.
-- Earlier standard installation and operation were validated in real Windows projects; those records do not establish a fresh 4.1.2 installation or online end-to-end acceptance. Public checks cover package contents, installation structure, and the minimal fixture.
+- The current stable release is `v4.1.3`, primarily for local Codex Desktop projects.
+- Earlier standard installation and operation were validated in real Windows projects; those records do not establish a fresh 4.1.3 installation or online end-to-end acceptance. Public checks cover package contents, installation structure, and the minimal fixture.
 - Task creation, callbacks, and persistent permissions vary across platforms. Evidence from one platform is not a universal compatibility claim.
 - The existing read-only local fallback for completed tasks with unavailable final text is retained. It does not guarantee compatibility with every host version or eliminate long-context goal drift.
 - The 4.1.2 refusal and lost-response checks inject failures around the real local runtime; they do not execute or certify Codex's policy engine or prove model compliance. Not every `blocked by policy` cause is established or resolved. Existing return-path coverage retains mocked model/Desktop peers; hot loading and online end-to-end behavior remain outside these claims. See [validation and limits](docs/releases/v4.1.2-validation.md).
@@ -213,7 +213,7 @@ It is not currently a good fit for:
 | Install, upgrade, or roll back | [Installation, Upgrade, and Project Initialization](模板交付包/docs/en/installation-upgrade-and-project-initialization.md) |
 | Try a clean fixture | [Quick Start](docs/en/quick-start.md) |
 | Understand PM, Worker, documents, and runtime | [Architecture](docs/en/architecture.md) |
-| Review 4.1.2 changes | [Release Notes](docs/en/releases/v4.1.2.md) · [CHANGELOG](CHANGELOG.md) |
+| Review 4.1.3 changes | [Release Notes](docs/en/releases/v4.1.3.md) · [CHANGELOG](CHANGELOG.md) |
 | Review the 4.1.0 collaboration layer | [Previous Upgrade Guide](docs/en/releases/v4.1.0.md) |
 | Inspect the control repository | [Template Package](模板交付包/README.md) |
 | Report a problem or propose an improvement | [Issues](https://github.com/adubeyond/beyond-ai-collaboration/issues) · [Contributing](CONTRIBUTING.en.md) |

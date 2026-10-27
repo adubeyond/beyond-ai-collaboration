@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [4.1.3] - 2026-10-27
+
+### Changed
+
+- Refine prototype design in `identity-product`: remove copy that does not help understanding, decisions, or actions; fix the affected layout and interaction when removing redundant explanations exposes usability problems.
+- Consider user, developer, and AI-agent experience together through clear controls, observable state, and maintainable implementation, without expanding the task to a framework rewrite or extra process.
+- Preserve necessary business information, input requirements, feedback, risk warnings, and existing flows; verify affected behavior rather than measuring success by word count.
+- Keep callback, runtime, model-policy, and retained CLI implementations unchanged. Ship a full package without installing projects or resuming tasks. See [release notes](docs/en/releases/v4.1.3.md) and [validation scope](docs/releases/v4.1.3-validation.md).
+
 ## [4.1.2] - 2026-10-25
 
 ### Fixed
