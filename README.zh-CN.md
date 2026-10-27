@@ -13,9 +13,9 @@ BEYOND 是面向 **Codex Desktop 本地项目**的开源 AI 项目协作系统�
 
 它适合已经在用 Codex 做真实开发，但正在被这些问题困扰的人：新对话反复失忆、任务完成后无人收口、阶段过多需要人工续推、测试通过却无法判断能否发布，以及多个任务并行时责任和写入边界混乱。
 
-[下载 BEYOND v4.1.2](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v4.1.2) · [Gitee 镜像](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90 秒真实案例](docs/真实案例与90秒演示.md) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [4.1.2 补丁说明](docs/releases/v4.1.2.md) · [系统架构](docs/系统架构与运行机制.md)
+[下载 BEYOND v4.1.3](https://github.com/adubeyond/beyond-ai-collaboration/releases/tag/v4.1.3) · [Gitee 镜像](https://gitee.com/adubeyond/beyond-ai-collaboration) · [90 秒真实案例](docs/真实案例与90秒演示.md) · [安装指南](模板交付包/docs/安装升级与项目初始化指南.md) · [快速开始](docs/快速开始.md) · [4.1.3 补丁说明](docs/releases/v4.1.3.md) · [系统架构](docs/系统架构与运行机制.md)
 
-4.1.2 将请求准备、登记和清理分成独立工具调用，区分启动前策略拒绝、执行失败和结果未知，避免因清理失败重复登记或通知。运行时、正式 Worker 回调、模型策略和既有 CLI 修补保持不变，不放宽平台安全设置。
+4.1.3 将原型精简与三方体验融入产品交互设计：删除冗余说明，用清晰布局与交互引导操作，同时兼顾用户、开发者和 AI agent，保留必要提示与原有功能。运行时、回调、模型矩阵和既有 CLI 修补保持不变。
 
 ## BEYOND 带来什么
 
@@ -121,8 +121,8 @@ PM负责理解目标、分析问题、设计任务和纠偏，不只是转发任
 
 ### 1. 下载正式版本
 
-- [BEYOND-4.1.2.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.2/BEYOND-4.1.2.zip)
-- [BEYOND-4.1.2.zip.sha256（可选校验文件）](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.2/BEYOND-4.1.2.zip.sha256)
+- [BEYOND-4.1.3.zip](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.3/BEYOND-4.1.3.zip)
+- [BEYOND-4.1.3.zip.sha256（可选校验文件）](https://github.com/adubeyond/beyond-ai-collaboration/releases/download/v4.1.3/BEYOND-4.1.3.zip.sha256)
 
 ZIP即可安装；`.sha256`缺失或下载失败不阻断安装。若提供了校验文件而哈希不一致，则必须停止。完整命令见[安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md)。
 
@@ -132,7 +132,7 @@ ZIP即可安装；`.sha256`缺失或下载失败不阻断安装。若提供了�
 
 ```text
 这是BEYOND安装维护请求，不建立PM、Worker或业务任务。
-请使用我已下载并验真通过的BEYOND 4.1.2正式发布包，安装或升级当前项目的beyond-control和七个全局Skill。
+请使用我已下载并验真通过的BEYOND 4.1.3正式发布包，安装或升级当前项目的beyond-control和七个全局Skill。
 先精确备份；保留项目原生规则以及local、projects、shared中的真实内容，不用空模板覆盖。
 完成项目入口融合和安装验真后停止，等待我重启Codex。不要启动、恢复或修改业务任务。
 ```
@@ -145,7 +145,7 @@ task-design      task-dev
 task-test        task-ops
 ```
 
-BEYOND 4.1.2不安装身份Hook、notify分支、常驻守护进程或额外Codex CLI。可选CLI路径使用本机已有CLI，按次启动有限生命周期后台执行与通知，不替换默认Desktop主链。
+BEYOND 4.1.3不安装身份Hook、notify分支、常驻守护进程或额外Codex CLI。可选CLI路径使用本机已有CLI，按次启动有限生命周期后台执行与通知，不替换默认Desktop主链。
 
 ### 3. 重启并接手项目
 
@@ -197,8 +197,8 @@ $identity-pm
 
 ## 当前边界
 
-- 当前正式版本是`v4.1.2`，主要面向Codex Desktop本地项目。
-- 既有标准安装与运行路径曾在真实Windows项目中验证；历史记录不代表4.1.2已经完成新的实机安装或在线端到端验收。公开脚本覆盖内容、安装结构和最小示例。
+- 当前正式版本是`v4.1.3`，主要面向Codex Desktop本地项目。
+- 既有标准安装与运行路径曾在真实Windows项目中验证；历史记录不代表4.1.3已经完成新的实机安装或在线端到端验收。公开脚本覆盖内容、安装结构和最小示例。
 - 不同平台对任务创建、线程回调和持久权限的支持不同，不能把一个平台的通过结论外推到所有环境。
 - 保留已结束但平台正文不可读时的本机只读补读；不保证所有宿主版本兼容，也不宣称彻底解决长上下文中的目标漂移。
 - 4.1.2拒绝与响应丢失检查是在真实本地运行时外围注入故障，不是执行或认证Codex策略引擎，也不证明模型必然遵循规则。并非所有`blocked by policy`的原因都已查明或解决；保留的回传测试仍使用模拟模型、Desktop对端，不证明热加载或在线端到端行为。具体范围见[验证与限制](docs/releases/v4.1.2-validation.md)。
@@ -213,7 +213,7 @@ $identity-pm
 | 安装、升级或回退 | [安装、升级与项目初始化指南](模板交付包/docs/安装升级与项目初始化指南.md) |
 | 在干净示例中体验 | [快速开始](docs/快速开始.md) |
 | 理解PM、Worker、文档和运行时 | [系统架构与运行机制](docs/系统架构与运行机制.md) |
-| 查看4.1.2变化 | [补丁说明](docs/releases/v4.1.2.md) · [CHANGELOG](CHANGELOG.md) |
+| 查看4.1.3变化 | [补丁说明](docs/releases/v4.1.3.md) · [CHANGELOG](CHANGELOG.md) |
 | 回看4.1.0协作与交付层 | [历史升级说明](docs/releases/v4.1.0.md) |
 | 阅读控制仓结构 | [模板交付包说明](模板交付包/README.md) |
 | 提交问题或改进 | [Issues](https://github.com/adubeyond/beyond-ai-collaboration/issues) · [贡献指南](CONTRIBUTING.md) |
